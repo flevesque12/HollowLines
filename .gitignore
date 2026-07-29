@@ -1,0 +1,83 @@
+# ══════════════════════════════════════════════
+#  Unity .gitignore
+#  Projet : HollowLines
+# ══════════════════════════════════════════════
+
+# ── Unity generated ──────────────────────────
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+[Rr]ecordings/
+
+# ── Asset meta files (never ignore .meta) ────
+# Unity needs .meta files — they track GUIDs,
+# import settings, etc. Ne les ignore JAMAIS.
+
+# ── IDE / Editor ─────────────────────────────
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+*.csproj
+*.unityproj
+*.sln
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+.idea/
+
+# ── OS generated ─────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ── Unity asset bundles ──────────────────────
+*.unitypackage
+AssetBundles/
+
+# ── Crashs & profiling ──────────────────────
+sysinfo.txt
+crashlytics-build.properties
+*.stackdump
+
+# ── Addressables ─────────────────────────────
+[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
+[Aa]ddressable[Aa]ssets[Dd]ata/*.json
+[Aa]ddressable[Aa]ssets[Dd]ata/*.log
+
+# ── TextMeshPro (auto-generated) ─────────────
+Assets/TextMesh Pro/
+
+# ── Plastic SCM (si pas utilisé) ─────────────
+*.private.0
+*.private
+
+# ── NuGet ────────────────────────────────────
+packages/
+
+# ── Builds output ───────────────────────────
+# Si tu build localement aussi
+build/
+Builds/
