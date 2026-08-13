@@ -109,7 +109,8 @@ Assets/_Project/Scripts/
     AvatarController.cs   — Walk-input repeat; does NOT call AvatarModel.Tick()
     AvatarView.cs         — Sprite + lerp follow for the avatar
     BoardView.cs          — ✅R4 One SpriteRenderer per cell, event-driven updates + wobble shake;
-                            Diamond cells get the DiamondShine material instead of a tint (§5.10)
+                            Diamond cells get the DiamondShine material instead of a tint (§5.10);
+                            🆕 exit-zone glow strips for campaign/tutorial boards (§5.16)
     GameInput.cs          — 🔄 Input System adapter: keyboard + Xbox/gamepad (§16), gated while paused
     VfxManager.cs         — ✅R4 Burst debris, shockwave ripple, streak glow/trail, chain flash, bomb fuse
                             telegraph, diamond collect sparkle (§5.10)
@@ -130,6 +131,7 @@ Assets/_Project/Art/Resources/
   Shaders/
     FuseGlow.shader       — 🆕 additive radial glow for the bomb fuse telegraph (§5.10 / §5.11)
     DiamondShine.shader   — 🆕R4 persistent per-tile shimmer for undrilled diamonds (§5.10)
+    ExitGlow.shader       — 🆕 additive ambient floor glow for the campaign/tutorial exit zone (§5.16)
 tools/
   playtest/
     Program.cs            — Headless bot playtest harness
@@ -666,6 +668,41 @@ just re-shows the title screen over the frozen board.
 > and landed on `AirSystem`, HUD read `DEPTH: 70`, fade cleaned itself up, game-over summary read
 > "70 m" with a "Nouvelle descente" button, and restart reset to seg 0 / depth 0 / air 100 / new seed.
 > Zero console errors.
+
+### 5.16 Exit Glow (BoardView)  🆕 IMPLEMENTED (2026-08-12)
+Not part of the R-plan; added on request as a small level-feel pass. A passive environmental cue
+for the campaign/tutorial win threshold (§5.7, CampaignManager) — before this, the only signal that
+a level was ending was the `ShowLevelComplete` popup firing *after* the avatar already crossed the
+line (design rule 6, "depth is always forward" — reaching the exit should read as arriving
+somewhere, not just triggering a menu).
+
+- `BoardView.BuildExitGlow()` spawns one full-width `SpriteRenderer` strip per row across the last
+  `exitGlowRows` rows of the board (default 4, Inspector-configurable), parented under the
+  BoardView GameObject so it's torn down automatically on the next `LoadLevel()`. Brightness ramps
+  from alpha 0.12 (top of the band) to 0.85 (bottom row), so the glow reads as "getting closer,"
+  not a flat band appearing all at once.
+- Gated by a new `showExitGlow` parameter on `BoardView.Init()`, set in `GameBootstrap` as
+  `!_endlessMode && (useCampaign || _inTutorial)` — Endless has no fixed floor to signal, and the
+  debug map has no win check at all (`useCampaign` gates that branch in `Update()`), so both stay
+  dark.
+- Rendered with the new **`ExitGlow` shader** (`Resources/Shaders/ExitGlow.shader`) — additive,
+  one shared material, self-animated pulse via `_Time` (dephased per row by a hash of world Y so
+  the band doesn't breathe in lockstep). Same missing-shader fallback contract as `FuseGlow` /
+  `DiamondShine` (§5.10).
+- No Core changes: the band is just "the last N rows," independent of the exact
+  `CampaignManager.WinDepthFromFloor` math, so no new NUnit coverage — verified live in the Unity
+  Editor via UnityMCP (positioned screenshots at the exit zone, before and after the fix below).
+
+> **⚠️ First attempt was invisible — sortingOrder was backwards.** The original design put the glow
+> strips at `sortingOrder = -1` (behind the tile layer), meaning to let it "shine through" gaps and
+> drilled cells. That doesn't work in this renderer: `emptyColor` (the tint for a drilled/empty
+> cell) is opaque (alpha 1, not transparent), so the regular tile layer — drawn at sortingOrder 0
+> for *every* cell, empty or not — completely painted over anything behind it. A screenshot
+> confirmed zero visible effect. Fixed by moving the glow to `sortingOrder = 1` (**above** the
+> tiles); the additive blend does the actual work, washing warm light on top of whatever's already
+> drawn (blocks *and* gaps alike) instead of trying to peek through it. Re-verified with a
+> screenshot showing the gradient building from nothing at the top of the band to a strong gold
+> wash at the final row.
 
 ---
 
@@ -1362,9 +1399,10 @@ the shatter cases.
   disagree. §4.7 was also fixed to state Hard/HardCracked/AirCapsule are streak-neutral (it used to
   contradict itself) — matching `StreakTracker` and §6.1.
 - **Procedural-first assets, not zero-asset.** All SFX are synthesized (`SfxSynth`), and VFX are
-  built from generated primitives — including two procedural **shaders**: `FuseGlow` (additive
-  radial glow, no texture, §5.10) and 🆕R4 `DiamondShine` (persistent per-tile shimmer + glint
-  sweep, §5.10). The block *sprites* are the exception: AI-generated tiles loaded from
+  built from generated primitives — including three procedural **shaders**: `FuseGlow` (additive
+  radial glow, no texture, §5.10), 🆕R4 `DiamondShine` (persistent per-tile shimmer + glint
+  sweep, §5.10), and 🆕 `ExitGlow` (additive ambient floor wash for the campaign/tutorial exit
+  zone, §5.16). The block *sprites* are the exception: AI-generated tiles loaded from
   `Resources/Tiles/` by `BoardView`, with a procedural white-square fallback.
 - **Bot playtest harness** — `tools/playtest/` compiles real Core sources. Now fully v3-wired
   (R2.7); run with `dotnet run` from that folder. Its output is the evidence behind §15.

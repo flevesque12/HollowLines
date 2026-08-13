@@ -104,10 +104,10 @@ a few things worth calling out for anyone reading the code:
   paper trail of what was measured and why each number is where it is.
 - **Procedural audio and VFX, not a big asset budget.** Every sound effect is synthesized
   at runtime (`SfxSynth` — sine tones, sweeps, layered noise, arpeggios); every particle
-  effect reuses one generated sprite; a couple of small hand-written shaders (`FuseGlow`,
-  `DiamondShine`) do additive glow and per-tile shimmer without a single texture. Block
-  *sprites* are the one AI-generated exception, with a procedural fallback if the art is
-  missing.
+  effect reuses one generated sprite; three small hand-written shaders (`FuseGlow`,
+  `DiamondShine`, `ExitGlow`) do additive glow, per-tile shimmer, and an ambient exit-zone
+  wash without a single texture. Block *sprites* are the one AI-generated exception, with
+  a procedural fallback if the art is missing.
 - **AI-assisted development workflow.** This project's `CLAUDE.md` is a living
   spec-and-decision-log written for AI coding assistants (and future-me) — every deviation
   from the original design gets a dated note explaining *why*, not just *what*.
@@ -122,7 +122,7 @@ Assets/_Project/
     Tests/    — NUnit suite (PlayMode)
   Art/Resources/
     Tiles/    — AI-generated block sprites (+ procedural fallback)
-    Shaders/  — FuseGlow, DiamondShine
+    Shaders/  — FuseGlow, DiamondShine, ExitGlow
 tools/
   playtest/   — headless .NET 8 console harness, compiles Core/*.cs directly
 hollow-lines-gdd-v3.md   — full game design document

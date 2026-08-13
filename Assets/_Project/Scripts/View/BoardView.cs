@@ -25,6 +25,14 @@ namespace HollowLines.View
         [SerializeField] private Color diamondColor  = new Color(0.80f, 0.92f, 1.00f); // icy white-blue gem
         [SerializeField] private Color emptyColor    = new Color(0.05f, 0.04f, 0.03f);
 
+        [Header("— Exit Glow —")]
+        [Tooltip("Warm ambient glow color for the exit zone (campaign/tutorial only) — the last rows before the win threshold.")]
+        [SerializeField] private Color exitGlowColor = new Color(1f, 0.82f, 0.45f, 1f);
+
+        [Tooltip("How many rows above the board's bottom breathe with the exit glow.")]
+        [Range(1, 10)]
+        [SerializeField] private int exitGlowRows = 4;
+
         [Header("— Wobble Shake —")]
         [Tooltip("Horizontal shake amplitude of a wobbling cell, in world units.")]
         [Range(0f, 0.2f)]
@@ -51,7 +59,13 @@ namespace HollowLines.View
         private static Material _diamondMaterial;
         private static bool _diamondMaterialTried;
 
-        public void Init(GridModel grid, GravitySystem gravity)
+        // Exit-zone ambient glow (campaign/tutorial only — endless and the debug map have no
+        // fixed floor to signal). One wide strip per row, loaded/cached the same way as the
+        // diamond material above.
+        private static Material _exitGlowMaterial;
+        private static bool _exitGlowMaterialTried;
+
+        public void Init(GridModel grid, GravitySystem gravity, bool showExitGlow = false)
         {
             _grid = grid;
             _gravity = gravity;
@@ -76,6 +90,54 @@ namespace HollowLines.View
                     _tiles[x, y] = renderer;
                 }
             }
+
+            if (showExitGlow)
+                BuildExitGlow(grid);
+        }
+
+        /// <summary>
+        /// One full-width glow strip per row in the exit zone, parented under this BoardView so it
+        /// is torn down automatically on the next LoadLevel(). Rendered ON TOP of the tile layer
+        /// (sortingOrder above the tiles' default 0) with an additive blend, so it washes the whole
+        /// exit zone in warm light without hiding the block colors underneath — sitting it behind
+        /// the tiles instead doesn't work here, since even "empty" cells render with an opaque
+        /// emptyColor (alpha 1) that would fully occlude anything drawn earlier. Brightness ramps
+        /// toward the bottom row so the glow reads as "getting closer", not a flat band appearing
+        /// all at once.
+        /// </summary>
+        private void BuildExitGlow(GridModel grid)
+        {
+            int startRow = Mathf.Max(0, grid.Height - exitGlowRows);
+            int bandRows = grid.Height - startRow;
+            Material material = EnsureExitGlowMaterial() ?? _defaultTileMaterial;
+
+            for (int y = startRow; y < grid.Height; y++)
+            {
+                float t = (y - startRow + 1) / (float)bandRows;
+
+                var go = new GameObject($"ExitGlow row {y}");
+                go.transform.SetParent(transform, false);
+                go.transform.localPosition = new Vector3((grid.Width - 1) / 2f, -y, 0f);
+                go.transform.localScale    = new Vector3(grid.Width, 1f, 1f);
+
+                var renderer = go.AddComponent<SpriteRenderer>();
+                renderer.sprite         = GetUnitSprite();
+                renderer.sharedMaterial = material;
+                renderer.color          = new Color(exitGlowColor.r, exitGlowColor.g, exitGlowColor.b, Mathf.Lerp(0.12f, 0.85f, t));
+                renderer.sortingOrder   = 1; // above the tile layer's default 0 — additive, so it washes on top instead of hiding behind it
+            }
+        }
+
+        private static Material EnsureExitGlowMaterial()
+        {
+            if (_exitGlowMaterialTried)
+                return _exitGlowMaterial;
+            _exitGlowMaterialTried = true;
+
+            Shader shader = Resources.Load<Shader>("Shaders/ExitGlow");
+            if (shader != null)
+                _exitGlowMaterial = new Material(shader) { name = "ExitGlow (runtime)" };
+            return _exitGlowMaterial;
         }
 
         private void OnDestroy()

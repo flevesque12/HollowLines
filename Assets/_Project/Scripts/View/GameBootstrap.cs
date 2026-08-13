@@ -387,7 +387,11 @@ namespace HollowLines.View
             // Rebuild board views.
             _boardViewGo = new GameObject("BoardView");
             _boardViewGo.transform.SetParent(transform, false);
-            _boardViewGo.AddComponent<BoardView>().Init(_grid, _gravity);
+            // Exit glow only makes sense where there's a fixed floor to signal (campaign/tutorial
+            // share the same depth-only win threshold, §7). Endless has no floor, and the debug
+            // map has no win check at all (useCampaign gates that branch in Update()).
+            bool showExitGlow = !_endlessMode && (useCampaign || _inTutorial);
+            _boardViewGo.AddComponent<BoardView>().Init(_grid, _gravity, showExitGlow);
 
             _avatarViewGo = new GameObject("AvatarView");
             _avatarViewGo.transform.SetParent(_boardViewGo.transform, false);
