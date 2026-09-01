@@ -455,9 +455,9 @@ sealed class Sim
             Health.HealthDepleted += () => { _p.Dead = true; _r.Outcome = "crushed"; };
         }
 
-        Avatar.Drilled += (cell, oldType) =>
+        Avatar.Drilled += (cell, oldType, direction) =>
         {
-            Streak.NotifyDrill(oldType);
+            Streak.NotifyDrill(oldType, direction);
             Score.AwardDrill(Streak.CurrentStreak, Streak.CurrentColor);
             if (oldType == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
             Bombs.NotifyDrilled(cell);

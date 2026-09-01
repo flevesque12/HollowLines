@@ -14,7 +14,8 @@ namespace HollowLines.Core
 
         /// <summary>
         /// Source-specific magnitude, for popups that read "×N":
-        /// streak step · burst cell count · bomb chain multiplier · depth award count · cascade step.
+        /// streak step · burst cell count · bomb chain multiplier · depth award count · cascade step ·
+        /// enemy-kill bonus · Boomer-blast parent bonus.
         /// </summary>
         public readonly int Detail;
 

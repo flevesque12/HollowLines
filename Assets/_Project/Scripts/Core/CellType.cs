@@ -12,7 +12,7 @@ namespace HollowLines.Core
     ///   5  HardCracked — Hard after 1 hit; 1 more drill removes it
     ///   6  Steel       — bomb-only; NOT drillable; collapse clears outright
     ///   7  AirCapsule  — drill to collect; restores air; does NOT fuse
-    ///   8  Bomb        — NOT drillable; armed by adjacent drill or chunk landing; 2.5 s fuse; cross blast radius 2
+    ///   8  Bomb        — NOT drillable; armed by adjacent drill or chunk landing; 1.5 s fuse; cross blast radius 2
     ///   9  Diamond     — drill to collect (1 tap); does NOT fuse; streak-neutral (§6.1/§6.4)
     /// </summary>
     public enum CellType : byte

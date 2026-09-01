@@ -32,9 +32,10 @@ namespace HollowLines.Core
 
         /// <summary>
         /// Fired after a successful drill. Second arg is the cell type BEFORE the hit
-        /// (e.g. Hard, AirCapsule) so listeners can react to what was drilled.
+        /// (e.g. Hard, AirCapsule) so listeners can react to what was drilled. Third arg is the
+        /// cardinal direction drilled — StreakTracker (§6.1) uses it to keep the streak vertical-only.
         /// </summary>
-        public event Action<GridPos, CellType> Drilled;
+        public event Action<GridPos, CellType, DrillDirection> Drilled;
 
         private readonly GridModel _grid;
         private float _fallTimer;
@@ -116,8 +117,15 @@ namespace HollowLines.Core
             if (!_grid.Drill(target))
                 return false;
 
-            Drilled?.Invoke(target, oldType);
+            Drilled?.Invoke(target, oldType, DirectionOf(dx, dy));
             return true;
+        }
+
+        private static DrillDirection DirectionOf(int dx, int dy)
+        {
+            if (dy < 0) return DrillDirection.Up;
+            if (dy > 0) return DrillDirection.Down;
+            return dx < 0 ? DrillDirection.Left : DrillDirection.Right;
         }
 
         /// <summary>Advance the avatar's own gravity. Call every frame before GravitySystem.Tick.</summary>

@@ -8,11 +8,12 @@ namespace HollowLines.Core
     /// solid floor. The v2.1 void-line gate is gone: depth is always forward (design rule 6), and
     /// scoring now rewards drilling, bursting and bombing along the way rather than gating on them.
     ///
-    /// R4: on levels with diamonds (4+, §9), reaching the bottom is necessary but not sufficient —
-    /// the caller also passes DiamondSystem.IsComplete into NotifyAvatarPosition. Levels 1-3 have no
-    /// diamonds, and the parameter defaults to true, so the gate stays a no-op there (§6.4).
-    /// Pure C# — no MonoBehaviour, no UnityEngine. CampaignManager does not hold a DiamondSystem
-    /// reference; Core systems don't reference each other, the caller reads the flag (§7).
+    /// v3.1 arcade pivot (§5.7, §9): the R4 diamond gate is replaced by a score gate. On levels 4+,
+    /// reaching the bottom is necessary but not sufficient — the caller also passes the current
+    /// ScoreSystem.Score into NotifyAvatarPosition, and it must meet ScoreMinimumForLevel(CurrentLevel).
+    /// Levels 1-3 have a minimum of 0 (tutorial, no gate). Diamonds are no longer required to win —
+    /// they're still placed (§5.8) and each is worth +150 pts toward the same score gate.
+    /// Pure C# — no MonoBehaviour, no UnityEngine.
     /// </summary>
     public sealed class CampaignManager
     {
@@ -62,24 +63,41 @@ namespace HollowLines.Core
 
         /// <summary>
         /// Call once per Update after AvatarModel.Tick(). Detects the win condition: depth, gated by
-        /// diamond collection on levels that have any (R4, §6.4).
+        /// the level's score minimum (v3.1, §5.7).
         /// </summary>
         /// <param name="avatarPos">The avatar's current grid position.</param>
         /// <param name="boardHeight">Total row count of the current board (grid.Height).</param>
-        /// <param name="diamondsComplete">
-        ///   DiamondSystem.IsComplete for the current board. Defaults to true so levels without
-        ///   diamonds (1-3) and callers that predate R4 keep depth as the only requirement.
+        /// <param name="currentScore">
+        ///   ScoreSystem.Score for the current run. Defaults to int.MaxValue so callers that don't
+        ///   care about the gate (the tutorial showcase, older tests) keep depth as the only
+        ///   requirement — it always clears ScoreMinimumForLevel.
         /// </param>
-        public void NotifyAvatarPosition(GridPos avatarPos, int boardHeight, bool diamondsComplete = true)
+        public void NotifyAvatarPosition(GridPos avatarPos, int boardHeight, int currentScore = int.MaxValue)
         {
             if (_levelWon || IsCampaignComplete) return;
 
             int threshold = boardHeight - WinDepthFromFloor;
-            if (avatarPos.Y >= threshold && diamondsComplete)
+            if (avatarPos.Y >= threshold && currentScore >= ScoreMinimumForLevel(CurrentLevel))
             {
                 _levelWon = true;
                 LevelCompleted?.Invoke(CurrentLevel);
             }
+        }
+
+        /// <summary>
+        /// Minimum ScoreSystem.Score required to win a level, on top of reaching the bottom
+        /// (v3.1 arcade pivot, §5.7/§9 — replaces the R4 diamond gate). Levels 1-3 are the tutorial
+        /// ramp and have no gate. A tunnel-bot earns ~50 pts/row from Depth alone, so the level 4
+        /// minimum is trivially cleared by descending; the level 8+ minimums require engaging with
+        /// bursts, bombs or enemy kills along the way.
+        /// </summary>
+        public static int ScoreMinimumForLevel(int level)
+        {
+            if (level <= 3) return 0;
+            if (level <= 5) return 500;
+            if (level <= 7) return 1500;
+            if (level <= 9) return 3000;
+            return 5000; // level 10
         }
 
         /// <summary>

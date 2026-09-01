@@ -65,6 +65,19 @@ namespace HollowLines.Core
         private readonly GridModel _grid;
         private readonly Dictionary<long, ChunkState> _states = new Dictionary<long, ChunkState>();
         private readonly HashSet<GridPos> _wobblingCells = new HashSet<GridPos>();
+        private readonly List<GridPos> _lastShockwave = new List<GridPos>();
+
+        /// <summary>
+        /// The shockwave ring of the burst currently being resolved — the cells around the chunk's
+        /// footprint, excluding the footprint itself. Filled in BEFORE ChunkBurst fires, so a
+        /// handler can read it during that event (that is its only supported use: EnemySystem needs
+        /// footprint + ring as one kill zone, §6.5). Stale between bursts — never poll it.
+        ///
+        /// This exists instead of a 4th ChunkBurst parameter because ChunkBurst has five subscribers
+        /// (GameBootstrap, VfxManager, AudioManager, the playtest harness, ChunkBurstTests) and only
+        /// one of them wants the ring; widening the event would churn all five for one consumer.
+        /// </summary>
+        public IReadOnlyList<GridPos> LastShockwaveCells => _lastShockwave;
 
         public GravitySystem(GridModel grid)
         {
@@ -360,6 +373,22 @@ namespace HollowLines.Core
             foreach (GridPos cell in cells)
                 _grid.Set(cell, CellType.Empty);
 
+            // Shockwave ring: every cardinal neighbor that is not itself part of the burst.
+            // COMPUTED BEFORE ChunkBurst fires, so a handler reading LastShockwaveCells during the
+            // event sees THIS burst's ring and not the previous one. Its effects still apply after
+            // the event, so the documented crush → land → burst → shockwave ordering is unchanged.
+            var ring = new HashSet<GridPos>();
+            foreach (GridPos cell in cells)
+            {
+                AddRingCell(ring, cells, cell.Offset(0, -1));
+                AddRingCell(ring, cells, cell.Offset(0,  1));
+                AddRingCell(ring, cells, cell.Offset(-1, 0));
+                AddRingCell(ring, cells, cell.Offset( 1, 0));
+            }
+
+            _lastShockwave.Clear();
+            _lastShockwave.AddRange(ring);
+
             ChunkBurst?.Invoke(cells, fallDistance, chunk.Color);
 
             // The avatar is only hit by the chunk's own footprint — that is where a crushed player
@@ -372,16 +401,6 @@ namespace HollowLines.Core
                     avatarHit = true;
                     break;
                 }
-            }
-
-            // Shockwave ring: every cardinal neighbor that is not itself part of the burst.
-            var ring = new HashSet<GridPos>();
-            foreach (GridPos cell in cells)
-            {
-                AddRingCell(ring, cells, cell.Offset(0, -1));
-                AddRingCell(ring, cells, cell.Offset(0,  1));
-                AddRingCell(ring, cells, cell.Offset(-1, 0));
-                AddRingCell(ring, cells, cell.Offset( 1, 0));
             }
 
             foreach (GridPos p in ring)

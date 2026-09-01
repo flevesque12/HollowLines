@@ -179,8 +179,9 @@ namespace HollowLines.Core
         }
 
         /// <summary>
-        /// R4 (§9): exact diamond count per campaign level. Levels 1-3 are pure tutorial (0 —
-        /// the campaign win gate is a no-op there, CampaignManager.NotifyAvatarPosition §6.4).
+        /// R4 (§9): exact diamond count per campaign level. Levels 1-3 are pure tutorial (0).
+        /// v3.1: diamonds no longer gate the level — each is a +150 pt bonus toward the score
+        /// minimum CampaignManager.ScoreMinimumForLevel gates on (§5.7).
         /// </summary>
         public static int DiamondCountForLevel(int level)
         {
@@ -250,6 +251,207 @@ namespace HollowLines.Core
                 var row = board[pos.Y].ToCharArray();
                 row[pos.X] = 'D';
                 board[pos.Y] = new string(row);
+            }
+        }
+
+        // ── Enemy placement (🆕R5.13, §9) ────────────────────────────────────
+
+        /// <summary>Minimum row gap between any two enemies — keeps them scattered, never clustered.</summary>
+        public const int MinEnemyRowSpacing = 3;
+
+        /// <summary>A Crawler prefers a row with at least this many empty cells to shuffle along.</summary>
+        public const int CrawlerLateralSpace = 3;
+
+        /// <summary>A Boomer prefers to sit within this many rows of a buried bomb.</summary>
+        public const int BoomerBombProximity = 2;
+
+        /// <summary>Crawlers per campaign level (§9). None before level 6, where bombs already taught burst kills.</summary>
+        public static int CrawlerCountForLevel(int level)
+        {
+            switch (level)
+            {
+                case 6:
+                case 7:  return 3;
+                case 8:  return 4;
+                case 9:  return 5;
+                case 10: return 6;
+                default: return 0; // levels 1-5
+            }
+        }
+
+        /// <summary>Boomers per campaign level (§9). None before level 7 — the player has to have seen bomb chains first.</summary>
+        public static int BoomerCountForLevel(int level)
+        {
+            switch (level)
+            {
+                case 7:  return 2;
+                case 8:  return 3;
+                case 9:  return 4;
+                case 10: return 5;
+                default: return 0; // levels 1-6
+            }
+        }
+
+        /// <summary>
+        /// R5.13 (§9): pick the enemy placements for a campaign board. Returns (type, position)
+        /// pairs; the enemy count per level comes from <see cref="CrawlerCountForLevel"/> /
+        /// <see cref="BoomerCountForLevel"/>. Levels 1-5 return an empty list.
+        ///
+        /// **The board is NOT mutated** — read-only input. Enemies are ACTORS, not CellTypes (§6.5):
+        /// they have no map character and cannot live in the `rows` at all (GridModel.FromStringMap
+        /// would throw on one). An enemy's position is the coordinate of an existing solid cell,
+        /// which is exactly what "buried/dormant" means — the cell keeps its own type, and the enemy
+        /// sits on top of it as a separate entity. That is also what makes the Crawler work: it is
+        /// walled in until the player drills next to it, which both wakes it (§6.5 activation) and
+        /// opens the tunnel it then walks into.
+        ///
+        /// Placement rules, in order of how hard they bind:
+        ///   HARD — content rows only (never the spawn zone, never the floor), and only on an
+        ///          existing Color/Hard cell. Never Empty (an enemy hanging in mid-air reads as a
+        ///          bug), never Steel or Bomb (those cells have their own meaning to the player).
+        ///   HARD — at least <see cref="MinEnemyRowSpacing"/> rows between any two enemies, of
+        ///          either type. Enforced by construction: each enemy claims a whole row.
+        ///   SOFT — Boomers prefer rows within <see cref="BoomerBombProximity"/> of a buried bomb,
+        ///          so their death blast has a real chance of setting one off (design rule 9).
+        ///   SOFT — Crawlers prefer rows with at least <see cref="CrawlerLateralSpace"/> empty
+        ///          cells, so there is somewhere to shuffle once woken.
+        /// Soft rules are preferences, not filters: each type takes its preferred rows first and
+        /// falls back to any legal row, so the per-level count is always met when geometry allows.
+        /// </summary>
+        public static List<(EnemyType type, GridPos pos)> PlaceEnemies(string[] board, int level, Random rng)
+        {
+            var placements = new List<(EnemyType type, GridPos pos)>();
+
+            if (board == null || board.Length == 0)
+                return placements;
+            if (rng == null)
+                throw new ArgumentNullException(nameof(rng));
+
+            int crawlers = CrawlerCountForLevel(level);
+            int boomers  = BoomerCountForLevel(level);
+            if (crawlers + boomers == 0)
+                return placements;
+
+            int width    = board[0].Length;
+            int firstRow = SpawnRows;
+            int lastRow  = board.Length - FloorRows - 1;
+            if (lastRow < firstRow)
+                return placements;
+
+            // One pass over the content rows collects everything both preferences need.
+            var legalRows     = new List<int>();
+            var rowColumns    = new Dictionary<int, List<int>>(); // row → columns holding a Color/Hard cell
+            var rowEmptyCount = new Dictionary<int, int>();
+            var bombRows      = new List<int>();
+
+            for (int y = firstRow; y <= lastRow; y++)
+            {
+                var columns = new List<int>();
+                int empty   = 0;
+                bool hasBomb = false;
+
+                for (int x = 0; x < width; x++)
+                {
+                    char c = board[y][x];
+                    if (c == 'A' || c == 'B' || c == 'C' || c == 'H') columns.Add(x);
+                    else if (c == '.') empty++;
+                    else if (c == 'X') hasBomb = true;
+                }
+
+                if (hasBomb)
+                    bombRows.Add(y);
+                if (columns.Count == 0)
+                    continue; // nowhere solid to bury an enemy in this row
+
+                legalRows.Add(y);
+                rowColumns[y]    = columns;
+                rowEmptyCount[y] = empty;
+            }
+
+            var usedRows = new List<int>();
+
+            // Boomers go first: "near a bomb" is the narrower preference, so it gets first pick of
+            // the rows before Crawler placement starts blocking them out.
+            PlaceEnemyType(EnemyType.Boomer, boomers,
+                           OrderRowsByPreference(legalRows, y => IsNearBombRow(y, bombRows), rng),
+                           rowColumns, usedRows, placements, rng);
+
+            PlaceEnemyType(EnemyType.Crawler, crawlers,
+                           OrderRowsByPreference(legalRows, y => rowEmptyCount[y] >= CrawlerLateralSpace, rng),
+                           rowColumns, usedRows, placements, rng);
+
+            return placements;
+        }
+
+        private static void PlaceEnemyType(EnemyType type, int count, List<int> orderedRows,
+                                           Dictionary<int, List<int>> rowColumns, List<int> usedRows,
+                                           List<(EnemyType type, GridPos pos)> placements, Random rng)
+        {
+            int placed = 0;
+            foreach (int y in orderedRows)
+            {
+                if (placed >= count)
+                    return;
+                if (!IsFarEnough(y, usedRows))
+                    continue;
+
+                List<int> columns = rowColumns[y];
+                int x = columns[rng.Next(columns.Count)];
+
+                placements.Add((type, new GridPos(x, y)));
+                usedRows.Add(y);
+                placed++;
+            }
+            // Falls through short only if the board genuinely has no legal spacing left — defensive,
+            // real campaign boards are far taller than count × MinEnemyRowSpacing.
+        }
+
+        /// <summary>Preferred rows first (shuffled), then everything else (shuffled) as fallback.</summary>
+        private static List<int> OrderRowsByPreference(List<int> rows, Func<int, bool> isPreferred, Random rng)
+        {
+            var preferred = new List<int>();
+            var rest      = new List<int>();
+
+            foreach (int y in rows)
+            {
+                if (isPreferred(y)) preferred.Add(y);
+                else                rest.Add(y);
+            }
+
+            Shuffle(preferred, rng);
+            Shuffle(rest, rng);
+            preferred.AddRange(rest);
+            return preferred;
+        }
+
+        private static bool IsNearBombRow(int row, List<int> bombRows)
+        {
+            foreach (int bombRow in bombRows)
+            {
+                if (Math.Abs(row - bombRow) <= BoomerBombProximity)
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool IsFarEnough(int row, List<int> usedRows)
+        {
+            foreach (int used in usedRows)
+            {
+                if (Math.Abs(row - used) < MinEnemyRowSpacing)
+                    return false;
+            }
+            return true;
+        }
+
+        private static void Shuffle(List<int> items, Random rng)
+        {
+            for (int i = items.Count - 1; i > 0; i--)
+            {
+                int j = rng.Next(i + 1);
+                int tmp  = items[i];
+                items[i] = items[j];
+                items[j] = tmp;
             }
         }
 

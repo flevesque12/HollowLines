@@ -17,6 +17,8 @@ namespace HollowLines.Core
     ///   Depth           DepthPoints                              +50 per new deepest row
     ///   Perfect Clear   PerfectClearBase (flat)                  +500, cascade does NOT scale it
     ///   Diamond         DiamondPoints (flat)                     +150 per diamond, however collected
+    ///   Enemy Kill      killPoints × bonus                       Crawler 100/Boomer 150, ×fall_bonus/chain_mult/1
+    ///   Boomer Blast    blocks × BombPointsPerBlock × parentBonus  Boomer's death explosion scores like a bomb
     ///
     /// === Design rationale (v3) ===
     ///
@@ -36,6 +38,8 @@ namespace HollowLines.Core
         public const int DepthPoints        = 50;
         public const int PerfectClearBase   = 500;
         public const int DiamondPoints      = 150;
+        public const int CrawlerKillPoints  = 100;
+        public const int BoomerKillPoints   = 150;
 
         /// <summary>Rows per +1 burst multiplier: fallBonus = floor(fallDistance / BurstFallDivisor).</summary>
         public const int BurstFallDivisor = 2;
@@ -200,6 +204,46 @@ namespace HollowLines.Core
             Score += pts;
 
             OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Diamond, 1));
+        }
+
+        /// <summary>
+        /// Award points for killing a Crawler or Boomer (§6.5). Crawler = 100 pts, Boomer = 150 pts,
+        /// both scaled by the parent bonus.
+        /// </summary>
+        /// <param name="type">Which enemy died — sets the base value.</param>
+        /// <param name="bonus">
+        ///   fall_bonus if killed by a chunk burst, chain_mult if killed by a bomb blast, or 1 for a
+        ///   plain crush kill. GameBootstrap reads this off GravitySystem/BombSystem and passes it
+        ///   through — EnemySystem's own EnemyKilled event only carries the KillMethod, not the
+        ///   bonus value itself (Core systems don't reference each other, §7). Values &lt; 1 clamp to 1.
+        /// </param>
+        public void AwardEnemyKill(EnemyType type, int bonus = 1)
+        {
+            if (bonus < 1) bonus = 1;
+
+            int basePoints = type == EnemyType.Boomer ? BoomerKillPoints : CrawlerKillPoints;
+            int pts = basePoints * bonus;
+            Score += pts;
+
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.EnemyKill, bonus));
+        }
+
+        /// <summary>
+        /// Award points for a Boomer's death blast (§6.5) — it explodes like a bomb, so it scores
+        /// like one: same BombPointsPerBlock rate, scaled by the SAME parent bonus that killed the
+        /// Boomer in the first place (carried straight through, not recomputed).
+        /// </summary>
+        /// <param name="blocksDestroyed">Blocks removed by the Boomer's radius-1 blast.</param>
+        /// <param name="parentBonus">fall_bonus or chain_mult from whatever killed the Boomer.</param>
+        public void AwardBoomerBlast(int blocksDestroyed, int parentBonus)
+        {
+            if (blocksDestroyed < 0) blocksDestroyed = 0;
+            if (parentBonus     < 1) parentBonus     = 1;
+
+            int pts = blocksDestroyed * BombPointsPerBlock * parentBonus;
+            Score += pts;
+
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.BoomerBlast, parentBonus));
         }
 
         /// <summary>Reset all state for a new run.</summary>

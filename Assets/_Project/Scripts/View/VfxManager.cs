@@ -61,6 +61,25 @@ namespace HollowLines.View
         [SerializeField] private int diamondSparkleParticles = 10;
         [SerializeField] private float diamondSparkleDuration = 0.45f;
 
+        [Header("— Enemies (R5.15) —")]
+        [Tooltip("Crawler death: a quick, low, earthy crunch — small and cheap, it's a bonus target.")]
+        [SerializeField] private Color crawlerDeathColor    = new Color(0.45f, 0.62f, 0.25f);
+        [SerializeField] private int   crawlerDeathParticles = 8;
+        [SerializeField] private float crawlerDeathDuration  = 0.28f;
+
+        [Tooltip("Boomer death: bigger and brighter than the Crawler's — it's an amplifier, it should read as one.")]
+        [SerializeField] private Color boomerDeathColor     = new Color(1f, 0.72f, 0.20f);
+        [SerializeField] private int   boomerDeathParticles = 18;
+        [SerializeField] private float boomerDeathDuration  = 0.5f;
+
+        [Tooltip("The flash when a dormant Crawler wakes up.")]
+        [SerializeField] private Color enemyWakeColor    = new Color(0.85f, 1f, 0.6f);
+        [SerializeField] private float enemyWakeDuration = 0.25f;
+
+        [Tooltip("Halo colour of a live Boomer — it pulses until something kills it.")]
+        [SerializeField] private Color boomerGlowColor = new Color(1f, 0.55f, 0.15f);
+        [SerializeField] private float boomerGlowScale = 1.1f;
+
         [Header("— Bomb Fuse Telegraph (v3) —")]
         [Tooltip("Glow colour of a freshly-armed bomb (plenty of fuse left).")]
         [SerializeField] private Color fuseCalmColor = new Color(1f, 0.35f, 0.12f);
@@ -107,9 +126,40 @@ namespace HollowLines.View
             public float LastSeen;  // Time.time of the last FuseProgress for this cell
         }
 
+        private EnemySystem _enemies;
+
+        /// <summary>
+        /// Last known type + cell for every living enemy, keyed by id.
+        ///
+        /// EnemySystem's events don't carry enough to draw with: EnemyActivated is just an id, and
+        /// EnemyKilled has the type but no position (by the time it fires the enemy is already dead,
+        /// so it can't be looked up either). Rather than widen two Core events for a purely visual
+        /// need, the view keeps its own cache — the same shape as the _fuses dictionary above, and
+        /// the same idea: per-entity view state that Core has no reason to carry.
+        ///
+        /// Refreshed on a timer rather than every frame: GetAllAlive() allocates a fresh list, and a
+        /// Crawler only steps every CrawlerMoveInterval (0.8 s), so 0.2 s is always well inside one
+        /// move and costs 5 allocations/second instead of 60.
+        /// </summary>
+        private readonly System.Collections.Generic.Dictionary<int, EnemyMarker> _enemyMarkers =
+            new System.Collections.Generic.Dictionary<int, EnemyMarker>();
+        private float _enemyCacheTimer;
+        private const float EnemyCacheRefresh = 0.2f;
+
+        private struct EnemyMarker
+        {
+            public EnemyType Type;
+            public GridPos   Pos;
+        }
+
+        // One pulsing halo per ACTIVE Boomer, keyed by enemy id (not by cell: a Boomer never moves,
+        // but the id is what the kill event gives us to tear it down with).
+        private readonly System.Collections.Generic.Dictionary<int, SpriteRenderer> _boomerGlows =
+            new System.Collections.Generic.Dictionary<int, SpriteRenderer>();
+
         public void Init(AvatarModel avatar, CollapseSystem collapse, ChainTracker chain, BombSystem bombs,
                          GridModel grid, GravitySystem gravity = null, StreakTracker streak = null,
-                         AvatarView avatarView = null)
+                         AvatarView avatarView = null, EnemySystem enemies = null)
         {
             _avatar     = avatar;
             _collapse   = collapse;
@@ -119,6 +169,7 @@ namespace HollowLines.View
             _gravity    = gravity;
             _streak     = streak;
             _avatarView = avatarView;
+            _enemies    = enemies;
 
             _avatar.Drilled          += OnDrilled;
             _collapse.PerfectClear   += OnPerfectClear;
@@ -139,6 +190,14 @@ namespace HollowLines.View
             {
                 _streak.StreakGrew   += OnStreakGrew;
                 _streak.StreakBroken += OnStreakBroken;
+            }
+
+            if (_enemies != null)
+            {
+                _enemies.EnemySpawned    += OnEnemySpawned;
+                _enemies.EnemyActivated  += OnEnemyActivated;
+                _enemies.EnemyKilled     += OnEnemyKilled;
+                _enemies.BoomerDetonated += OnBoomerDetonated;
             }
 
             BuildGlowSprite();
@@ -171,11 +230,20 @@ namespace HollowLines.View
                 _streak.StreakGrew   -= OnStreakGrew;
                 _streak.StreakBroken -= OnStreakBroken;
             }
+            if (_enemies != null)
+            {
+                _enemies.EnemySpawned    -= OnEnemySpawned;
+                _enemies.EnemyActivated  -= OnEnemyActivated;
+                _enemies.EnemyKilled     -= OnEnemyKilled;
+                _enemies.BoomerDetonated -= OnBoomerDetonated;
+            }
         }
 
         private void Update()
         {
             AnimateFuses();
+            RefreshEnemyMarkers();
+            AnimateBoomerGlows();
 
             // Streak trail: a fading breadcrumb behind the driller at high streaks.
             if (_currentStreak < streakTrailStep || _avatarView == null)
@@ -194,7 +262,7 @@ namespace HollowLines.View
 
         // ── Event handlers ──────────────────────────────────────────────
 
-        private void OnDrilled(GridPos cell, CellType oldType)
+        private void OnDrilled(GridPos cell, CellType oldType, DrillDirection direction)
         {
             SpawnFlash(cell);
             if (oldType == CellType.Diamond) SpawnDiamondSparkle(cell);
@@ -358,6 +426,163 @@ namespace HollowLines.View
             }
 
             SpawnRipple(origin, diamondSparkleColor);
+        }
+
+        // ── Enemies (R5.15) ──────────────────────────────────────────────
+
+        private void OnEnemySpawned(int id, EnemyType type, GridPos pos)
+        {
+            _enemyMarkers[id] = new EnemyMarker { Type = type, Pos = pos };
+        }
+
+        /// <summary>
+        /// A buried enemy woke up. A Crawler gets a one-shot flash (it's about to start moving);
+        /// a Boomer instead lights a permanent pulsing halo — it never moves, so the standing threat
+        /// (and opportunity) has to read continuously, not for a quarter second.
+        /// </summary>
+        private void OnEnemyActivated(int id)
+        {
+            if (!_enemyMarkers.TryGetValue(id, out EnemyMarker marker))
+                return;
+
+            if (marker.Type == EnemyType.Crawler)
+                SpawnWakeFlash(marker.Pos);
+            else
+                AddBoomerGlow(id, marker.Pos);
+        }
+
+        private void OnEnemyKilled(int id, EnemyType type, KillMethod method, int bonus)
+        {
+            // The cached cell is the last one seen while it was alive — EnemyKilled carries no
+            // position, and the enemy is already dead so it can't be looked up any more.
+            if (_enemyMarkers.TryGetValue(id, out EnemyMarker marker))
+            {
+                if (type == EnemyType.Crawler)
+                    SpawnCrawlerDeath(marker.Pos);
+                // A Boomer's own death burst is drawn by OnBoomerDetonated, which knows the real
+                // position — but a Boomer killed by a plain crush never detonates, so it would
+                // otherwise die silently. Cover that case here.
+                else if (!_boomerGlows.ContainsKey(id) || method == KillMethod.Crush)
+                    SpawnBoomerDeath(marker.Pos);
+
+                _enemyMarkers.Remove(id);
+            }
+
+            RemoveBoomerGlow(id);
+        }
+
+        /// <summary>The Boomer's payoff: a bigger, brighter burst plus its own shockwave ripple.</summary>
+        private void OnBoomerDetonated(GridPos pos, int parentBonus, int blocksDestroyed)
+        {
+            SpawnBoomerDeath(pos);
+        }
+
+        private void SpawnCrawlerDeath(GridPos cell)
+        {
+            Vector3 origin = BoardView.ToLocal(cell);
+            for (int i = 0; i < crawlerDeathParticles; i++)
+            {
+                GameObject go = NewParticle("CrawlerDeath", origin, crawlerDeathColor, 0.85f, 6);
+                go.transform.localScale = Vector3.one * Random.Range(0.14f, 0.26f);
+
+                float angle = Random.Range(0f, Mathf.PI * 2f);
+                var drift = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * Random.Range(0.8f, 1.6f);
+                StartCoroutine(FadeAndDrift(go.transform, go.GetComponent<SpriteRenderer>(),
+                                            crawlerDeathDuration, drift));
+            }
+        }
+
+        private void SpawnBoomerDeath(GridPos cell)
+        {
+            Vector3 origin = BoardView.ToLocal(cell);
+            for (int i = 0; i < boomerDeathParticles; i++)
+            {
+                GameObject go = NewParticle("BoomerDeath", origin, boomerDeathColor, 0.95f, 7);
+                go.transform.localScale = Vector3.one * Random.Range(0.2f, 0.42f);
+
+                float angle = i * (360f / boomerDeathParticles) * Mathf.Deg2Rad;
+                var drift = new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * Random.Range(1.8f, 3.0f);
+                StartCoroutine(FadeAndDrift(go.transform, go.GetComponent<SpriteRenderer>(),
+                                            boomerDeathDuration, drift));
+            }
+
+            SpawnRipple(origin, boomerDeathColor);
+        }
+
+        private void SpawnWakeFlash(GridPos cell)
+        {
+            GameObject go = NewParticle("EnemyWake", BoardView.ToLocal(cell), enemyWakeColor, 0.9f, 7);
+            go.transform.localScale = Vector3.one * 0.9f;
+            StartCoroutine(FadeAndScale(go.transform, go.GetComponent<SpriteRenderer>(),
+                                        enemyWakeDuration, 1.5f));
+        }
+
+        private void AddBoomerGlow(int id, GridPos pos)
+        {
+            if (_boomerGlows.ContainsKey(id))
+                return;
+
+            var go = new GameObject("BoomerGlow");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = BoardView.ToLocal(pos);
+            go.transform.localScale    = Vector3.one * boomerGlowScale;
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite       = BoardView.GetUnitSprite();
+            sr.sortingOrder = 6;
+
+            // Same additive radial glow the bomb fuse uses — a Boomer IS a bomb with legs, so
+            // borrowing its material keeps the visual language consistent (and costs nothing).
+            Material mat = EnsureFuseMaterial();
+            if (mat != null)
+                sr.sharedMaterial = mat;
+
+            sr.color = new Color(boomerGlowColor.r, boomerGlowColor.g, boomerGlowColor.b, 0f);
+            _boomerGlows[id] = sr;
+        }
+
+        private void RemoveBoomerGlow(int id)
+        {
+            if (!_boomerGlows.TryGetValue(id, out SpriteRenderer sr))
+                return;
+            if (sr != null)
+                Destroy(sr.gameObject);
+            _boomerGlows.Remove(id);
+        }
+
+        /// <summary>A steady breathing pulse — slower and calmer than a lit fuse, which is racing.</summary>
+        private void AnimateBoomerGlows()
+        {
+            if (_boomerGlows.Count == 0)
+                return;
+
+            float phase = Mathf.Sin(Time.time * 3f * Mathf.PI) * 0.5f + 0.5f; // 0 → 1, ~1.5 Hz
+
+            foreach (var kvp in _boomerGlows)
+            {
+                SpriteRenderer sr = kvp.Value;
+                if (sr == null)
+                    continue;
+
+                sr.color = new Color(boomerGlowColor.r, boomerGlowColor.g, boomerGlowColor.b,
+                                     Mathf.Lerp(0.30f, 0.75f, phase));
+                sr.transform.localScale = Vector3.one * boomerGlowScale * Mathf.Lerp(0.9f, 1.1f, phase);
+            }
+        }
+
+        /// <summary>Keeps the id → cell cache current so Crawler death bursts land where it actually is.</summary>
+        private void RefreshEnemyMarkers()
+        {
+            if (_enemies == null)
+                return;
+
+            _enemyCacheTimer -= Time.deltaTime;
+            if (_enemyCacheTimer > 0f)
+                return;
+            _enemyCacheTimer = EnemyCacheRefresh;
+
+            foreach (EnemyEntity e in _enemies.GetAllAlive())
+                _enemyMarkers[e.Id] = new EnemyMarker { Type = e.Type, Pos = e.Position };
         }
 
         /// <summary>Expanding ring, 1 cell of radius, that reads as the shockwave's reach.</summary>

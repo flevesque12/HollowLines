@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using HollowLines.Core;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -13,10 +14,10 @@ namespace HollowLines.View
     /// once in Awake and survive level transitions.
     ///
     /// Grid-dependent systems (GridModel, AvatarModel, GravitySystem, CollapseSystem,
-    /// BombSystem, ChainTracker) are fully rebuilt by LoadLevel() on each transition.
+    /// BombSystem, ChainTracker, EnemySystem) are fully rebuilt by LoadLevel() on each transition.
     ///
     /// Tick order (CLAUDE.md §7): avatar → depth → campaign → bombs → collapse → gravity
-    /// → chain → health → air.
+    /// → chain → health → air → enemies.
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
     {
@@ -127,6 +128,7 @@ namespace HollowLines.View
         private CollapseSystem _collapse;
         private BombSystem    _bombSystem;
         private ChainTracker  _chainTracker;
+        private EnemySystem   _enemySystem;
 
         // ── Persistent views ──────────────────────────────────────────────────
         private GameInput        _input;
@@ -240,7 +242,7 @@ namespace HollowLines.View
             else if (_inTutorial)                                               //    win detection (depth only)
                 CheckTutorialWin();
             else if (useCampaign)
-                _campaign.NotifyAvatarPosition(_avatar.Position, _grid.Height, _diamondSystem.IsComplete); // R4 gate
+                _campaign.NotifyAvatarPosition(_avatar.Position, _grid.Height, _scoreSystem.Score); // v3.1 score gate
             _bombSystem.Tick(dt, _avatar.Position);                             // 4. bomb fuses
             _collapse.Resolve(_avatar.Position);                                // 5. Perfect Clear detection
             _gravity.Tick(dt, _avatar.Position);                                // 6. chunk gravity + burst
@@ -248,6 +250,13 @@ namespace HollowLines.View
             _healthSystem.Tick(dt);                                             // 8. health i-frames
             if (!disableAir)                                                     // 9. air drain (debug: skippable)
                 _airSystem.Tick(dt);
+            _enemySystem.Tick(dt, _avatar.Position);                            // 10. enemy movement + contact
+
+            // Endless has no drill/burst event to wake buried enemies ahead of the player, so they
+            // activate as the camera scrolls them into view (§6.5). Campaign boards don't need it —
+            // there the drill and blast triggers cover it.
+            if (_endlessMode)
+                ActivateEnemiesInView();
 
             // Camera follows the avatar down the well (smoothed, frame-rate independent). CameraShake
             // lays its offset on top of this base, so the follow and the shake never fight.
@@ -322,6 +331,7 @@ namespace HollowLines.View
             _collapse     = new CollapseSystem(_grid);
             _bombSystem   = new BombSystem(_grid, _collapse);
             _chainTracker = new ChainTracker(_collapse, _gravity);
+            _enemySystem  = new EnemySystem(_grid); // grid-dependent: the Boomer blast writes cells (§6.5)
 
             // Settle the freshly generated board into a stable rest state BEFORE play. Generated
             // boards carry unsupported mass over gaps; without this the first ticks would wobble,
@@ -332,23 +342,35 @@ namespace HollowLines.View
             // ── Streak tracking (CLAUDE.md §7) ───────────────────────────────
             // Every drill pays, scaled by the same-color run. Capsules are streak-neutral,
             // so grabbing air mid-streak is never a punishment.
-            _avatar.Drilled += (drilledCell, oldType) =>
+            _avatar.Drilled += (drilledCell, oldType, direction) =>
             {
-                _streakTracker.NotifyDrill(oldType);
+                _streakTracker.NotifyDrill(oldType, direction);
                 _scoreSystem.AwardDrill(_streakTracker.CurrentStreak, _streakTracker.CurrentColor);
+                _airSystem.RestoreDrill();
                 if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
                 if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(drilledCell); // R4
                 _bombSystem.NotifyDrilled(drilledCell);
+                _enemySystem.NotifyAdjacentDrill(drilledCell); // R5.9: wakes a dormant neighbor
             };
 
             // ── Chunk gravity + burst ────────────────────────────────────────
-            _gravity.ChunkLanded += chunk => _bombSystem.NotifyChunkLanded(chunk);
+            _gravity.ChunkLanded += chunk =>
+            {
+                _bombSystem.NotifyChunkLanded(chunk);
+                // Enemies take the footprint as a plain cell list — a landing slab crushes whatever
+                // stands under it, dormant or not (§6.5).
+                _enemySystem.NotifyChunkLanded(new List<GridPos>(chunk.Cells));
+            };
 
             _gravity.ChunkBurst += (cells, fallDistance, _) =>
             {
                 _scoreSystem.AwardBurst(cells.Count, fallDistance);
                 _airSystem.RestoreBurst();
                 _cameraShake.Shake(0.10f + 0.02f * cells.Count, 0.25f);
+
+                // Footprint + shockwave ring are one kill zone. LastShockwaveCells is only valid
+                // during this event (GravitySystem fills it just before firing) — read it here, now.
+                _enemySystem.NotifyBurst(cells, new List<GridPos>(_gravity.LastShockwaveCells), fallDistance);
             };
 
             // Shockwave side effects: capsules freed, diamonds freed, bombs lit, avatar caught in the blast.
@@ -369,6 +391,29 @@ namespace HollowLines.View
             _bombSystem.AvatarHitByBlast    += _ => OnAvatarCrushed();
             _bombSystem.BombArmed           += pos => Debug.Log($"[Bomb] Armée en {pos}");
             _bombSystem.BombExploded        += pos => { _cameraShake.Shake(0.35f, 0.3f); Debug.Log($"[Bomb] BOOM en {pos}"); };
+            // R5.12: the blast's chain position IS the enemy-kill bonus, so it rides along on the event.
+            _bombSystem.BlastResolved       += (cells, chainMult) => _enemySystem.NotifyBombBlast(cells, chainMult);
+
+            // ── Enemies (R5.12 — Crawler + Boomer, §6.5) ─────────────────────
+            // The bonus rides on EnemyKilled itself (fall_bonus / chain_mult / 1), so there is no
+            // switch on KillMethod here and no "last thing that happened" field to read back.
+            _enemySystem.EnemyKilled += (id, type, method, bonus) =>
+            {
+                _scoreSystem.AwardEnemyKill(type, bonus);
+                Debug.Log($"[Enemy] {type} tué par {method} (×{bonus})");
+            };
+            _enemySystem.AvatarHitByEnemy += _ => OnAvatarCrushed();
+
+            // The blast itself is already applied by EnemySystem (R5.8 owns the grid writes, the
+            // capsule/diamond liberation and the capped chain) — GameBootstrap only banks the score
+            // and the side effects Core can't reach, exactly like the bomb-liberation wiring above.
+            _enemySystem.BoomerDetonated += (pos, parentBonus, blocksDestroyed) =>
+            {
+                _scoreSystem.AwardBoomerBlast(blocksDestroyed, parentBonus);
+                _cameraShake.Shake(0.25f, 0.28f);
+            };
+            _enemySystem.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();
+            _enemySystem.DiamondLiberated    += pos => _diamondSystem.NotifyCollected(pos);
 
             // ── Perfect Clear (rare jackpot, no longer the core loop) ─────────
             _collapse.PerfectClear  += _ =>
@@ -382,7 +427,7 @@ namespace HollowLines.View
             // Point HUD and audio at the new grid-dependent systems.
             _hud.RewireChain(_chainTracker);
             _hud.OnLevelLoaded();
-            _audio.Rewire(_avatar, _collapse, _chainTracker, _bombSystem, _gravity);
+            _audio.Rewire(_avatar, _collapse, _chainTracker, _bombSystem, _gravity, _enemySystem);
 
             // Rebuild board views.
             _boardViewGo = new GameObject("BoardView");
@@ -402,7 +447,16 @@ namespace HollowLines.View
             var vfxGo = new GameObject("VfxManager");
             vfxGo.transform.SetParent(_boardViewGo.transform, false);
             vfxGo.AddComponent<VfxManager>().Init(_avatar, _collapse, _chainTracker, _bombSystem, _grid,
-                                                  _gravity, _streakTracker, avatarView);
+                                                  _gravity, _streakTracker, avatarView, _enemySystem);
+
+            // Enemy sprites live under the board view, so they're torn down with it on the next load.
+            var enemyViewGo = new GameObject("EnemyView");
+            enemyViewGo.transform.SetParent(_boardViewGo.transform, false);
+            enemyViewGo.AddComponent<EnemyView>().Init(_enemySystem);
+
+            // Populate enemies LAST, so everything that renders them off EnemySpawned (EnemyView's
+            // sprites, VfxManager's marker cache) is already listening when the spawn events fire.
+            SpawnEnemiesForBoard(rows);
 
             FrameCamera();
         }
@@ -649,6 +703,50 @@ namespace HollowLines.View
             Vector3 start = CameraTarget();
             _cameraShake.BasePosition = start;
             cam.transform.position    = start;
+        }
+
+        /// <summary>
+        /// Populate the freshly loaded board with its enemies (✅R5.13, §9).
+        ///
+        /// Placements come from StrateGenerator out-of-band, never from the board string: enemies are
+        /// ACTORS, not CellTypes (§6.5), so they have no map character and cannot appear in `rows` at
+        /// all. `_enemySystem` is rebuilt per LoadLevel, so it always starts empty — no Reset() needed.
+        ///
+        /// Campaign only. The tutorial showcase is hand-authored and teaches scoring, not combat; the
+        /// debug map is a sandbox; and Endless enemy placement is explicitly deferred to R6 (the
+        /// generator's counts are per campaign level, and Endless has no level number).
+        ///
+        /// The seed is derived from the level (not the clock) so a level's enemies are as
+        /// deterministic as its board — but with a different constant, so enemy placement isn't
+        /// locked in step with the terrain rng.
+        /// </summary>
+        private void SpawnEnemiesForBoard(string[] rows)
+        {
+            if (_endlessMode || _inTutorial || !useCampaign)
+                return;
+
+            int level = _campaign.CurrentLevel;
+            var rng   = new System.Random(unchecked(level * (int)0x85EBCA6B));
+
+            foreach (var placement in StrateGenerator.PlaceEnemies(rows, level, rng))
+                _enemySystem.SpawnEnemy(placement.type, placement.pos);
+        }
+
+        /// <summary>
+        /// Wake every dormant enemy inside the camera's current vertical slice (§6.5, Endless).
+        /// Rows map to world Y as y = -row (BoardView.ToLocal), so the visible band is the camera's
+        /// un-shaken centre ± half its orthographic height. Rounded outward so an enemy on the very
+        /// edge of the view still counts as on-screen.
+        /// </summary>
+        private void ActivateEnemiesInView()
+        {
+            Camera cam  = Camera.main;
+            float  half = cam != null ? cam.orthographicSize : cameraViewRows / 2f;
+            float  centerRow = _cameraShake != null ? -_cameraShake.BasePosition.y : _avatar.Position.Y;
+
+            _enemySystem.ActivateInViewport(
+                Mathf.FloorToInt(centerRow - half),
+                Mathf.CeilToInt(centerRow + half));
         }
 
         /// <summary>

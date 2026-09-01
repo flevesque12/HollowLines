@@ -9,6 +9,11 @@ namespace HollowLines.Core
     /// AirCapsule and Hard/HardCracked are streak-neutral: the player is never punished for grabbing
     /// air or chipping through a Hard block mid-streak. Steel and Bomb never reach NotifyDrill —
     /// they are not drillable.
+    ///
+    /// v3.1 arcade pivot: the streak is vertical-only. A lateral or upward drill is completely
+    /// ignored (no reset, no increment) — only a downward drill builds or breaks it. This makes the
+    /// streak a passive bonus of natural descent instead of an active routing system, and removes
+    /// the Streak × Burst conflict (bursts destroy blocks laterally; the streak never notices).
     /// </summary>
     public sealed class StreakTracker
     {
@@ -24,11 +29,14 @@ namespace HollowLines.Core
         /// <summary>Fired when a different color breaks the streak, with the count that just ended.</summary>
         public event Action<int> StreakBroken;
 
-        /// <summary>Call after every successful drill with the CellType that was drilled.</summary>
-        public void NotifyDrill(CellType drilled)
+        /// <summary>Call after every successful drill with the CellType and direction that was drilled.</summary>
+        public void NotifyDrill(CellType drilled, DrillDirection direction)
         {
+            if (direction != DrillDirection.Down)
+                return; // v3.1: lateral/upward drills are streak-neutral, no reset, no increment
+
             if (!drilled.CanFuse())
-                return; // streak-neutral: Hard, HardCracked, AirCapsule never touch the streak
+                return; // streak-neutral: Hard, HardCracked, AirCapsule, Diamond never touch the streak
 
             if (CurrentStreak > 0 && drilled == CurrentColor)
             {

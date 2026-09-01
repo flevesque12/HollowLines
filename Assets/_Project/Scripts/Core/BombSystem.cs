@@ -27,7 +27,8 @@ namespace HollowLines.Core
     /// </summary>
     public sealed class BombSystem
     {
-        public const float FuseDuration = 2.5f;
+        // v3.1 arcade pivot (§2, CLAUDE.md): shortened from 2.5s for faster arcade tempo.
+        public const float FuseDuration = 1.5f;
         public const int   BlastRadius  = 2;
 
         public bool HasPocketBomb { get; private set; }
@@ -69,6 +70,14 @@ namespace HollowLines.Core
         /// Caller wires this to ScoreSystem.AwardBomb().
         /// </summary>
         public event Action<int, int> BombScored;
+
+        /// <summary>
+        /// 🆕R5.12: the cells one blast actually reached (its centre plus every in-bounds cell of the
+        /// cross), and that blast's chain position. Fired once per detonation, right after the blast
+        /// resolves. Wire to EnemySystem.NotifyBombBlast — an enemy standing in a blast cell dies
+        /// whatever CellType was there, so this is the full reached set, not just destroyed blocks.
+        /// </summary>
+        public event Action<List<GridPos>, int> BlastResolved;
 
         private readonly GridModel _grid;
 
@@ -198,13 +207,20 @@ namespace HollowLines.Core
                     _grid.Set(pos, CellType.Empty);
 
                 BombExploded?.Invoke(pos);
-                int destroyed = Blast(pos, avatarCell, queue, exploded);
+
+                var reached = new List<GridPos> { pos }; // the bomb's own cell counts as hit
+                int destroyed = Blast(pos, avatarCell, queue, exploded, reached);
                 BombScored?.Invoke(destroyed, chainMultiplier);
+                BlastResolved?.Invoke(reached, chainMultiplier);
             }
         }
 
-        /// <summary>Applies one bomb's cross blast. Returns how many blocks it removed outright.</summary>
-        private int Blast(GridPos center, GridPos avatarCell, Queue<GridPos> sympatheticQueue, HashSet<GridPos> alreadyExploded)
+        /// <summary>
+        /// Applies one bomb's cross blast. Returns how many blocks it removed outright, and appends
+        /// every in-bounds cell the blast reached to <paramref name="reached"/> (for BlastResolved).
+        /// </summary>
+        private int Blast(GridPos center, GridPos avatarCell, Queue<GridPos> sympatheticQueue,
+                          HashSet<GridPos> alreadyExploded, List<GridPos> reached)
         {
             // Cross pattern — 4 cardinal axes, up to BlastRadius steps each.
             int[] dx = {  0,  0, -1,  1 };
@@ -219,6 +235,8 @@ namespace HollowLines.Core
                     GridPos target = center.Offset(dx[axis] * r, dy[axis] * r);
                     if (!_grid.InBounds(target))
                         break; // out of bounds stops the arm in this direction
+
+                    reached.Add(target);
 
                     CellType hit = _grid.Get(target);
 

@@ -10,6 +10,8 @@ namespace HollowLines.Core
     ///   Depth        — flat award per new deepest row. Descending is always progress.
     ///   PerfectClear — rare full-void-row jackpot. A bonus, never the loop.
     ///   Diamond      — 🆕R4: flat award per diamond collected (drilled, bombed, or burst-liberated).
+    ///   EnemyKill    — 🆕R5.11: Crawler/Boomer kill, scaled by the parent bonus (fall_bonus/chain_mult/1).
+    ///   BoomerBlast  — 🆕R5.11: a Boomer's death explosion. Scores like a bomb blast (§6.5).
     /// </summary>
     public enum ScoreSource
     {
@@ -18,6 +20,8 @@ namespace HollowLines.Core
         Bomb,
         Depth,
         PerfectClear,
-        Diamond
+        Diamond,
+        EnemyKill,
+        BoomerBlast
     }
 }

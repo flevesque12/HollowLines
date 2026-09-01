@@ -28,6 +28,10 @@ namespace HollowLines.Core
         public const float BurstRestoreAmount        = 0.5f; // % per chunk burst
         public const float BombChainRestorePerBomb   = 1f;   // % per bomb in a sympathetic chain
 
+        // v3.1 arcade pivot (§8, design rule 1/5): every drill pays a little air back — the core
+        // survival loop is "drill to breathe", not a bonus for hitting a special cell type.
+        public const float DrillRestoreAmount = 0.5f; // % per drill (any successful drill)
+
         /// <summary>
         /// Drain in % per second. Campaign overrides this per level (CampaignManager.DrainRateForLevel);
         /// endless and debug boards keep the default.
@@ -76,6 +80,9 @@ namespace HollowLines.Core
 
         /// <summary>+5% air for shattering a chunk on impact. Wire to GravitySystem.ChunkBurst.</summary>
         public void RestoreBurst() => Restore(BurstRestoreAmount);
+
+        /// <summary>+0.5% air for every successful drill. Wire to AvatarModel.Drilled.</summary>
+        public void RestoreDrill() => Restore(DrillRestoreAmount);
 
         /// <summary>
         /// +3% air per bomb in a sympathetic chain. Wire to BombSystem.BombScored when chainMult > 1.

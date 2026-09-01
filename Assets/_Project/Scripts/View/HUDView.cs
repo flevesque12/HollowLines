@@ -7,7 +7,7 @@ namespace HollowLines.View
 {
     /// <summary>
     /// Gameplay HUD: score, depth, color streak, air bar, hearts, chain multiplier,
-    /// plus the v3 celebration popups (burst / bomb chain / perfect clear).
+    /// plus the v3 celebration popups (burst / bomb chain / perfect clear / enemy kill / Boomer blast).
     /// All UI built in code via UI Toolkit — no UXML/USS asset required.
     ///
     /// Usage: GameBootstrap calls Init() in Awake(); this MonoBehaviour builds its
@@ -72,6 +72,10 @@ namespace HollowLines.View
         private static readonly Color ColDim    = new Color(0.20f, 0.16f, 0.12f);
         private static readonly Color ColPanel  = new Color(0.00f, 0.00f, 0.00f, 0.55f);
         private static readonly Color ColMuted  = new Color(0.70f, 0.70f, 0.70f);
+        // R5.14 enemy popups: lime for a kill, violet for a Boomer's blast — deliberately neither
+        // amber (burst) nor red (bomb chain), so all four celebrations stay tellable apart at a glance.
+        private static readonly Color ColKill   = new Color(0.55f, 0.95f, 0.35f);
+        private static readonly Color ColBoom   = new Color(0.78f, 0.45f, 1.00f);
 
         // Streak tint mirrors the BoardView block palette so "×5" reads as "×5 amber".
         private static readonly Color ColBlockA = new Color(0.94f, 0.62f, 0.15f); // amber
@@ -301,7 +305,37 @@ namespace HollowLines.View
                 case ScoreSource.PerfectClear:
                     ShowPopup($"PERFECT CLEAR! +{evt.Points:N0}", ColGold);
                     break;
+
+                case ScoreSource.EnemyKill:
+                    ShowEnemyKillPopup(evt);
+                    break;
+
+                case ScoreSource.BoomerBlast:
+                    // A Boomer that detonates in open air destroys nothing — "+0 BOOM!" is noise.
+                    if (evt.Points > 0)
+                        ShowPopup($"+{evt.Points:N0} BOOM!", ColBoom);
+                    break;
             }
+        }
+
+        /// <summary>
+        /// "+100 CRAWLER!" / "+450 BOOMER! ×3" (R5.14).
+        ///
+        /// ScoreEvent has no enemy-type field — Detail carries the kill bonus — but the type is
+        /// exactly recoverable: AwardEnemyKill computes Points = basePoints × bonus, so
+        /// basePoints = Points / Detail lands precisely on CrawlerKillPoints or BoomerKillPoints.
+        /// That keeps the popup on the same OnScore-only diet as every other one (§5.9): the view
+        /// never subscribes to EnemySystem directly and never re-derives a scoring formula.
+        /// </summary>
+        private void ShowEnemyKillPopup(ScoreEvent evt)
+        {
+            int bonus      = Mathf.Max(1, evt.Detail);
+            int basePoints = evt.Points / bonus;
+
+            string name  = basePoints == ScoreSystem.BoomerKillPoints ? "BOOMER" : "CRAWLER";
+            string mult   = bonus > 1 ? $" ×{bonus}" : string.Empty;
+
+            ShowPopup($"+{evt.Points:N0} {name}!{mult}", ColKill);
         }
 
         private void RefreshScore()

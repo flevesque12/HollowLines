@@ -897,6 +897,47 @@ namespace HollowLines.Tests
                 "one burst must not out-earn a second of drain");
             Assert.Less(AirSystem.CapsuleRestoreAmount, 3f * AirSystem.DefaultDrainRate,
                 "a capsule is a find, not a refill");
+            Assert.LessOrEqual(AirSystem.DrillRestoreAmount, AirSystem.BurstRestoreAmount,
+                "drill restore is the survival floor, not a shortcut — it must never out-earn any other source");
+        }
+
+        // ── v3.1 arcade pivot: drill restore (§8, §6.1) ───────────────────────
+
+        [Test]
+        public void RestoreDrill_AddsCorrectAmount()
+        {
+            var air = new AirSystem();
+            air.Tick(10f); // drain to 50 %
+            Assert.AreEqual(50f, air.Air, Delta, "precondition");
+
+            air.RestoreDrill();
+
+            Assert.AreEqual(50.5f, air.Air, Delta);
+        }
+
+        [Test]
+        public void RestoreDrill_ClampsAtMax()
+        {
+            var air = new AirSystem();
+            air.Tick(0.04f); // drain 0.2 % → Air = 99.8
+            Assert.AreEqual(99.8f, air.Air, Delta, "precondition");
+
+            air.RestoreDrill(); // +0.5 % would overfill to 100.3
+
+            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
+        }
+
+        [Test]
+        public void RestoreDrill_TenTimesFromNinetyFive_ClampsAtMax_NoHigher()
+        {
+            var air = new AirSystem();
+            air.Tick(1f); // drain 5 % → Air = 95
+            Assert.AreEqual(95f, air.Air, Delta, "precondition");
+
+            for (int i = 0; i < 10; i++)
+                air.RestoreDrill();
+
+            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta, "must clamp at 100, never overshoot");
         }
 
         [Test]
@@ -1341,7 +1382,7 @@ namespace HollowLines.Tests
             });
             var avatar = new AvatarModel(grid, new GridPos(0, 0));
             CellType? reported = null;
-            avatar.Drilled += (_, old) => reported = old;
+            avatar.Drilled += (_, old, __) => reported = old;
 
             avatar.TryDrill(0, 1); // drill the Hard block below
 
@@ -1360,7 +1401,7 @@ namespace HollowLines.Tests
             });
             var avatar = new AvatarModel(grid, new GridPos(0, 0));
             CellType? reported = null;
-            avatar.Drilled += (_, old) => reported = old;
+            avatar.Drilled += (_, old, __) => reported = old;
 
             avatar.TryDrill(0, 1);
 
@@ -1379,7 +1420,7 @@ namespace HollowLines.Tests
             });
             var avatar = new AvatarModel(grid, new GridPos(0, 0));
             bool fired = false;
-            avatar.Drilled += (_, __) => fired = true;
+            avatar.Drilled += (_, __, ___) => fired = true;
 
             bool result = avatar.TryDrill(0, 1);
 
@@ -2242,6 +2283,159 @@ namespace HollowLines.Tests
             Assert.IsTrue(foundAny, "EndlessDiamondRate must actually place diamonds somewhere across 8 seeds");
         }
 
+        // ── Enemy placement (R5.13, §9) ───────────────────────────────────────
+
+        [Test]
+        public void PlaceEnemies_Level5_PlacesNone()
+        {
+            string[] board = StrateGenerator.CampaignBoard(5);
+
+            var enemies = StrateGenerator.PlaceEnemies(board, 5, new System.Random(1));
+
+            CollectionAssert.IsEmpty(enemies, "enemies only start at level 6 (§9)");
+        }
+
+        [Test]
+        public void PlaceEnemies_Level6_PlacesThreeCrawlers_NoBoomers()
+        {
+            string[] board = StrateGenerator.CampaignBoard(6);
+
+            var enemies = StrateGenerator.PlaceEnemies(board, 6, new System.Random(1));
+
+            Assert.AreEqual(3, enemies.Count);
+            foreach (var e in enemies)
+                Assert.AreEqual(EnemyType.Crawler, e.type, "Boomers don't appear until level 7 (§9)");
+        }
+
+        [Test]
+        public void PlaceEnemies_Level7_PlacesThreeCrawlersAndTwoBoomers()
+        {
+            string[] board = StrateGenerator.CampaignBoard(7);
+
+            var enemies = StrateGenerator.PlaceEnemies(board, 7, new System.Random(1));
+
+            int crawlers = 0, boomers = 0;
+            foreach (var e in enemies)
+            {
+                if (e.type == EnemyType.Crawler) crawlers++;
+                else                             boomers++;
+            }
+
+            Assert.AreEqual(5, enemies.Count);
+            Assert.AreEqual(3, crawlers);
+            Assert.AreEqual(2, boomers);
+        }
+
+        [Test]
+        public void PlaceEnemies_CountsMatchTheCampaignTable()
+        {
+            // §9: 6 → 3C, 7 → 3C+2B, 8 → 4C+3B, 9 → 5C+4B, 10 → 6C+5B.
+            int[] expectedCrawlers = { 0, 0, 0, 0, 0, 3, 3, 4, 5, 6 };
+            int[] expectedBoomers  = { 0, 0, 0, 0, 0, 0, 2, 3, 4, 5 };
+
+            for (int level = 1; level <= 10; level++)
+            {
+                string[] board = StrateGenerator.CampaignBoard(level);
+                var enemies = StrateGenerator.PlaceEnemies(board, level, new System.Random(level));
+
+                int crawlers = 0, boomers = 0;
+                foreach (var e in enemies)
+                {
+                    if (e.type == EnemyType.Crawler) crawlers++;
+                    else                             boomers++;
+                }
+
+                Assert.AreEqual(expectedCrawlers[level - 1], crawlers, $"Crawler count for level {level}");
+                Assert.AreEqual(expectedBoomers[level - 1],  boomers,  $"Boomer count for level {level}");
+            }
+        }
+
+        [Test]
+        public void PlaceEnemies_AlwaysInContentRows_NeverSpawnOrFloor()
+        {
+            for (int level = 6; level <= 10; level++)
+            {
+                string[] board = StrateGenerator.CampaignBoard(level);
+                var enemies = StrateGenerator.PlaceEnemies(board, level, new System.Random(level * 7));
+
+                int lastContentRow = board.Length - StrateGenerator.FloorRows - 1;
+                foreach (var e in enemies)
+                {
+                    Assert.GreaterOrEqual(e.pos.Y, StrateGenerator.SpawnRows,
+                        $"level {level}: an enemy landed in the spawn zone");
+                    Assert.LessOrEqual(e.pos.Y, lastContentRow,
+                        $"level {level}: an enemy landed on the bedrock floor");
+                }
+            }
+        }
+
+        [Test]
+        public void PlaceEnemies_RespectsMinimumRowSpacing()
+        {
+            for (int level = 6; level <= 10; level++)
+            {
+                string[] board = StrateGenerator.CampaignBoard(level);
+                var enemies = StrateGenerator.PlaceEnemies(board, level, new System.Random(level * 13));
+
+                for (int i = 0; i < enemies.Count; i++)
+                {
+                    for (int j = i + 1; j < enemies.Count; j++)
+                    {
+                        int gap = System.Math.Abs(enemies[i].pos.Y - enemies[j].pos.Y);
+                        Assert.GreaterOrEqual(gap, StrateGenerator.MinEnemyRowSpacing,
+                            $"level {level}: enemies at rows {enemies[i].pos.Y} and {enemies[j].pos.Y} are clustered");
+                    }
+                }
+            }
+        }
+
+        [Test]
+        public void PlaceEnemies_AlwaysOnASolidColorOrHardCell()
+        {
+            // Never Empty (would read as floating), never Steel or Bomb (those cells mean something
+            // else to the player). The enemy is buried IN the cell — it keeps its own type.
+            for (int level = 6; level <= 10; level++)
+            {
+                string[] board = StrateGenerator.CampaignBoard(level);
+                var enemies = StrateGenerator.PlaceEnemies(board, level, new System.Random(level * 29));
+
+                foreach (var e in enemies)
+                {
+                    char c = board[e.pos.Y][e.pos.X];
+                    Assert.IsTrue(c == 'A' || c == 'B' || c == 'C' || c == 'H',
+                        $"level {level}: enemy at {e.pos} sits on '{c}', which is not a solid Color/Hard cell");
+                }
+            }
+        }
+
+        [Test]
+        public void PlaceEnemies_DoesNotMutateTheBoard()
+        {
+            // Enemies are ACTORS, not CellTypes (§6.5) — placement is pure, the board is untouched.
+            string[] board = StrateGenerator.CampaignBoard(10);
+            string before = string.Join("|", board);
+
+            StrateGenerator.PlaceEnemies(board, 10, new System.Random(5));
+
+            Assert.AreEqual(before, string.Join("|", board));
+        }
+
+        [Test]
+        public void PlaceEnemies_IsDeterministic_ForTheSameSeed()
+        {
+            string[] board = StrateGenerator.CampaignBoard(9);
+
+            var a = StrateGenerator.PlaceEnemies(board, 9, new System.Random(42));
+            var b = StrateGenerator.PlaceEnemies(board, 9, new System.Random(42));
+
+            Assert.AreEqual(a.Count, b.Count);
+            for (int i = 0; i < a.Count; i++)
+            {
+                Assert.AreEqual(a[i].type, b[i].type, $"enemy {i} type differs between two identical runs");
+                Assert.AreEqual(a[i].pos,  b[i].pos,  $"enemy {i} position differs between two identical runs");
+            }
+        }
+
         // ── v3 tutorials ──────────────────────────────────────────────────────
 
         [Test]
@@ -2426,7 +2620,7 @@ namespace HollowLines.Tests
             // Drill straight down the vein, as the natural first instinct does. Stops at the
             // Diamond chamber (row 9), not the Perfect Clear row — the vein itself is only rows 3-8.
             for (int y = StrateGenerator.SpawnRows; y < StrateGenerator.TutorialDiamondRow; y++)
-                streak.NotifyDrill(grid.Get(new GridPos(col, y)));
+                streak.NotifyDrill(grid.Get(new GridPos(col, y)), DrillDirection.Down);
 
             Assert.AreEqual(6, streak.CurrentStreak, "the ColorB vein must build an unbroken ×6 streak");
             Assert.AreEqual(CellType.ColorB, streak.CurrentColor);
@@ -2812,10 +3006,10 @@ namespace HollowLines.Tests
             Assert.AreEqual(5, received);
         }
 
-        // ── Diamond gate (R4, §6.4) ──────────────────────────────────────────
+        // ── Score gate (v3.1 arcade pivot, §5.7 — replaces the R4 diamond gate) ──
 
         [Test]
-        public void Campaign_AtThreshold_WithIncompleteDiamonds_DoesNotComplete()
+        public void Campaign_AtThreshold_ScoreBelowMinimum_DoesNotComplete()
         {
             var c = new CampaignManager(startLevel: 4);
             string[] board = c.BuildCurrentBoard();
@@ -2825,13 +3019,13 @@ namespace HollowLines.Tests
             bool fired = false;
             c.LevelCompleted += _ => fired = true;
 
-            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, diamondsComplete: false);
+            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: 0);
 
-            Assert.IsFalse(fired, "reaching the bottom is not enough while diamonds remain");
+            Assert.IsFalse(fired, "reaching the bottom is not enough while the score gate is unmet");
         }
 
         [Test]
-        public void Campaign_AtThreshold_DiamondsCompleteAfterward_ThenFiresLevelCompleted()
+        public void Campaign_AtThreshold_ScoreMeetsMinimum_FiresLevelCompleted()
         {
             var c = new CampaignManager(startLevel: 4);
             string[] board = c.BuildCurrentBoard();
@@ -2841,20 +3035,71 @@ namespace HollowLines.Tests
             bool fired = false;
             c.LevelCompleted += _ => fired = true;
 
-            // Standing at the bottom, still missing a diamond.
-            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, diamondsComplete: false);
+            // Level 4's minimum is exactly 500 (§9).
+            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: 500);
+
+            Assert.IsTrue(fired, "meeting the score minimum at the bottom must complete the level");
+        }
+
+        [Test]
+        public void Campaign_AtThreshold_ScoreRisesAboveMinimumAfterward_ThenFiresLevelCompleted()
+        {
+            var c = new CampaignManager(startLevel: 4);
+            string[] board = c.BuildCurrentBoard();
+            int boardHeight = board.Length;
+            int threshold   = boardHeight - CampaignManager.WinDepthFromFloor;
+
+            bool fired = false;
+            c.LevelCompleted += _ => fired = true;
+
+            // Standing at the bottom, still short of the gate.
+            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: 200);
             Assert.IsFalse(fired);
 
-            // Last diamond collected — same frame loop re-checks and the gate opens.
-            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, diamondsComplete: true);
-            Assert.IsTrue(fired, "collecting the last diamond while at the bottom must complete the level");
+            // Score caught up (a late burst/bomb/diamond) — same frame loop re-checks and the gate opens.
+            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: 500);
+            Assert.IsTrue(fired, "the score gate opening while at the bottom must complete the level");
         }
 
         [Test]
-        public void Campaign_DiamondsCompleteDefaultsTrue_UnaffectedCallersStillWinOnDepthAlone()
+        public void Campaign_ScoreZero_Level1_StillWins_NoGateOnTutorialLevels()
         {
-            // Callers that predate R4 (and levels 1-3, which have no diamonds) never pass the flag.
             var c = new CampaignManager(startLevel: 1);
+            string[] board = c.BuildCurrentBoard();
+            int boardHeight = board.Length;
+            int threshold   = boardHeight - CampaignManager.WinDepthFromFloor;
+
+            bool fired = false;
+            c.LevelCompleted += _ => fired = true;
+
+            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: 0);
+
+            Assert.IsTrue(fired, "levels 1-3 have a 0 minimum — depth alone must win");
+        }
+
+        [Test]
+        public void Campaign_NotAtThreshold_HighScore_StillDoesNotComplete()
+        {
+            // Depth is always required (design rule 6) — no amount of score skips the floor.
+            var c = new CampaignManager(startLevel: 4);
+            string[] board = c.BuildCurrentBoard();
+            int boardHeight = board.Length;
+            int threshold   = boardHeight - CampaignManager.WinDepthFromFloor;
+
+            bool fired = false;
+            c.LevelCompleted += _ => fired = true;
+
+            c.NotifyAvatarPosition(new GridPos(0, threshold - 1), boardHeight, currentScore: 10000);
+
+            Assert.IsFalse(fired, "score cannot substitute for depth");
+        }
+
+        [Test]
+        public void Campaign_CurrentScoreDefaultsToMaxValue_UnaffectedCallersStillWinOnDepthAlone()
+        {
+            // Callers that don't care about the gate (tutorial showcase, older tests) never pass a
+            // score — even on a level with a real minimum, the default must clear it.
+            var c = new CampaignManager(startLevel: 4);
             string[] board = c.BuildCurrentBoard();
             int boardHeight = board.Length;
             int threshold   = boardHeight - CampaignManager.WinDepthFromFloor;
@@ -2865,6 +3110,22 @@ namespace HollowLines.Tests
             c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight);
 
             Assert.IsTrue(fired);
+        }
+
+        [Test]
+        public void ScoreMinimumForLevel_MatchesTheCampaignTable()
+        {
+            // §9: 1-3 → 0, 4-5 → 500, 6-7 → 1500, 8-9 → 3000, 10 → 5000.
+            Assert.AreEqual(0,    CampaignManager.ScoreMinimumForLevel(1));
+            Assert.AreEqual(0,    CampaignManager.ScoreMinimumForLevel(2));
+            Assert.AreEqual(0,    CampaignManager.ScoreMinimumForLevel(3));
+            Assert.AreEqual(500,  CampaignManager.ScoreMinimumForLevel(4));
+            Assert.AreEqual(500,  CampaignManager.ScoreMinimumForLevel(5));
+            Assert.AreEqual(1500, CampaignManager.ScoreMinimumForLevel(6));
+            Assert.AreEqual(1500, CampaignManager.ScoreMinimumForLevel(7));
+            Assert.AreEqual(3000, CampaignManager.ScoreMinimumForLevel(8));
+            Assert.AreEqual(3000, CampaignManager.ScoreMinimumForLevel(9));
+            Assert.AreEqual(5000, CampaignManager.ScoreMinimumForLevel(10));
         }
 
         // ── Depth-only win (v3: the line gate is gone) ───────────────────────
@@ -3066,9 +3327,9 @@ namespace HollowLines.Tests
         {
             var streak = new StreakTracker();
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
 
             Assert.AreEqual(3, streak.CurrentStreak);
             Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
@@ -3079,9 +3340,9 @@ namespace HollowLines.Tests
         {
             var streak = new StreakTracker();
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorB);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
 
             Assert.AreEqual(1, streak.CurrentStreak);
             Assert.AreEqual(CellType.ColorB, streak.CurrentColor);
@@ -3094,9 +3355,9 @@ namespace HollowLines.Tests
         {
             var streak = new StreakTracker();
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.AirCapsule);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.AirCapsule, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
 
             Assert.AreEqual(2, streak.CurrentStreak, "capsule must not count toward or break the streak");
             Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
@@ -3107,9 +3368,9 @@ namespace HollowLines.Tests
         {
             var streak = new StreakTracker();
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.Hard);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.Hard, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
 
             Assert.AreEqual(2, streak.CurrentStreak, "hard block must not count toward or break the streak");
         }
@@ -3119,9 +3380,9 @@ namespace HollowLines.Tests
         {
             var streak = new StreakTracker();
 
-            streak.NotifyDrill(CellType.ColorB);
-            streak.NotifyDrill(CellType.HardCracked);
-            streak.NotifyDrill(CellType.ColorB);
+            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
+            streak.NotifyDrill(CellType.HardCracked, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
 
             Assert.AreEqual(2, streak.CurrentStreak);
         }
@@ -3131,11 +3392,51 @@ namespace HollowLines.Tests
         {
             var streak = new StreakTracker();
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.Diamond);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.Diamond, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
 
             Assert.AreEqual(2, streak.CurrentStreak, "diamond must not count toward or break the streak");
+            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
+        }
+
+        // ── v3.1 arcade pivot: vertical-only streak ─────────────────────────
+
+        [Test]
+        public void LateralDrill_SameColor_DoesNotGrowStreak()
+        {
+            var streak = new StreakTracker();
+
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Left);
+
+            Assert.AreEqual(2, streak.CurrentStreak, "a lateral drill must not grow the streak, even same-color");
+            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
+        }
+
+        [Test]
+        public void UpwardDrill_DifferentColor_DoesNotResetStreak()
+        {
+            var streak = new StreakTracker();
+
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorB, DrillDirection.Up);
+
+            Assert.AreEqual(2, streak.CurrentStreak, "an upward drill must not break the streak, even a different color");
+            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
+        }
+
+        [Test]
+        public void DownwardDrill_SameColor_GrowsStreakNormally()
+        {
+            var streak = new StreakTracker();
+
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+
+            Assert.AreEqual(2, streak.CurrentStreak);
             Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
         }
 
@@ -3148,11 +3449,11 @@ namespace HollowLines.Tests
             int? broken = null;
             streak.StreakBroken += count => broken = count;
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
             Assert.IsNull(broken, "must not fire while the streak is still alive");
 
-            streak.NotifyDrill(CellType.ColorB);
+            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
             Assert.AreEqual(2, broken, "must report the streak length that just ended (AA), not the new one");
         }
 
@@ -3163,7 +3464,7 @@ namespace HollowLines.Tests
             bool broken = false;
             streak.StreakBroken += _ => broken = true;
 
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
 
             Assert.IsFalse(broken, "there is no prior streak to break on the very first drill");
         }
@@ -3175,9 +3476,9 @@ namespace HollowLines.Tests
             var counts = new List<int>();
             streak.StreakGrew += counts.Add;
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
 
             CollectionAssert.AreEqual(new[] { 1, 2, 3 }, counts);
         }
@@ -3189,9 +3490,9 @@ namespace HollowLines.Tests
             int growCount = 0;
             streak.StreakGrew += _ => growCount++;
 
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.AirCapsule);
-            streak.NotifyDrill(CellType.Hard);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.AirCapsule, DrillDirection.Down);
+            streak.NotifyDrill(CellType.Hard, DrillDirection.Down);
 
             Assert.AreEqual(1, growCount, "only the ColorA drill should have fired StreakGrew");
         }
@@ -3202,8 +3503,8 @@ namespace HollowLines.Tests
         public void Reset_ZeroesStreakAndColor()
         {
             var streak = new StreakTracker();
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
 
             streak.Reset();
 
@@ -3215,14 +3516,14 @@ namespace HollowLines.Tests
         public void Reset_ThenNewColor_StartsCleanStreak_NoSpuriousBrokenEvent()
         {
             var streak = new StreakTracker();
-            streak.NotifyDrill(CellType.ColorA);
-            streak.NotifyDrill(CellType.ColorA);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
+            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
             streak.Reset();
 
             bool broken = false;
             streak.StreakBroken += _ => broken = true;
 
-            streak.NotifyDrill(CellType.ColorB);
+            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
 
             Assert.IsFalse(broken, "Reset must clear prior state so the next drill starts a fresh streak");
             Assert.AreEqual(1, streak.CurrentStreak);
@@ -3397,6 +3698,102 @@ namespace HollowLines.Tests
             Assert.AreEqual(ScoreSource.Diamond, evt.Value.Source);
         }
 
+        // ── AwardEnemyKill / AwardBoomerBlast (§6.5, R5.11) ──────────────────
+
+        [Test]
+        public void AwardEnemyKill_Crawler_BonusOne_Scores100()
+        {
+            var score = new ScoreSystem();
+            score.AwardEnemyKill(EnemyType.Crawler, 1);
+            Assert.AreEqual(100, score.Score);
+        }
+
+        [Test]
+        public void AwardEnemyKill_Crawler_BonusThree_Scores300()
+        {
+            // e.g. a Crawler killed by a chunk burst with fall_bonus = 3.
+            var score = new ScoreSystem();
+            score.AwardEnemyKill(EnemyType.Crawler, 3);
+            Assert.AreEqual(300, score.Score, "100 × fall_bonus 3");
+        }
+
+        [Test]
+        public void AwardEnemyKill_Boomer_BonusOne_Scores150()
+        {
+            var score = new ScoreSystem();
+            score.AwardEnemyKill(EnemyType.Boomer, 1);
+            Assert.AreEqual(150, score.Score);
+        }
+
+        [Test]
+        public void AwardEnemyKill_DefaultBonus_IsOne()
+        {
+            // A plain crush kill has no fall_bonus/chain_mult — the caller can omit the bonus.
+            var score = new ScoreSystem();
+            score.AwardEnemyKill(EnemyType.Crawler);
+            Assert.AreEqual(100, score.Score);
+        }
+
+        [Test]
+        public void AwardEnemyKill_BonusBelowOne_ClampsToOne()
+        {
+            var score = new ScoreSystem();
+            score.AwardEnemyKill(EnemyType.Boomer, 0);
+            Assert.AreEqual(150, score.Score);
+        }
+
+        [Test]
+        public void AwardEnemyKill_FiresOnScore_WithEnemyKillSource()
+        {
+            var score = new ScoreSystem();
+            ScoreEvent? evt = null;
+            score.OnScore += e => evt = e;
+
+            score.AwardEnemyKill(EnemyType.Crawler, 2);
+
+            Assert.AreEqual(200, evt.Value.Points);
+            Assert.AreEqual(ScoreSource.EnemyKill, evt.Value.Source);
+            Assert.AreEqual(2, evt.Value.Detail, "Detail carries the bonus that scaled the kill");
+        }
+
+        [Test]
+        public void AwardBoomerBlast_FourBlocksBonusTwo_Scores200()
+        {
+            var score = new ScoreSystem();
+            score.AwardBoomerBlast(blocksDestroyed: 4, parentBonus: 2);
+            Assert.AreEqual(200, score.Score, "4 × 25 × 2");
+        }
+
+        [Test]
+        public void AwardBoomerBlast_ParentBonusBelowOne_ClampsToOne()
+        {
+            var score = new ScoreSystem();
+            score.AwardBoomerBlast(blocksDestroyed: 4, parentBonus: 0);
+            Assert.AreEqual(100, score.Score, "4 × 25 × 1 (clamped)");
+        }
+
+        [Test]
+        public void AwardBoomerBlast_NegativeBlocks_ClampsToZero()
+        {
+            var score = new ScoreSystem();
+            score.AwardBoomerBlast(blocksDestroyed: -3, parentBonus: 2);
+            Assert.AreEqual(0, score.Score);
+        }
+
+        [Test]
+        public void AwardBoomerBlast_FiresOnScore_WithBoomerBlastSource()
+        {
+            var score = new ScoreSystem();
+            ScoreEvent? evt = null;
+            score.OnScore += e => evt = e;
+
+            score.AwardBoomerBlast(blocksDestroyed: 4, parentBonus: 2);
+
+            Assert.AreEqual(200, evt.Value.Points);
+            Assert.AreEqual(ScoreSource.BoomerBlast, evt.Value.Source);
+            Assert.AreEqual(2, evt.Value.Detail, "Detail carries the parent bonus, not the block count");
+        }
+
         // ── Accumulation and tracked bests ───────────────────────────────────
 
         [Test]
@@ -3409,8 +3806,10 @@ namespace HollowLines.Tests
             score.AwardDepth(9);                      //  50
             score.AwardPerfectClear(1);               // 500
             score.AwardDiamond();                     // 150
+            score.AwardEnemyKill(EnemyType.Crawler, 2); // 200
+            score.AwardBoomerBlast(4, 2);              // 200
 
-            Assert.AreEqual(1030, score.Score);
+            Assert.AreEqual(1430, score.Score);
         }
 
         [Test]
@@ -3988,6 +4387,736 @@ namespace HollowLines.Tests
         {
             var day = new System.DateTime(2026, 7, 6, 14, 22, 00, System.DateTimeKind.Utc);
             Assert.AreEqual("2026-07-06", DailyDig.LabelFor(day), "the label is a stable key, never localized");
+        }
+    }
+
+    [TestFixture]
+    public class EnemySystemTests
+    {
+        // ── Spawn / activate ────────────────────────────────────────────────
+
+        [Test]
+        public void SpawnEnemy_CreatesDormantEnemy_AndFiresEvent()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(2, 3);
+
+            (int id, EnemyType type, GridPos at)? reported = null;
+            enemies.EnemySpawned += (id, type, p) => reported = (id, type, p);
+
+            int spawnedId = enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            Assert.IsNotNull(reported);
+            Assert.AreEqual(spawnedId, reported.Value.id);
+            Assert.AreEqual(EnemyType.Crawler, reported.Value.type);
+            Assert.AreEqual(pos, reported.Value.at);
+
+            EnemyEntity? enemy = enemies.GetEnemyAt(pos);
+            Assert.IsTrue(enemy.HasValue);
+            Assert.IsFalse(enemy.Value.IsActive, "a freshly spawned enemy must be dormant");
+            Assert.IsTrue(enemy.Value.IsAlive);
+            Assert.AreEqual(1, enemy.Value.Health);
+        }
+
+        [Test]
+        public void ActivateEnemy_MakesItActive_AndFiresEvent()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 0));
+
+            int? reportedId = null;
+            enemies.EnemyActivated += activatedId => reportedId = activatedId;
+
+            enemies.ActivateEnemy(id);
+
+            Assert.AreEqual(id, reportedId);
+            Assert.IsTrue(enemies.GetEnemyAt(new GridPos(0, 0)).Value.IsActive);
+        }
+
+        [Test]
+        public void ActivateEnemy_UnknownId_DoesNotThrow_NoEvent()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            bool fired = false;
+            enemies.EnemyActivated += _ => fired = true;
+
+            Assert.DoesNotThrow(() => enemies.ActivateEnemy(999));
+            Assert.IsFalse(fired);
+        }
+
+        // ── Activation triggers (§6.5, R5.9) ─────────────────────────────────
+
+        [Test]
+        public void NotifyAdjacentDrill_WakesDormantCrawlerNextDoor()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var crawlerPos = new GridPos(1, 0);
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, crawlerPos);
+
+            int? activatedId = null;
+            enemies.EnemyActivated += activated => activatedId = activated;
+
+            enemies.NotifyAdjacentDrill(new GridPos(0, 0)); // right neighbor is (1,0) — the Crawler
+
+            Assert.AreEqual(id, activatedId);
+            Assert.IsTrue(enemies.GetEnemyAt(crawlerPos).Value.IsActive);
+        }
+
+        [Test]
+        public void NotifyAdjacentDrill_TwoCellsAway_DoesNotActivate()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var crawlerPos = new GridPos(2, 0);
+            enemies.SpawnEnemy(EnemyType.Crawler, crawlerPos);
+
+            bool fired = false;
+            enemies.EnemyActivated += _ => fired = true;
+
+            enemies.NotifyAdjacentDrill(new GridPos(0, 0)); // 2 cells from the Crawler — not adjacent
+
+            Assert.IsFalse(fired);
+            Assert.IsFalse(enemies.GetEnemyAt(crawlerPos).Value.IsActive);
+        }
+
+        [Test]
+        public void NotifyBurst_ShockwaveAdjacentToDormantEnemy_ActivatesIt()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var crawlerPos = new GridPos(5, 0);
+            enemies.SpawnEnemy(EnemyType.Crawler, crawlerPos);
+
+            // The Crawler sits just outside the effect zone — adjacent to a shockwave cell, not
+            // inside it — so it wakes up without being killed by the same burst.
+            enemies.NotifyBurst(new List<GridPos> { new GridPos(0, 0) }, new List<GridPos> { new GridPos(4, 0) }, fallDist: 2);
+
+            Assert.IsTrue(enemies.GetEnemyAt(crawlerPos).Value.IsActive, "a shockwave cell adjacent to a dormant enemy must wake it");
+            Assert.IsTrue(enemies.GetEnemyAt(crawlerPos).HasValue, "and it must survive — it was adjacent, not inside the zone");
+        }
+
+        [Test]
+        public void NotifyBombBlast_AdjacentToDormantEnemy_ActivatesIt()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var crawlerPos = new GridPos(5, 0);
+            enemies.SpawnEnemy(EnemyType.Crawler, crawlerPos);
+
+            enemies.NotifyBombBlast(new List<GridPos> { new GridPos(4, 0) }, chainMult: 1);
+
+            Assert.IsTrue(enemies.GetEnemyAt(crawlerPos).Value.IsActive, "a blast cell adjacent to a dormant enemy must wake it");
+        }
+
+        [Test]
+        public void ActivateInViewport_WakesEnemiesInsideTheRange()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            int inRangeTop    = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 5));
+            int inRangeBottom = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 8));
+
+            enemies.ActivateInViewport(5, 8);
+
+            Assert.IsTrue(enemies.GetEnemyAt(new GridPos(0, 5)).Value.IsActive, "the top edge of the range must activate");
+            Assert.IsTrue(enemies.GetEnemyAt(new GridPos(0, 8)).Value.IsActive, "the bottom edge of the range must activate");
+        }
+
+        [Test]
+        public void ActivateInViewport_DoesNotWakeEnemiesOutsideTheRange()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 2)); // above the range
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 9)); // below the range
+
+            enemies.ActivateInViewport(5, 8);
+
+            Assert.IsFalse(enemies.GetEnemyAt(new GridPos(0, 2)).Value.IsActive, "a row above the range must stay dormant");
+            Assert.IsFalse(enemies.GetEnemyAt(new GridPos(0, 9)).Value.IsActive, "a row below the range must stay dormant");
+        }
+
+        // ── Crawler movement (§6.5, R5.7) ────────────────────────────────────
+
+        [Test]
+        public void Crawler_Active_MovesRight_After0_8Seconds()
+        {
+            var grid = GridModel.FromStringMap(new[] { "......." }); // 7 empty columns, one row
+            var enemies = new EnemySystem(grid);
+            var start = new GridPos(3, 0);
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, start);
+            enemies.ActivateEnemy(id);
+
+            enemies.Tick(EnemySystem.CrawlerMoveInterval, new GridPos(0, 0));
+
+            EnemyEntity? moved = enemies.GetEnemyAt(new GridPos(4, 0));
+            Assert.IsTrue(moved.HasValue, "the Crawler must step right after one full move interval");
+            Assert.AreEqual(id, moved.Value.Id);
+            Assert.IsNull(enemies.GetEnemyAt(start), "the old cell must be vacated");
+        }
+
+        [Test]
+        public void Crawler_BouncesOffRightWall_ThenDirectionIsLeft()
+        {
+            var grid = GridModel.FromStringMap(new[] { "......." }); // cols 0-6
+            var enemies = new EnemySystem(grid);
+            var start = new GridPos(6, 0); // rightmost column — the default rightward heading is blocked immediately
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, start);
+            enemies.ActivateEnemy(id);
+
+            enemies.Tick(EnemySystem.CrawlerMoveInterval, new GridPos(0, 0));
+
+            Assert.IsTrue(enemies.GetEnemyAt(new GridPos(5, 0)).HasValue,
+                "hitting the right wall must bounce and step left within the same interval");
+
+            // Confirm the heading actually flipped (not a one-off nudge): it keeps going left.
+            enemies.Tick(EnemySystem.CrawlerMoveInterval, new GridPos(0, 0));
+            Assert.IsTrue(enemies.GetEnemyAt(new GridPos(4, 0)).HasValue, "direction must stay left after the bounce");
+        }
+
+        [Test]
+        public void Crawler_BouncesOffSolidBlock_ReversesDirection()
+        {
+            var grid = GridModel.FromStringMap(new[] { "...H..." }); // Hard block at col 3
+            var enemies = new EnemySystem(grid);
+            var start = new GridPos(2, 0); // one cell left of the block, default heading is right
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, start);
+            enemies.ActivateEnemy(id);
+
+            enemies.Tick(EnemySystem.CrawlerMoveInterval, new GridPos(0, 0));
+
+            Assert.IsTrue(enemies.GetEnemyAt(new GridPos(1, 0)).HasValue,
+                "a solid block ahead must bounce the Crawler exactly like a wall");
+        }
+
+        [Test]
+        public void Crawler_Dormant_DoesNotMove_EvenAfter2Seconds()
+        {
+            var grid = GridModel.FromStringMap(new[] { "......." });
+            var enemies = new EnemySystem(grid);
+            var start = new GridPos(3, 0);
+            enemies.SpawnEnemy(EnemyType.Crawler, start); // never activated
+
+            enemies.Tick(2f, new GridPos(0, 0));
+
+            Assert.IsTrue(enemies.GetEnemyAt(start).HasValue, "a dormant Crawler must never move — Tick ignores it");
+        }
+
+        [Test]
+        public void Crawler_MakesFullRoundTrip_InAnEmptySevenColumnRow()
+        {
+            var grid = GridModel.FromStringMap(new[] { "......." }); // cols 0-6
+            var enemies = new EnemySystem(grid);
+            var start = new GridPos(0, 0);
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, start);
+            enemies.ActivateEnemy(id);
+
+            // 6 intervals to walk 0→6, a 7th to bounce off the right wall and step back to 5,
+            // then 5 more to walk 5→0 — 12 intervals total for a complete round trip.
+            for (int i = 0; i < 6; i++)
+                enemies.Tick(EnemySystem.CrawlerMoveInterval, new GridPos(0, 0));
+            Assert.IsTrue(enemies.GetEnemyAt(new GridPos(6, 0)).HasValue, "must reach the far wall after 6 intervals");
+
+            for (int i = 0; i < 6; i++)
+                enemies.Tick(EnemySystem.CrawlerMoveInterval, new GridPos(0, 0));
+            Assert.IsTrue(enemies.GetEnemyAt(start).HasValue, "after the full round trip the Crawler must be back at its starting column");
+        }
+
+        // ── Avatar contact damage (§6.5, R5.10) ──────────────────────────────
+
+        [Test]
+        public void Tick_ActiveCrawlerOnAvatarCell_FiresAvatarHitByEnemy()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var avatarPos = new GridPos(3, 3);
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, avatarPos);
+            enemies.ActivateEnemy(id);
+
+            int? hitId = null;
+            enemies.AvatarHitByEnemy += h => hitId = h;
+
+            enemies.Tick(0.01f, avatarPos); // dt far below the move interval — this is an overlap, not a step
+
+            Assert.AreEqual(id, hitId);
+        }
+
+        [Test]
+        public void Tick_DormantCrawlerOnAvatarCell_DoesNotFire()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var avatarPos = new GridPos(3, 3);
+            enemies.SpawnEnemy(EnemyType.Crawler, avatarPos); // never activated
+
+            bool fired = false;
+            enemies.AvatarHitByEnemy += _ => fired = true;
+
+            enemies.Tick(0.01f, avatarPos);
+
+            Assert.IsFalse(fired, "a buried Crawler must never deal contact damage");
+        }
+
+        [Test]
+        public void Tick_ActiveBoomerOnAvatarCell_DoesNotFire()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var avatarPos = new GridPos(3, 3);
+            int id = enemies.SpawnEnemy(EnemyType.Boomer, avatarPos);
+            enemies.ActivateEnemy(id);
+
+            bool fired = false;
+            enemies.AvatarHitByEnemy += _ => fired = true;
+
+            enemies.Tick(0.01f, avatarPos);
+
+            Assert.IsFalse(fired, "Boomers never deal contact damage, active or not — only their death blast is dangerous, and that's a bonus");
+        }
+
+        [Test]
+        public void Tick_ActiveCrawlerAtDifferentPosition_DoesNotFire()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(5, 5));
+            enemies.ActivateEnemy(id);
+
+            bool fired = false;
+            enemies.AvatarHitByEnemy += _ => fired = true;
+
+            enemies.Tick(0.01f, new GridPos(0, 0));
+
+            Assert.IsFalse(fired);
+        }
+
+        [Test]
+        public void Tick_CrawlerStepsIntoAvatarCell_FiresAvatarHitByEnemy()
+        {
+            var grid = GridModel.FromStringMap(new[] { "......." });
+            var enemies = new EnemySystem(grid);
+            var avatarPos = new GridPos(4, 0);
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(3, 0));
+            enemies.ActivateEnemy(id);
+
+            int? hitId = null;
+            enemies.AvatarHitByEnemy += h => hitId = h;
+
+            enemies.Tick(EnemySystem.CrawlerMoveInterval, avatarPos); // steps right into the avatar's cell
+
+            Assert.AreEqual(id, hitId);
+            Assert.AreEqual(avatarPos, enemies.GetEnemyAt(avatarPos).Value.Position);
+        }
+
+        // ── Queries ──────────────────────────────────────────────────────────
+
+        [Test]
+        public void GetEnemyAt_ReturnsTheEnemyAtThatPosition()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(5, 1);
+            enemies.SpawnEnemy(EnemyType.Boomer, pos);
+
+            EnemyEntity? found = enemies.GetEnemyAt(pos);
+
+            Assert.IsTrue(found.HasValue);
+            Assert.AreEqual(EnemyType.Boomer, found.Value.Type);
+            Assert.AreEqual(pos, found.Value.Position);
+        }
+
+        [Test]
+        public void GetEnemyAt_NoEnemyThere_ReturnsNull()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 0));
+
+            Assert.IsNull(enemies.GetEnemyAt(new GridPos(9, 9)));
+        }
+
+        [Test]
+        public void GetAllAlive_DeadEnemy_DoesNotReappear()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(1, 1);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            enemies.NotifyChunkLanded(new List<GridPos> { pos });
+
+            CollectionAssert.IsEmpty(enemies.GetAllAlive());
+            Assert.IsNull(enemies.GetEnemyAt(pos), "a dead enemy must not be found by position either");
+        }
+
+        // ── Kill by crush (chunk landing) ───────────────────────────────────
+
+        [Test]
+        public void NotifyChunkLanded_KillsEnemyUnderTheChunk_FiresEnemyKilled()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(3, 4);
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            (int id, EnemyType type, KillMethod method)? killed = null;
+            enemies.EnemyKilled += (killedId, type, method, _) => killed = (killedId, type, method);
+
+            enemies.NotifyChunkLanded(new List<GridPos> { new GridPos(0, 0), pos });
+
+            Assert.IsNotNull(killed);
+            Assert.AreEqual(id, killed.Value.id);
+            Assert.AreEqual(EnemyType.Crawler, killed.Value.type);
+            Assert.AreEqual(KillMethod.Crush, killed.Value.method);
+            Assert.IsFalse(enemies.GetEnemyAt(pos).HasValue);
+        }
+
+        [Test]
+        public void NotifyChunkLanded_DormantEnemy_IsStillKilled()
+        {
+            // Corrected per dev: dormant enemies are buried but physically present — gravity/burst/
+            // bomb kill them the same as active ones. Only avatar CONTACT (R5.10) checks IsActive.
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(2, 2);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos); // never activated — stays dormant
+
+            enemies.NotifyChunkLanded(new List<GridPos> { pos });
+
+            Assert.IsNull(enemies.GetEnemyAt(pos), "a dormant enemy must still die when crushed");
+        }
+
+        // ── Kill by burst ────────────────────────────────────────────────────
+
+        [Test]
+        public void NotifyBurst_KillsEnemyInBurstZone_FiresEnemyKilled()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(4, 4);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            KillMethod? method = null;
+            enemies.EnemyKilled += (_, __, m, ___) => method = m;
+
+            enemies.NotifyBurst(new List<GridPos> { pos }, new List<GridPos>(), fallDist: 4);
+
+            Assert.AreEqual(KillMethod.Burst, method);
+            Assert.IsFalse(enemies.GetEnemyAt(pos).HasValue);
+        }
+
+        [Test]
+        public void NotifyBurst_KillsEnemyInShockwaveRing_NotJustBurstCells()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(6, 6);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            enemies.NotifyBurst(new List<GridPos> { new GridPos(0, 0) }, new List<GridPos> { pos }, fallDist: 2);
+
+            Assert.IsFalse(enemies.GetEnemyAt(pos).HasValue, "the shockwave ring must kill too, not just the burst footprint");
+        }
+
+        [Test]
+        public void NotifyBurst_KillingBoomer_FiresBoomerDetonated_WithFallBonus()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(1, 1);
+            enemies.SpawnEnemy(EnemyType.Boomer, pos);
+
+            (GridPos pos, int bonus)? detonated = null;
+            enemies.BoomerDetonated += (p, bonus, _) => detonated = (p, bonus);
+
+            enemies.NotifyBurst(new List<GridPos> { pos }, new List<GridPos>(), fallDist: 5); // floor(5/2) = 2
+
+            Assert.IsNotNull(detonated);
+            Assert.AreEqual(pos, detonated.Value.pos);
+            Assert.AreEqual(2, detonated.Value.bonus);
+        }
+
+        [Test]
+        public void NotifyBurst_KillingCrawler_DoesNotFireBoomerDetonated()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(1, 1);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            bool fired = false;
+            enemies.BoomerDetonated += (_, __, ___) => fired = true;
+
+            enemies.NotifyBurst(new List<GridPos> { pos }, new List<GridPos>(), fallDist: 5);
+
+            Assert.IsFalse(fired, "only a Boomer kill detonates — a Crawler just dies");
+        }
+
+        // ── Kill by bomb blast ───────────────────────────────────────────────
+
+        [Test]
+        public void NotifyBombBlast_KillsEnemyInBlastZone_FiresEnemyKilled()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(2, 5);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            KillMethod? method = null;
+            enemies.EnemyKilled += (_, __, m, ___) => method = m;
+
+            enemies.NotifyBombBlast(new List<GridPos> { pos }, chainMult: 1);
+
+            Assert.AreEqual(KillMethod.Bomb, method);
+            Assert.IsFalse(enemies.GetEnemyAt(pos).HasValue);
+        }
+
+        [Test]
+        public void NotifyBombBlast_KillingBoomer_FiresBoomerDetonated_WithChainMult()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(3, 3);
+            enemies.SpawnEnemy(EnemyType.Boomer, pos);
+
+            (GridPos pos, int bonus)? detonated = null;
+            enemies.BoomerDetonated += (p, bonus, _) => detonated = (p, bonus);
+
+            enemies.NotifyBombBlast(new List<GridPos> { pos }, chainMult: 3);
+
+            Assert.IsNotNull(detonated);
+            Assert.AreEqual(pos, detonated.Value.pos);
+            Assert.AreEqual(3, detonated.Value.bonus, "the Boomer's blast must carry the SAME chainMult as the bomb that killed it");
+        }
+
+        [Test]
+        public void NotifyChunkLanded_KillingBoomer_DoesNotFireBoomerDetonated()
+        {
+            // Only Burst and Bomb kills amplify (§6.5) — a Boomer crushed by a landing chunk just dies.
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(0, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, pos);
+
+            bool fired = false;
+            enemies.BoomerDetonated += (_, __, ___) => fired = true;
+
+            enemies.NotifyChunkLanded(new List<GridPos> { pos });
+
+            Assert.IsFalse(fired);
+        }
+
+        // ── Boomer death blast (§6.5, R5.8) ─────────────────────────────────
+        // "Boomer killed → BoomerDetonated fires" is already pinned by
+        // NotifyBurst_KillingBoomer_FiresBoomerDetonated_WithFallBonus and
+        // NotifyBombBlast_KillingBoomer_FiresBoomerDetonated_WithChainMult above — not duplicated here.
+        //
+        // Every test below places the Boomer at (0,0) with the thing it should affect at (1,0), its
+        // one cardinal neighbor that exists in a minimal 1-row grid. Above/Below/Left all fall
+        // outside the grid and are silently skipped by the bounds check — only Right is exercised,
+        // which is enough: the blast treats all four cardinal directions identically.
+
+        [Test]
+        public void Boomer_Explosion_DestroysAdjacentColorBlock()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".A" }); // Boomer at (0,0), ColorA at (1,0)
+            var enemies = new EnemySystem(grid);
+            var boomerPos = new GridPos(0, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, boomerPos);
+
+            enemies.NotifyBurst(new List<GridPos> { boomerPos }, new List<GridPos>(), fallDist: 2);
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 0)),
+                "the adjacent color block must be destroyed by the Boomer's blast");
+        }
+
+        [Test]
+        public void Boomer_Explosion_SoftensSteelToHard()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".S" }); // Steel at (1,0)
+            var enemies = new EnemySystem(grid);
+            var boomerPos = new GridPos(0, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, boomerPos);
+
+            enemies.NotifyBurst(new List<GridPos> { boomerPos }, new List<GridPos>(), fallDist: 2);
+
+            Assert.AreEqual(CellType.Hard, grid.Get(new GridPos(1, 0)),
+                "Steel must soften to Hard, same as a real bomb blast — not be destroyed outright");
+        }
+
+        [Test]
+        public void Boomer_Explosion_LiberatesAirCapsule()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".P" }); // AirCapsule at (1,0)
+            var enemies = new EnemySystem(grid);
+            var boomerPos = new GridPos(0, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, boomerPos);
+
+            GridPos? liberated = null;
+            enemies.AirCapsuleLiberated += p => liberated = p;
+
+            enemies.NotifyBurst(new List<GridPos> { boomerPos }, new List<GridPos>(), fallDist: 2);
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 0)));
+            Assert.AreEqual(new GridPos(1, 0), liberated, "the capsule must be freed, not silently destroyed");
+        }
+
+        [Test]
+        public void Boomer_Explosion_LiberatesDiamond()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".D" }); // Diamond at (1,0)
+            var enemies = new EnemySystem(grid);
+            var boomerPos = new GridPos(0, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, boomerPos);
+
+            GridPos? liberated = null;
+            enemies.DiamondLiberated += p => liberated = p;
+
+            enemies.NotifyBurst(new List<GridPos> { boomerPos }, new List<GridPos>(), fallDist: 2);
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 0)));
+            Assert.AreEqual(new GridPos(1, 0), liberated, "the diamond must be freed, not silently destroyed");
+        }
+
+        [Test]
+        public void Boomer_Explosion_DoesNotArmAdjacentBomb()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".X" }); // buried Bomb at (1,0)
+            var enemies = new EnemySystem(grid);
+            var boomerPos = new GridPos(0, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, boomerPos);
+
+            enemies.NotifyBurst(new List<GridPos> { boomerPos }, new List<GridPos>(), fallDist: 2);
+
+            Assert.AreEqual(CellType.Bomb, grid.Get(new GridPos(1, 0)),
+                "a Boomer blast must leave a buried bomb completely untouched — not arm it, not destroy it");
+        }
+
+        [Test]
+        public void Boomer_Explosion_KillsAdjacentCrawler()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".." });
+            var enemies = new EnemySystem(grid);
+            var boomerPos = new GridPos(0, 0);
+            var crawlerPos = new GridPos(1, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, boomerPos);
+            int crawlerId = enemies.SpawnEnemy(EnemyType.Crawler, crawlerPos);
+
+            var killed = new List<int>();
+            enemies.EnemyKilled += (id, _, __, ___) => killed.Add(id);
+
+            enemies.NotifyBurst(new List<GridPos> { boomerPos }, new List<GridPos>(), fallDist: 2);
+
+            Assert.IsFalse(enemies.GetEnemyAt(crawlerPos).HasValue, "the adjacent Crawler must die in the blast");
+            CollectionAssert.Contains(killed, crawlerId);
+        }
+
+        [Test]
+        public void Boomer_Chain_KillingAnotherBoomer_AlsoDetonatesIt()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".." });
+            var enemies = new EnemySystem(grid);
+            var posA = new GridPos(0, 0);
+            var posB = new GridPos(1, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, posA);
+            enemies.SpawnEnemy(EnemyType.Boomer, posB);
+
+            var detonated = new List<GridPos>();
+            enemies.BoomerDetonated += (pos, bonus, _) => detonated.Add(pos);
+
+            enemies.NotifyBurst(new List<GridPos> { posA }, new List<GridPos>(), fallDist: 4); // bonus = 2
+
+            Assert.AreEqual(2, detonated.Count, "both A and the chain-killed B must detonate");
+            CollectionAssert.Contains(detonated, posA);
+            CollectionAssert.Contains(detonated, posB);
+        }
+
+        [Test]
+        public void Boomer_ChainCap_FourDeep_FourthDoesNotDetonate()
+        {
+            // A(0,0) → B(1,0) → C(2,0) → D(3,0), each the next one's only cardinal neighbor.
+            // Killing A cascades through B (depth 2) and C (depth 3, at the cap); D would be
+            // depth 4 — it dies, but the cap stops it from detonating or cascading further.
+            var grid = GridModel.FromStringMap(new[] { "...." });
+            var enemies = new EnemySystem(grid);
+            var posA = new GridPos(0, 0);
+            var posB = new GridPos(1, 0);
+            var posC = new GridPos(2, 0);
+            var posD = new GridPos(3, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, posA);
+            enemies.SpawnEnemy(EnemyType.Boomer, posB);
+            enemies.SpawnEnemy(EnemyType.Boomer, posC);
+            enemies.SpawnEnemy(EnemyType.Boomer, posD);
+
+            var detonated = new List<GridPos>();
+            enemies.BoomerDetonated += (pos, bonus, _) => detonated.Add(pos);
+
+            enemies.NotifyBurst(new List<GridPos> { posA }, new List<GridPos>(), fallDist: 4);
+
+            Assert.AreEqual(3, detonated.Count, "the chain must cap at exactly 3 detonations (A, B, C)");
+            CollectionAssert.Contains(detonated, posA);
+            CollectionAssert.Contains(detonated, posB);
+            CollectionAssert.Contains(detonated, posC);
+            CollectionAssert.DoesNotContain(detonated, posD, "the 4th Boomer in the chain must not detonate — it's past the cap");
+
+            Assert.IsFalse(enemies.GetEnemyAt(posD).HasValue, "D must still die, just without detonating");
+        }
+
+        [Test]
+        public void Boomer_Explosion_NeverHitsTheAvatar()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".." });
+            var enemies = new EnemySystem(grid);
+            var boomerPos = new GridPos(0, 0);
+            enemies.SpawnEnemy(EnemyType.Boomer, boomerPos);
+
+            bool avatarHit = false;
+            enemies.AvatarHitByEnemy += _ => avatarHit = true;
+
+            enemies.NotifyBurst(new List<GridPos> { boomerPos }, new List<GridPos>(), fallDist: 2);
+
+            Assert.IsFalse(avatarHit, "a Boomer's blast is a bonus for the player, never a hazard — it must not fire avatar-harm events");
+        }
+
+        [Test]
+        public void KillZone_MissingTheEnemy_DoesNotKillIt_NoEvent()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(1, 1);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            bool fired = false;
+            enemies.EnemyKilled += (_, __, ___, ____) => fired = true;
+
+            enemies.NotifyChunkLanded(new List<GridPos> { new GridPos(9, 9) });
+
+            Assert.IsFalse(fired);
+            Assert.IsTrue(enemies.GetEnemyAt(pos).HasValue);
+        }
+
+        [Test]
+        public void AlreadyDeadEnemy_IsNotKilledAgain_NoDuplicateEvent()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            var pos = new GridPos(1, 1);
+            enemies.SpawnEnemy(EnemyType.Crawler, pos);
+
+            int killCount = 0;
+            enemies.EnemyKilled += (_, __, ___, ____) => killCount++;
+
+            enemies.NotifyChunkLanded(new List<GridPos> { pos });
+            enemies.NotifyBombBlast(new List<GridPos> { pos }, chainMult: 1); // already dead, must be a no-op
+
+            Assert.AreEqual(1, killCount);
+        }
+
+        // ── Reset ────────────────────────────────────────────────────────────
+
+        [Test]
+        public void Reset_ClearsAllEnemies()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 0));
+            enemies.SpawnEnemy(EnemyType.Boomer, new GridPos(1, 1));
+
+            enemies.Reset();
+
+            CollectionAssert.IsEmpty(enemies.GetAllAlive());
+            Assert.IsNull(enemies.GetEnemyAt(new GridPos(0, 0)));
+            Assert.IsNull(enemies.GetEnemyAt(new GridPos(1, 1)));
+        }
+
+        [Test]
+        public void Reset_ThenSpawn_IdsRestartCleanly()
+        {
+            var enemies = new EnemySystem(new GridModel(10, 10));
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 0));
+            enemies.Reset();
+
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(2, 2));
+
+            Assert.AreEqual(1, enemies.GetAllAlive().Count);
+            Assert.AreEqual(EnemyType.Crawler, enemies.GetEnemyAt(new GridPos(2, 2)).Value.Type);
+            Assert.AreEqual(0, id, "the id sequence restarts after Reset");
         }
     }
 }

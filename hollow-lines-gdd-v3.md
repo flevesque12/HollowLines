@@ -1,4 +1,4 @@
-# HOLLOW LINES — Game Design Document v3
+# HOLLOW LINES — Game Design Document v3.1 (arcade pivot)
 
 **Working title:** Hollow Lines
 **Genre:** Casual arcade / action descent
@@ -8,7 +8,16 @@
 **Target audience:** Casual-to-mid players who like arcade action with score chasing (Mr. Driller, Downwell, Spelunky crowd), ages 16–40
 **Art style:** Pixel art
 
-**v3 changes:** Complete mechanical redesign. The void-line (clearing a full row of empty cells) is demoted from core mechanic to rare bonus event ("Perfect Clear"). New core scoring is built around three action-reward systems: Color Streak (successive same-color drilling), Chunk Burst (large fused blocks exploding on high fall impact), and Bomb Bonanza (chain explosions rewarded instead of punished). The design philosophy shifts from cerebral puzzle to visceral arcade-action: the fun is in drilling, bursting, and exploding — not in surgical row-clearing.
+**v3.1 arcade pivot:** After completing the v3 implementation (R1-R4, 260 tests), a pairwise
+mechanic analysis (matrix) revealed that several systems conflicted with the game's arcade
+identity: the color streak rewarded lateral routing instead of descent, the diamond gate forced
+collection that interrupted forward momentum, and the planned Digger/Tank enemies added
+puzzle-solving that slowed the tempo. The v3.1 pivot resolves every conflict identified in the
+matrix by making all non-descent mechanics either passive (streak) or optional (diamonds, enemies).
+
+Key changes from v3: Color Streak is vertical-only (lateral drills are streak-neutral). Diamonds
+are an optional bonus (+150 pts, no gate). Enemies are Crawler + Boomer only (Digger/Tank removed).
+Bomb fuse reduced 2.5→1.5 s. Every drill restores +0.5% air. Campaign win = depth + score minimum.
 
 ---
 
@@ -22,11 +31,11 @@
 
 ## 2. Design pillars
 
-1. **Drilling IS the fun.** Every drill tap must feel good. The score systems reward the act of drilling itself, not an abstract goal built on top of it.
+1. **Drilling IS the fun.** Every drill tap must feel good. The score systems reward the act of drilling itself, not an abstract goal built on top of it. 🆕v3.1: every drill also restores air — drilling IS survival.
 2. **Big bursts, big rewards.** Chunk Bursts and Bomb chains are the highlight moments — spectacle and score aligned. The player should think "yes!" when they see a big chunk wobbling or three bombs lined up.
 3. **Readable danger.** Every hazard is telegraphed (0.6 s wobble, bomb fuse beep). No unfair deaths.
-4. **Depth is destiny.** Going deeper is always good. The game never asks the player to stop descending and solve a puzzle — forward momentum is rewarded.
-5. **Survive by attacking.** Air drains constantly; capsules and aggressive play (burst bonuses, bomb liberations) are the only way to breathe. Passive play = suffocation.
+4. **Depth is destiny.** Going deeper is always good. The game never asks the player to stop descending. 🔄v3.1: no mechanic may require lateral routing or backtracking. Everything optional is on the way down.
+5. **Survive by attacking.** Air drains constantly; drilling, capsules and aggressive play (burst bonuses, bomb liberations) are the only way to breathe. Passive play = suffocation. 🔄v3.1: drilling itself is the primary air source.
 
 ---
 
@@ -52,7 +61,7 @@ Spawn at surface → drill down through procedural layers
 ### Campaign loop
 
 ```
-Level N → reach the bottom → level N+1 (new mechanic introduced)
+Level N → reach the bottom + meet score minimum → level N+1 (new mechanic introduced)
 → complete all 10 → unlock Endless mode
 ```
 
@@ -138,12 +147,12 @@ A 6-cell chunk falling 4 rows = 6 × 25 × 2 = **300 pts**.
 
 **Design intent:** the player scans the board for large chunks with sapable supports. Undermining a 10-cell chunk perched 4 rows above the floor is the "clip-worthy" moment. It's visual, dramatic, and plannable without requiring a full row to be empty.
 
-### 4.7 Color Streak (new core mechanic)
+### 4.7 Color Streak (v3.1: vertical-only passive bonus)
 
-Successive drills on the **same color** build a streak multiplier:
+Successive **downward** drills on the **same color** build a streak multiplier:
 
 ```
-Drill color X:    base_drill_pts × streak_step
+Drill DOWN on color X:  base_drill_pts × streak_step
   1st X in a row: 10 × 1 = 10
   2nd X in a row: 10 × 2 = 20
   3rd X in a row: 10 × 3 = 30
@@ -151,32 +160,23 @@ Drill color X:    base_drill_pts × streak_step
   Nth X in a row: 10 × N
 ```
 
-**The streak resets to 0 only when the player drills a *different* color.** Nothing else resets it.
+**🔄v3.1: only downward drills count.** Lateral and upward drills are completely ignored
+(streak-neutral — no increment, no reset). This eliminates the Streak × Burst conflict
+identified in the pairwise matrix: bursts destroy blocks laterally, but the streak only cares
+about the vertical column the player is descending through. The streak becomes a passive
+bonus of natural descent rather than an active routing system.
 
-- **Streak-neutral (ignored — neither increment nor reset):** Hard, HardCracked, AirCapsule.
-  A drill the player is *forced* to make (chipping a Hard block that sits inside a color vein)
-  or a survival grab (an air capsule) must never cost the streak.
-- **Never reached:** Steel and Bomb are not drillable, so they never touch the streak.
+**The streak resets to 0 only when the player drills DOWN on a *different* color.**
+
+- **Streak-neutral (ignored):** Hard, HardCracked, AirCapsule, Diamond, all lateral/up drills.
+- **Never reached:** Steel and Bomb are not drillable.
 - **Does not reset on:** moving without drilling, falling, being hit, waiting.
 
-**Why neutral, not reset.** This is deliberate and load-bearing for the level design: the
-generator threads color veins *through* Hard/Steel cells and gaps (see §9, `columnColors`), so a
-blue vein with a Hard block planted in the middle must stay a single scoring route. If Hard reset
-the streak, that vein would be a trap and the routing skill the design is built on would fight
-itself. It also honours pillars #1 (drilling is the reward — never a punishment) and #5 (don't
-punish the player for necessary or survival drilling). Implementation: the streak counter simply
-ignores non-color drills; only a *different* color resets it.
-
-**Streak milestones (feedback ramp):**
-
-| Streak | Feedback |
-|---|---|
-| ×3 | Drill SFX pitch rises; subtle avatar glow in the streak color |
-| ×5 | Screen edge tints the streak color; "×5" popup |
-| ×8 | Particle trail on the avatar; stronger screen tint |
-| ×10+ | Full avatar glow + trail; text popup "FRENZY!"; background music tempo up slightly |
-
-**Design intent:** the player looks at the grid and sees *paths of color* — a vein of blue going diagonally down-left becomes a visible scoring route. Routing through same-color veins is the primary skill expression in moment-to-moment gameplay. The choice "do I keep following this blue vein that goes left, or switch to the red vein going right where there's an air capsule?" is the interesting decision on every screen.
+**Design intent (v3.1):** the player drills downward through vertical color veins generated
+by the StrateGenerator's cohesion system. The streak builds naturally without routing decisions.
+The player never thinks "should I go left for the blue vein?" — they just drill down, and the
+streak is a pleasant bonus when the colors line up. The SFX pitch rises, the glow appears, and
+it feels good — but it's never worth a detour.
 
 ### 4.8 Bombs (redesigned philosophy)
 
@@ -187,7 +187,8 @@ Buried bombs are terrain cells. Not drillable directly. Armed by:
 - A chunk landing on or adjacent to the bomb.
 - A Chunk Burst shockwave reaching the bomb.
 
-**Fuse:** 2.5 s with accelerating beep + flash (unchanged — same readability contract).
+**Fuse:** 🔄v3.1: **1.5 s** (was 2.5 s) with accelerating beep + flash. The shorter fuse keeps the
+arcade tempo fast — the player arms, sidesteps, boom, continues. No long pauses.
 
 **Blast:** cross-shaped, radius 2 (all cells in cardinal directions up to 2 cells away). Effects:
 - Color / Hard / HardCracked → Empty.
@@ -225,15 +226,17 @@ A 3-bomb sympathetic chain destroying 20 blocks total = 20 × 25 × 3 = **1,500 
 | DefaultDrainRate | 5%/s | Endless / debug baseline |
 | Campaign drain | 4%/s levels 1–3 · 7%/s levels 4–10 | Raised (R2.8c) once depths were tripled — drain only bites on a long-enough run |
 | Endless drain ramp | 5%/s + 0.5%/s per 20 rows of depth, capped at 10%/s | ✅ R3.2 — `EndlessManager.DrainRateForDepth` (CLAUDE.md §6.3); depth is ABSOLUTE across segments |
+| **Drill restore** | **+0.5%** | 🆕v3.1 — every drill tap restores air. The core arcade survival loop: drill to breathe |
 | AirCapsule restore | +6% | Drilled or liberated by bomb/burst |
 | Chunk Burst restore | +0.5% per burst | Flat bonus per burst event (not per cell) |
 | Bomb chain restore | +1% per bomb in chain | Rewards aggressive bombing |
 
 Air at 0% → game over.
 
-**v3 changes:** Chunk Bursts and bomb chains now restore small amounts of air. This reinforces pillar #5 (survive by attacking) — the most aggressive player literally breathes easier.
-
-**Removed:** +15% per void-line is removed as a primary mechanic. If a Perfect Clear happens (§4.10), it gives **+6%** air as part of its bonus.
+**v3.1 change:** every drill restores +0.5% air. This is the single most important arcade change:
+the player who drills actively stays alive. The player who stops to plan, route, or solve a puzzle
+suffocates. Air is no longer just a timer — it's a direct reward for the core action. Combined with
+the vertical-only streak, the message is clear: drill down fast, everything else follows.
 
 ### 4.10 Perfect Clear (former void-line, now rare bonus)
 
@@ -273,8 +276,8 @@ Unchanged from v2: 3 hearts, 1.5 s i-frames. Damage sources:
 
 ### 4.13 Win / lose
 
-**Campaign:**
-- **Win:** avatar reaches the bottom rows (depth target per level). No line gate — pure descent.
+**Campaign (🔄v3.1):**
+- **Win:** avatar reaches the bottom rows + **score meets the level minimum** (§6). Levels 1-3 have no score minimum. The score gate forces engagement with burst/bomb/enemy mechanics without requiring lateral routing.
 - **Lose:** air depleted OR hearts depleted.
 
 **Endless:**
@@ -288,11 +291,14 @@ Unchanged from v2: 3 hearts, 1.5 s i-frames. Damage sources:
 
 | Action | Points | Notes |
 |---|---|---|
-| Drill (base) | 10 × streak_step | Streak resets on different color |
+| Drill (base) | 10 × streak_step | 🔄v3.1: streak tracks downward drills only |
 | Chunk Burst | cells × 25 × fall_bonus | fall_bonus = floor(distance/2) |
 | Bomb explosion | blocks_destroyed × 25 × chain_mult | chain_mult = # of bombs in chain |
 | Depth (new row) | 50 | Per new deepest row reached |
 | Perfect Clear | 500 flat | Rare bonus; cascade no longer multiplies (R2.8b, §15.2) |
+| Diamond | 150 | 🔄v3.1: optional bonus in all modes (campaign gate removed) |
+| Crawler kill | 100 × parent_bonus | 🆕v3.1: × fall_bonus (burst) or × chain_mult (bomb) |
+| Boomer kill | 150 × parent_bonus | 🆕v3.1: plus secondary explosion scores as bomb blast |
 | Air capsule drill | 0 (streak-neutral) | Reward is the air, not points |
 
 **Score hierarchy (by design):** Bomb chains > Chunk Bursts > Color Streaks > Depth > Perfect Clear (by rarity-adjusted expected value). The player should feel that every scoring system is worth pursuing in the moment.
@@ -513,7 +519,7 @@ Avatar drills colored cell (Color A)
     → 6 cells cleared → +6 × 25 × 1 = 150 pts
     → AirSystem.RestoreBurst() → +0.5% air
     → Shockwave: arms a buried bomb adjacent to burst zone
-  → BombSystem: bomb armed → 2.5 s fuse → BOOM
+  → BombSystem: bomb armed → 1.5 s fuse → BOOM
     → Blast destroys 7 blocks, liberates 1 air capsule
     → AirSystem.RestoreCapsule() → +6% air
     → ScoreSystem.AwardBomb(destroyed=7, chainMult=1) → +175 pts

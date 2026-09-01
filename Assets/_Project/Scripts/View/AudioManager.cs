@@ -53,6 +53,10 @@ namespace HollowLines.View
         private AudioClip _levelCompleteClip;
         private AudioClip _perfectClearClip;
         private AudioClip _diamondClip;
+        private AudioClip _crawlerWakeClip;
+        private AudioClip _crawlerDeathClip;
+        private AudioClip _boomerWakeClip;
+        private AudioClip _boomerBoomClip;
         private AudioClip _musicLoopClip;
 
         // ── One source per category ─────────────────────────────────────────────
@@ -66,6 +70,7 @@ namespace HollowLines.View
         private AudioSource _stingerSource;
         private AudioSource _musicSource;
         private AudioSource _diamondSource;
+        private AudioSource _enemySource;
 
         // ── Persistent systems ──────────────────────────────────────────────────
         private StreakTracker _streak;
@@ -76,6 +81,7 @@ namespace HollowLines.View
         private ChainTracker   _chain;
         private BombSystem     _bombs;
         private GravitySystem  _gravity;
+        private EnemySystem    _enemies;
 
         // Last emitted beep index per armed bomb, so each fuse only ticks forward (never repeats).
         private readonly System.Collections.Generic.Dictionary<GridPos, int> _fuseBeepIndex =
@@ -105,7 +111,7 @@ namespace HollowLines.View
 
         /// <summary>Re-point at the fresh grid-dependent systems GameBootstrap rebuilds every LoadLevel().</summary>
         public void Rewire(AvatarModel avatar, CollapseSystem collapse, ChainTracker chain, BombSystem bombs,
-                           GravitySystem gravity = null)
+                           GravitySystem gravity = null, EnemySystem enemies = null)
         {
             Unwire();
 
@@ -114,6 +120,7 @@ namespace HollowLines.View
             _chain    = chain;
             _bombs    = bombs;
             _gravity  = gravity;
+            _enemies  = enemies;
 
             _avatar.Drilled        += OnDrilled;
             _collapse.PerfectClear += OnPerfectClear;
@@ -127,6 +134,13 @@ namespace HollowLines.View
             {
                 _gravity.ChunkBurst       += OnChunkBurst;
                 _gravity.DiamondLiberated += OnDiamondLiberated;
+            }
+
+            if (_enemies != null)
+            {
+                _enemies.EnemyActivated  += OnEnemyActivated;
+                _enemies.EnemyKilled     += OnEnemyKilled;
+                _enemies.BoomerDetonated += OnBoomerDetonated;
             }
         }
 
@@ -147,6 +161,12 @@ namespace HollowLines.View
                 _gravity.ChunkBurst       -= OnChunkBurst;
                 _gravity.DiamondLiberated -= OnDiamondLiberated;
             }
+            if (_enemies != null)
+            {
+                _enemies.EnemyActivated  -= OnEnemyActivated;
+                _enemies.EnemyKilled     -= OnEnemyKilled;
+                _enemies.BoomerDetonated -= OnBoomerDetonated;
+            }
             _fuseBeepIndex.Clear();
         }
 
@@ -159,7 +179,7 @@ namespace HollowLines.View
         /// Reads StreakTracker.CurrentStreak, which GameBootstrap's own Drilled handler has already
         /// updated — it subscribes in LoadLevel() before Rewire() runs, so this sees the fresh value.
         /// </summary>
-        private void OnDrilled(GridPos cell, CellType oldType)
+        private void OnDrilled(GridPos cell, CellType oldType, DrillDirection direction)
         {
             if (oldType == CellType.AirCapsule)
             {
@@ -195,6 +215,49 @@ namespace HollowLines.View
         }
 
         private void OnBombArmed(GridPos pos) => _bombSource.PlayOneShot(_bombArmClip);
+
+        // ── Enemies (R5.16) ─────────────────────────────────────────────
+
+        /// <summary>
+        /// A buried enemy woke up — high chirp for a Crawler, low boop for a Boomer.
+        ///
+        /// EnemyActivated carries only the id, so the type has to be looked up. Unlike the VFX case
+        /// (§5.10, R5.15) no cache is needed here: the enemy is necessarily ALIVE at the moment it
+        /// activates, so GetAllAlive() finds it, and activation is a rare one-shot rather than a
+        /// per-frame concern. Audio also doesn't care where it happened, only what it was.
+        /// </summary>
+        private void OnEnemyActivated(int id)
+        {
+            if (_enemies == null)
+                return;
+
+            foreach (EnemyEntity e in _enemies.GetAllAlive())
+            {
+                if (e.Id != id)
+                    continue;
+
+                _enemySource.PlayOneShot(e.Type == EnemyType.Boomer ? _boomerWakeClip : _crawlerWakeClip);
+                return;
+            }
+        }
+
+        /// <summary>
+        /// A Crawler died — short dry crunch. A Boomer's death is voiced by OnBoomerDetonated
+        /// instead (it has the boom), EXCEPT when a plain crush killed it: §6.5 says a crushed
+        /// Boomer never detonates, so without this branch it would die silently.
+        /// </summary>
+        private void OnEnemyKilled(int id, EnemyType type, KillMethod method, int bonus)
+        {
+            if (type == EnemyType.Crawler)
+                _enemySource.PlayOneShot(_crawlerDeathClip);
+            else if (method == KillMethod.Crush)
+                _enemySource.PlayOneShot(_boomerBoomClip, 0.6f); // quieter: it popped, it didn't detonate
+        }
+
+        private void OnBoomerDetonated(GridPos pos, int parentBonus, int blocksDestroyed)
+        {
+            _enemySource.PlayOneShot(_boomerBoomClip);
+        }
 
         /// <summary>R4: shared by drill, bomb blast and burst shockwave — a bright chime, higher
         /// register than everything else so a diamond always reads as the precious pickup it is.</summary>
@@ -269,6 +332,22 @@ namespace HollowLines.View
             // R4 — diamond chime: fast, bright, higher register (C6-E6-G6) than anything else in
             // the game, so it always reads as a bonus pickup rather than a scoring action.
             _diamondClip       = SfxSynth.Arpeggio(new[] { 1046.5f, 1318.51f, 1567.98f }, 0.045f, 0.4f);
+
+            // R5.16 — enemies. The two activation cues sit at opposite ends of the register on
+            // purpose: a Crawler chirps high (something small just started moving toward you), a
+            // Boomer boops low (something heavy just woke up and is now standing there).
+            _crawlerWakeClip   = SfxSynth.Tone(1500f, 0.1f, 0.3f, 0.002f, 0.05f);
+            _boomerWakeClip    = SfxSynth.Tone(150f, 0.2f, 0.35f, 0.005f, 0.12f);
+
+            // Crawler death: a short dry crunch. Higher low-pass than the crush clip so it reads
+            // as something small breaking, not as the player getting hit.
+            _crawlerDeathClip  = SfxSynth.Noise(0.15f, 0.4f, 0.35f);
+
+            // Boomer detonation: noise + tone layered like the chunk shatter, but tuned the other
+            // way — mostly TONE (noiseMix 0.35) at 70 Hz with a heavy low-pass, so it lands round
+            // and bass-heavy instead of crackly. That is what separates it from the bomb blast,
+            // which is pure Noise at a much brighter low-pass (0.25).
+            _boomerBoomClip    = SfxSynth.Shatter(0.3f, 70f, 0.6f, noiseMix: 0.35f, lowPassFactor: 0.06f);
         }
 
         private void BuildSources()
@@ -283,6 +362,7 @@ namespace HollowLines.View
             _stingerSource   = NewSource();
             _musicSource     = NewSource();
             _diamondSource   = NewSource();
+            _enemySource     = NewSource();
         }
 
         private AudioSource NewSource()
