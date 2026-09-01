@@ -1,16 +1,17 @@
 # Hollow Lines
 
-**A tiny pixel-art driller descends into a well that never ends.**
+**An arcade action-descent: a tiny pixel-art driller falls down a well that never ends.**
 
 ![Unity](https://img.shields.io/badge/Unity-6000.3-black?logo=unity&logoColor=white)
 ![C#](https://img.shields.io/badge/C%23-.NET-8A2BE2?logo=csharp&logoColor=white)
-![Tests](https://img.shields.io/badge/NUnit%20tests-260%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/NUnit%20tests-333%20passing-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-PC%20(mobile%20stretch)-blue)
 ![Status](https://img.shields.io/badge/status-solo%20dev%2C%20in%20progress-yellow)
 
-Drill streaks of the same color for rising combos, undermine huge chunks to make them
-shatter on impact, chain bombs together for massive bursts, collect buried diamonds on
-the way down — and find air pockets before you suffocate. Campaign teaches you the
+Drill straight down for rising color combos, undermine huge chunks so they shatter on
+impact, chain bombs together for massive bursts, blow up Boomers to amplify the chaos,
+and grab diamonds on the way past — all while the air runs out. This is a score-chaser,
+not a puzzle game: **nothing ever asks you to stop descending.** Campaign teaches you the
 ropes; Endless is the real game: how deep can you go?
 
 <p align="center">
@@ -40,39 +41,49 @@ ropes; Endless is the real game: how deep can you go?
 
 ## What is this
 
-Hollow Lines is a casual arcade descent game — think **Mr. Driller**'s avatar-in-a-well
+Hollow Lines is an **arcade action-descent** — think **Mr. Driller**'s avatar-in-a-well
 physics crossed with **Downwell**'s score-chasing depth run. You dig, blocks fall, chunks
 of the same color fuse into rigid slabs that crash down and shatter, bombs chain into each
-other, and the well never stops going down.
+other, buried enemies get flattened by the debris, and the well never stops going down.
 
-The design went through a full mechanical redesign (v2.1 → v3, documented in
-[`hollow-lines-gdd-v3.md`](hollow-lines-gdd-v3.md)) after early prototyping showed that
-the original "clear a full row of empty cells" loop was too cerebral for the arcade feel
-the game was chasing. v3 rebuilt scoring around three things that reward *every* drill
-tap instead of an abstract goal on top of it:
+The design got there in two passes, both documented in
+[`hollow-lines-gdd-v3.md`](hollow-lines-gdd-v3.md):
+
+- **v2.1 → v3** — a full mechanical redesign after prototyping showed the original "clear a
+  full row of empty cells" loop was too cerebral for the arcade feel the game was chasing.
+  v3 rebuilt scoring around things that reward *every* drill tap instead of an abstract
+  goal layered on top of it.
+- **v3 → v3.1 (the arcade pivot)** — a pairwise analysis of the shipped v3 systems found
+  several that quietly asked the player to **stop descending**: the color streak rewarded
+  lateral routing, the diamond gate forced collection detours, and two of the planned enemy
+  types were puzzles to be solved. Each one was either made passive or made optional.
 
 > Every drill tap is the reward, not a means to some other goal. Spectacle and score are
-> aligned — the biggest, loudest plays are also the highest-scoring ones.
+> aligned — the biggest, loudest plays are also the highest-scoring ones — and no mechanic
+> is allowed to interrupt the descent to get at it.
 
 ## Core mechanics
 
 | System | What it does |
 |---|---|
-| 🎨 **Color Streak** | Drilling the same color back-to-back multiplies your points. Colors generate in *veins*, not random noise, so a straight-down dig routinely builds a ×4–×8 streak. |
-| 💥 **Chunk Burst** | Same-color blocks fuse into rigid chunks. Undermine one and it falls — 2+ rows of fall distance and it shatters on impact for a big payout, plus a shockwave that frees capsules, diamonds, and arms nearby bombs. |
-| 🧨 **Bomb Bonanza** | Buried bombs arm when you drill next to them. Chain several together for a rising multiplier — bombs liberate air and diamonds instead of destroying them, so they're a tool, not a hazard. |
-| 💎 **Diamonds** | Scattered on the way down, never behind an unbreakable wall, never requiring backtracking. From campaign level 4 on, collecting all of them is required to clear the level — routing tension between speed and thoroughness. |
+| 🎨 **Color Streak** | Drilling **downward** on the same color back-to-back multiplies your points. Colors generate in *veins*, not random noise, so a straight-down dig routinely builds a ×4–×8 streak. Sideways and upward drills are streak-neutral — the streak is a reward for descending, never a reason to detour. |
+| 💥 **Chunk Burst** | Same-color blocks fuse into rigid chunks. Undermine one and it falls — 2+ rows of fall distance and it shatters on impact for a big payout, plus a shockwave that frees capsules and diamonds, arms nearby bombs, and flattens anything living in the blast. |
+| 🧨 **Bomb Bonanza** | Buried bombs arm when you drill next to them, then burn a 1.5 s fuse with an accelerating beep-and-flash telegraph. Chain several together for a rising multiplier — bombs liberate air and diamonds instead of destroying them, so they're a tool, not a hazard. |
+| 🐛 **Enemies** | Two kinds, both killed by *physics* rather than combat — you never fight them, you drop things on them. Both lie buried and inert until you drill nearby. **Crawlers** then shuffle along their row and cost you a heart if they reach you. **Boomers** never move and never touch you — but kill one and it explodes, destroying more blocks and potentially setting off other Boomers (chain capped 3 deep). Enemies amplify what you were already doing; they never block the way down. |
+| 💎 **Diamonds** | Free candy scattered on the way down — never behind an unbreakable wall, never gated. Grab one for +150 if it's on your path, ignore it if it isn't. |
 | 🕳️ **Depth** | Every new deepest row banks points on its own. The well only ever pulls you forward. |
 | ⭐ **Perfect Clear** | Clearing a full row of empties is a rare secret jackpot (+500 flat) — not the core loop, just a bonus for players who go looking for it. |
-| 💨 **Air** | Constantly draining, restored by capsules, bursts, and bomb chains. Passive play is a slow death; aggression keeps you breathing. |
+| 💨 **Air** | Constantly draining, and **every single drill puts some back**, alongside capsules, bursts and bomb chains. Standing still to plan is what kills you; drilling *is* survival. |
 
 ## Game modes
 
 - **Tutorial showcase** — a hand-authored, deterministic intro board that teaches every
   mechanic above in its own isolated chamber before you ever see a procedural level.
 - **Campaign** — 10 hand-tuned procedural levels, each introducing one new mechanic
-  (streaks → chunk bursts → air & diamonds → hard blocks → bombs → bomb chains → steel → …),
-  ramping toward a dense final descent.
+  (streaks → chunk bursts → air & diamonds → hard blocks → bombs & Crawlers → bomb chains
+  & Boomers → steel → …), ramping toward a dense final descent. Clearing a level means
+  reaching the bottom *and* meeting a score minimum — enough to make you engage with the
+  scoring systems, never enough to make you backtrack for them.
 - **Endless** — no levels, no win condition: you play until the air runs out or the hearts
   do. Depth is the leaderboard metric, difficulty ramps continuously across a chain of
   generated segments, and the drain rate climbs the deeper you go.
@@ -86,14 +97,14 @@ This project doubles as an exercise in keeping a game's rules honest and measura
 a few things worth calling out for anyone reading the code:
 
 - **Pure C# core, zero `UnityEngine` dependency.** Every rule of the game — grid physics,
-  gravity, scoring, air, bombs, diamonds, endless progression — lives under
+  gravity, scoring, air, bombs, diamonds, enemies, endless progression — lives under
   `HollowLines.Core` with no `MonoBehaviour`, no `Update()`, nothing Unity-specific. It
   compiles and runs standalone with plain `dotnet run`. Unity's `View/` layer is a thin,
   swappable shell on top: input in, sprites/SFX out.
-- **260 NUnit tests**, run in-editor via PlayMode, covering every scoring path, every
-  physics edge case (crush-vs-burst ordering, coyote-time falls, chain cascades), and
-  full board generators — including deterministic tutorial boards run end-to-end against
-  the *real* gravity and bomb systems, not mocks.
+- **333 NUnit tests**, run in-editor via PlayMode, covering every scoring path, every
+  physics edge case (crush-vs-burst ordering, coyote-time falls, chain cascades, capped
+  Boomer chain reactions), and full board generators — including deterministic tutorial
+  boards run end-to-end against the *real* gravity and bomb systems, not mocks.
 - **A headless bot playtest harness** (`tools/playtest/`) that compiles the actual game
   logic and drives it with several bot strategies (a straight-down tunneler, a row-clear
   farmer, a bomb hunter) to measure real balance data — air income vs. drain, points-by-
@@ -147,7 +158,7 @@ physical position (Y↑ A↓ X← B→) and the left stick walks. Esc or Start p
 ## Running the tests
 
 - **NUnit suite (primary):** `Window ▸ General ▸ Test Runner` in the Unity Editor, switch
-  to the **PlayMode** tab, Run All. 260 tests, a few seconds.
+  to the **PlayMode** tab, Run All. 333 tests, a few seconds.
 - **Headless playtest harness (behavioral/balance):**
   ```bash
   cd tools/playtest
@@ -162,8 +173,10 @@ physical position (Y↑ A↓ X← B→) and the left stick walks. Esc or Start p
 - ✅ Core loop — drilling, gravity, chunk fusion, color streaks, chunk bursts, bomb chains
 - ✅ Campaign (10 levels + tutorial showcase)
 - ✅ Endless mode + Daily Dig (date-seeded)
-- ✅ Diamonds — collection, campaign win gate, Endless bonus
-- 🔲 Enemies (Crawler / Digger / Tank) — killed by physics (bursts, bombs), not combat
+- ✅ Diamonds — collection, scoring, Endless bonus
+- ✅ v3.1 arcade pivot — vertical-only streak, air per drill, 1.5 s fuse, score-minimum win
+- ✅ Enemies (Crawler / Boomer) — killed by physics (crush, bursts, bombs), not combat
+- 🔲 Enemies in Endless (campaign placement ships; Endless placement is next)
 - 🔲 Online leaderboard for Endless / Daily Dig (separate ASP.NET Core + PostgreSQL project)
 - 🔲 Mobile port (stretch goal)
 
