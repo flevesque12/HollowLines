@@ -7,8 +7,15 @@ namespace HollowLines.Core
     /// M3 step 4: manages buried bombs and the player's pocket bomb.
     ///
     /// A buried bomb (CellType.Bomb in the grid) is armed when the player drills an adjacent cell
-    /// or when a falling chunk lands next to it. Once armed, a 2.5 s fuse ticks; on expiry the bomb
-    /// clears itself and blasts a cross of radius 2 in the four cardinal directions.
+    /// or when a falling chunk lands next to it. Once armed, a 1.5 s fuse ticks; on expiry the bomb
+    /// clears itself and blasts a cardinal cross.
+    ///
+    /// v3.2: the cross radius depends on WHO armed the bomb (§5.3, CLAUDE.md). A bomb the player
+    /// arms directly — by drilling a cell adjacent to it (<see cref="NotifyDrilled"/>) — blasts a
+    /// tight <see cref="DirectBlastRadius"/> cross. Every other arming source (a landing chunk, a
+    /// burst shockwave, and — always, even if the chain traces back to a player-armed bomb — a
+    /// sympathetic detonation) keeps the wider <see cref="ChainBlastRadius"/> cross. Only the one
+    /// bomb the player's own drill directly touches gets the reduced blast.
     ///
     /// Blast effects by type:
     ///   Color/Hard/HardCracked/Bomb → Empty (destroyed outright)
@@ -29,7 +36,12 @@ namespace HollowLines.Core
     {
         // v3.1 arcade pivot (§2, CLAUDE.md): shortened from 2.5s for faster arcade tempo.
         public const float FuseDuration = 1.5f;
-        public const int   BlastRadius  = 2;
+
+        /// <summary>v3.2: radius of a bomb the player armed directly (NotifyDrilled).</summary>
+        public const int DirectBlastRadius = 1;
+
+        /// <summary>v3.2: radius of every other bomb (chunk landing, burst shockwave, sympathetic chain).</summary>
+        public const int ChainBlastRadius = 2;
 
         public bool HasPocketBomb { get; private set; }
 
@@ -81,8 +93,17 @@ namespace HollowLines.Core
 
         private readonly GridModel _grid;
 
-        // Keyed by bomb position; value = seconds remaining on the fuse.
-        private readonly Dictionary<GridPos, float> _armed = new Dictionary<GridPos, float>();
+        // v3.2: each armed bomb tracks its own fuse remaining AND whether the PLAYER'S drill was
+        // what lit it (as opposed to a chunk landing or a burst shockwave) — that source decides
+        // its blast radius at detonation (DirectBlastRadius vs ChainBlastRadius, §5.3).
+        private struct ArmedBomb
+        {
+            public float Remaining;
+            public bool ArmedByPlayer;
+        }
+
+        // Keyed by bomb position.
+        private readonly Dictionary<GridPos, ArmedBomb> _armed = new Dictionary<GridPos, ArmedBomb>();
 
         public BombSystem(GridModel grid, CollapseSystem collapse)
         {
@@ -99,7 +120,7 @@ namespace HollowLines.Core
         /// </summary>
         public void NotifyDrilled(GridPos drilledCell)
         {
-            ArmAdjacent(drilledCell);
+            ArmAdjacent(drilledCell, armedByPlayer: true);
         }
 
         /// <summary>
@@ -109,7 +130,7 @@ namespace HollowLines.Core
         public void NotifyChunkLanded(Chunk chunk)
         {
             foreach (GridPos cell in chunk.Cells)
-                ArmAdjacent(cell);
+                ArmAdjacent(cell, armedByPlayer: false);
         }
 
         /// <summary>
@@ -117,7 +138,7 @@ namespace HollowLines.Core
         /// Wire to GravitySystem.BombArmedByBurst: a shockwave lights the fuse of the bomb it hits.
         /// No-op if the cell holds no bomb or that bomb is already counting down.
         /// </summary>
-        public void ArmBombAt(GridPos bombCell) => TryArm(bombCell);
+        public void ArmBombAt(GridPos bombCell) => TryArm(bombCell, armedByPlayer: false);
 
         // ── Per-frame update ─────────────────────────────────────────────
 
@@ -132,19 +153,19 @@ namespace HollowLines.Core
                 return;
 
             // Snapshot to safely mutate _armed while iterating.
-            var snapshot = new List<KeyValuePair<GridPos, float>>(_armed);
-            var toExplode = new List<GridPos>();
+            var snapshot = new List<KeyValuePair<GridPos, ArmedBomb>>(_armed);
+            var toExplode = new List<(GridPos pos, bool armedByPlayer)>();
 
             foreach (var kvp in snapshot)
             {
-                float remaining = kvp.Value - dt;
+                float remaining = kvp.Value.Remaining - dt;
                 if (remaining <= 0f)
                 {
-                    toExplode.Add(kvp.Key);
+                    toExplode.Add((kvp.Key, kvp.Value.ArmedByPlayer));
                 }
                 else
                 {
-                    _armed[kvp.Key] = remaining;
+                    _armed[kvp.Key] = new ArmedBomb { Remaining = remaining, ArmedByPlayer = kvp.Value.ArmedByPlayer };
                     FuseProgress?.Invoke(kvp.Key, 1f - (remaining / FuseDuration));
                 }
             }
@@ -177,16 +198,18 @@ namespace HollowLines.Core
                 _grid.Set(center, CellType.Empty);
             }
 
-            var seed = new List<GridPos> { center };
+            // Pocket bomb detonation isn't "armed by drilling adjacent" (NotifyDrilled) — it keeps
+            // the wider chain radius, same as before this change.
+            var seed = new List<(GridPos pos, bool armedByPlayer)> { (center, false) };
             ProcessExplosions(seed, avatarCell);
             return true;
         }
 
         // ── Internal ─────────────────────────────────────────────────────
 
-        private void ProcessExplosions(List<GridPos> seeds, GridPos avatarCell)
+        private void ProcessExplosions(List<(GridPos pos, bool armedByPlayer)> seeds, GridPos avatarCell)
         {
-            var queue = new Queue<GridPos>(seeds);
+            var queue = new Queue<(GridPos pos, bool armedByPlayer)>(seeds);
             var exploded = new HashSet<GridPos>();
 
             // v3 chain reward: 1 for the bomb that started it, +1 for every further detonation
@@ -195,7 +218,7 @@ namespace HollowLines.Core
 
             while (queue.Count > 0)
             {
-                GridPos pos = queue.Dequeue();
+                (GridPos pos, bool armedByPlayer) = queue.Dequeue();
                 if (!exploded.Add(pos))
                     continue;
 
@@ -208,8 +231,9 @@ namespace HollowLines.Core
 
                 BombExploded?.Invoke(pos);
 
+                int radius = armedByPlayer ? DirectBlastRadius : ChainBlastRadius;
                 var reached = new List<GridPos> { pos }; // the bomb's own cell counts as hit
-                int destroyed = Blast(pos, avatarCell, queue, exploded, reached);
+                int destroyed = Blast(pos, radius, avatarCell, queue, exploded, reached);
                 BombScored?.Invoke(destroyed, chainMultiplier);
                 BlastResolved?.Invoke(reached, chainMultiplier);
             }
@@ -219,10 +243,11 @@ namespace HollowLines.Core
         /// Applies one bomb's cross blast. Returns how many blocks it removed outright, and appends
         /// every in-bounds cell the blast reached to <paramref name="reached"/> (for BlastResolved).
         /// </summary>
-        private int Blast(GridPos center, GridPos avatarCell, Queue<GridPos> sympatheticQueue,
+        private int Blast(GridPos center, int radius, GridPos avatarCell,
+                          Queue<(GridPos pos, bool armedByPlayer)> sympatheticQueue,
                           HashSet<GridPos> alreadyExploded, List<GridPos> reached)
         {
-            // Cross pattern — 4 cardinal axes, up to BlastRadius steps each.
+            // Cross pattern — 4 cardinal axes, up to `radius` steps each.
             int[] dx = {  0,  0, -1,  1 };
             int[] dy = { -1,  1,  0,  0 };
 
@@ -230,7 +255,7 @@ namespace HollowLines.Core
 
             for (int axis = 0; axis < 4; axis++)
             {
-                for (int r = 1; r <= BlastRadius; r++)
+                for (int r = 1; r <= radius; r++)
                 {
                     GridPos target = center.Offset(dx[axis] * r, dy[axis] * r);
                     if (!_grid.InBounds(target))
@@ -243,9 +268,11 @@ namespace HollowLines.Core
                     if (target == avatarCell)
                         AvatarHitByBlast?.Invoke(target);
 
-                    // Sympathetic detonation: queued for processing after current explosion.
+                    // Sympathetic detonation: ALWAYS ArmedByPlayer = false (§5.3), even if this
+                    // whole chain traces back to a bomb the player drilled — only the bomb the
+                    // player's own drill directly touched gets the tight radius.
                     if (hit == CellType.Bomb && !alreadyExploded.Contains(target))
-                        sympatheticQueue.Enqueue(target);
+                        sympatheticQueue.Enqueue((target, false));
 
                     CellType result = BlastResult(hit);
                     if (result != hit)
@@ -290,15 +317,15 @@ namespace HollowLines.Core
             }
         }
 
-        private void ArmAdjacent(GridPos origin)
+        private void ArmAdjacent(GridPos origin, bool armedByPlayer)
         {
-            TryArm(origin.Above);
-            TryArm(origin.Below);
-            TryArm(origin.Offset(-1, 0));
-            TryArm(origin.Offset( 1, 0));
+            TryArm(origin.Above, armedByPlayer);
+            TryArm(origin.Below, armedByPlayer);
+            TryArm(origin.Offset(-1, 0), armedByPlayer);
+            TryArm(origin.Offset( 1, 0), armedByPlayer);
         }
 
-        private void TryArm(GridPos pos)
+        private void TryArm(GridPos pos, bool armedByPlayer)
         {
             if (!_grid.InBounds(pos))
                 return;
@@ -306,7 +333,7 @@ namespace HollowLines.Core
                 return;
             if (_armed.ContainsKey(pos))
                 return; // already counting down
-            _armed[pos] = FuseDuration;
+            _armed[pos] = new ArmedBomb { Remaining = FuseDuration, ArmedByPlayer = armedByPlayer };
             BombArmed?.Invoke(pos);
         }
 
@@ -322,9 +349,9 @@ namespace HollowLines.Core
             }
             foreach (GridPos pos in toShift)
             {
-                float time = _armed[pos];
+                ArmedBomb state = _armed[pos];
                 _armed.Remove(pos);
-                _armed[pos.Below] = time;
+                _armed[pos.Below] = state;
             }
         }
     }

@@ -60,7 +60,10 @@ emerged: several mechanics asked the player to **stop descending** to engage wit
 routing, diamond gate, Digger/Tank puzzle-solving). This conflicted with the game's identity
 as an arcade action-descent.
 
-**v3.1 changes (design decisions, not yet coded):**
+**v3.1 changes — ✅ ALL SHIPPED (R5.1-R5.17, 2026-09-01).** Every item below is implemented,
+tested and play-mode verified; see the R5 delivery notes in §10 for the per-step rationale and
+deviations. The one piece deliberately left for later is **enemy placement in Endless** (the §9
+counts are per campaign level, and Endless has no level number) — campaign placement ships.
 - **Color Streak** → vertical-only: only drills **downward** build the streak. Lateral drills
   are streak-neutral. The streak becomes a passive bonus of natural descent, not an active
   routing system. Eliminates the Streak × Burst conflict (bursts no longer destroy streak material).
@@ -323,6 +326,45 @@ Cell enum (0–9) + helper methods. Map chars: `.` `A` `B` `C` `H` `S` `P` `X` `
 >   tick without being linked still score ×1 then ×2, because they share one `ProcessExplosions()`
 >   call. Rare in practice; revisit if it shows up in playtest data.
 
+> **🔄R5.18 (2026-09-01): two blast radii, keyed by who armed the bomb.** A bomb the player arms
+> directly — by drilling a cell adjacent to it (`NotifyDrilled`) — blasts a tight
+> `DirectBlastRadius = 1` cross (only its 4 cardinal neighbors). Every other arming source keeps
+> the original `ChainBlastRadius = 2`: a landing chunk (`NotifyChunkLanded`), a burst shockwave
+> (`ArmBombAt`), and — always, even if the chain traces back to a player-armed bomb — a sympathetic
+> detonation. Each `ArmedBomb` entry now carries its own `ArmedByPlayer` flag alongside its fuse
+> timer; `ProcessExplosions`' BFS queue carries `(GridPos, armedByPlayer)` pairs instead of bare
+> positions so a sympathetic ignition can be hard-coded to `armedByPlayer: false` regardless of
+> what armed the bomb that triggered it (only the ONE bomb the player's own drill directly touches
+> gets the reduced radius). `TryUsePocketBomb`'s instant detonation is not "armed by drilling
+> adjacent" either, so it also keeps `ChainBlastRadius` (unchanged from before this pass).
+> Scoring (`blocksDestroyed`) is unaffected — it's still just however many cells the (now smaller
+> or larger) cross actually reached and cleared.
+>
+> **The tutorial showcase's bomb chamber (§5.14) needed a layout fix.** The original three bombs
+> sat 2 apart in a row (`AXCXCXA`) so the player-drilled center bomb could reach both neighbors
+> directly — that needs `ChainBlastRadius`, and the center bomb now only gets `DirectBlastRadius`.
+> Re-authored as a vertical stack instead: the player-armed bomb sits directly above a second bomb
+> (distance 1, reachable even at radius 1), whose sympathetic `ChainBlastRadius` then reaches
+> sideways to ignite a third. Still a genuine ×3 chain, verified against the real BombSystem by
+> `TutorialBoard_BombChamber_ArmingCenter_ChainsToThree`.
+
+> **R5.18 dodge-validation pass (2026-09-01):** four tests proving the radius split actually buys
+> the player a dodge, not just a smaller number. `PlayerCanDodge_DirectBomb_WithOneStep` confirms a
+> single lateral step off a player-armed bomb's row/column is always safe (the step lands diagonal
+> to the bomb, which the cross can never reach at any radius), while the drilled cell itself — the
+> player's old spot — stays lethal. `SympatheticBomb_HasLargerBlast` and
+> `PlayerSafe_FromChainedBombs_BecauseAlreadyFar` confirm the flip side: a sympathetically-triggered
+> bomb keeps `ChainBlastRadius` and can reach cells the originating player-armed bomb never could,
+> but a player already clear of BOTH bombs' rows and columns stays safe regardless.
+>
+> **`PlayerCanDodge_DirectBomb_ByDrillingDown` needed a correction from spec.** The cell 1 row
+> straight down from the bomb is not a valid dodge and isn't diagonal — it sits ON the down-axis at
+> distance 1, exactly as reachable as the drilled cell above the bomb (the cross is symmetric across
+> all four cardinal directions, not just the side the player approached from). It's also not
+> reachable in one move from the arming spot — it's two rows away. The test instead verifies the
+> real payoff: drilling a SECOND row down lands at distance 2, outside `DirectBlastRadius` — a
+> `ChainBlastRadius` bomb would still reach that far, a player-armed one does not.
+
 ### 5.4 CollapseSystem — Rename to PerfectClear
 **Changes:**
 - `RowCollapsed` event → rename to `PerfectClear` (or add a new `PerfectClear` event alongside).
@@ -535,6 +577,22 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
     `SpawnDiamondSparkle()`, wired to all three collection sources — `_avatar.Drilled` (diamond
     branch), `_gravity.DiamondLiberated`, `_bombs.DiamondLiberated` — via one shared handler,
     `OnDiamondLiberated`, so however the diamond was freed it reads as a pickup, not a destruction.
+- 🆕R5.15 **Enemy effects** (§6.5). Four of them, sized to match what each enemy is worth:
+  - **Crawler death** — 8 small olive particles, 0.28 s. Cheap and quick: it's a bonus target.
+  - **Boomer death** — 18 bright orange particles radiating evenly + its own `SpawnRipple`, 0.5 s.
+    Visibly bigger and brighter than the Crawler's, because a Boomer is an amplifier. Fired from
+    `BoomerDetonated`, plus a fallback in `OnEnemyKilled` for the crush case, which never detonates.
+  - **Crawler wake flash** — one-shot expanding pale square when a dormant Crawler activates.
+  - **Boomer standing halo** — a ~1.5 Hz pulse that lives as long as the active Boomer does,
+    **reusing the `FuseGlow` material**: a Boomer is a bomb with legs, so it borrows the bomb's
+    visual language. Deliberately slower and calmer than a lit fuse (2.5 → 12 Hz) — a Boomer is a
+    standing opportunity, not a countdown.
+  > **The events don't carry enough to draw with**, so VfxManager keeps an id → (type, cell)
+  > marker cache: `EnemyActivated` is only an id, and `EnemyKilled` has the type but no position
+  > (the enemy is already dead, so it can't be looked up either). Seeded from `EnemySpawned`,
+  > refreshed from `GetAllAlive()` on a **0.2 s timer** — that call allocates a list, and a Crawler
+  > only steps every 0.8 s, so 0.2 s costs 5 allocations/second instead of 60. Same per-entity
+  > view-state pattern as the `_fuses` dictionary.
 
 **Keep:** drill flash, collapse dust (now for PerfectClear), bomb burst, chain glow.
 
@@ -562,6 +620,17 @@ row-clear farming as a *problem*. The markers worked against the design, so `Cre
   the game, so a diamond always reads as a bonus pickup rather than a scoring action. One handler,
   `OnDiamondLiberated`, shared by drill / bomb blast / burst shockwave (same three sources as the
   VfxManager sparkle, §5.10).
+- 🆕R5.16 **Enemy SFX** (§6.5), one shared `_enemySource`, wired in `Rewire()` since EnemySystem is
+  grid-dependent. The two activation cues sit at **opposite ends of the register on purpose**: a
+  Crawler chirps high (`Tone` 1500 Hz, 0.1 s — something small just started moving toward you), a
+  Boomer boops low (`Tone` 150 Hz, 0.2 s — something heavy woke up and is now just standing there).
+  Crawler death is a short dry crunch (`Noise`, 0.15 s), brighter than the crush clip so it reads as
+  something small breaking rather than the player getting hit.
+  - **Boomer detonation** is `Shatter` tuned the OPPOSITE way to the chunk burst: mostly tone
+    (`noiseMix: 0.35`) at 70 Hz with a heavy low-pass (`0.06`), so it lands round and bass-heavy
+    instead of crackly. That is what separates it from the bomb blast, which is pure `Noise` at a
+    much brighter low-pass (0.25). Measured, not asserted: zero-crossing rate is **337/s vs the
+    bomb blast's 10 884/s** — 32× darker. Same crush fallback as the VFX (§5.10), at 0.6 volume.
 - Remove: void-line clear SFX trigger on every RowCollapsed (now only on PerfectClear).
 
 ### 5.12 UIScreenManager — Updated score screen
@@ -745,6 +814,28 @@ somewhere, not just triggering a menu).
 > screenshot showing the gradient building from nothing at the top of the band to a strong gold
 > wash at the final row.
 
+### 5.17 EnemyView  🆕 IMPLEMENTED (R5.17)
+One `SpriteRenderer` per living enemy, layered OVER the cell grid. Enemies are ACTORS, not
+CellTypes (§6.5), so they never enter BoardView's tile array and need their own renderers.
+
+- **`sortingOrder = 8`** — above the tiles (0) and the exit glow (1), **below the avatar (10)**.
+  That ordering is load-bearing: when a Crawler walks onto the driller's cell, the driller stays
+  visible at the exact moment contact damage fires (§6.5), instead of being hidden by the thing
+  hitting it.
+- **Dormant vs active is the whole visual language.** Dormant = `dormantAlpha` (0.4) and
+  *perfectly* still, because a buried enemy genuinely cannot hurt you; waking is what makes it
+  opaque and starts it moving. Active Crawler = lateral wiggle + a half-rate vertical bob (it
+  scuttles rather than slides); active Boomer = a scale pulse only, since it never moves.
+- Animation offsets are applied **on top of** the eased base position — the same split
+  `CameraShake` uses for follow-vs-shake, so movement and idle animation never fight.
+- **Positions are polled, not evented**: EnemySystem has no "moved" event, so `RefreshTargets()`
+  re-reads `GetAllAlive()` every 0.1 s (8× more responsive than the 0.8 s Crawler step) and the
+  per-frame lerp does the smoothing. Same allocation reasoning as VfxManager's marker cache (§5.10).
+- Death VFX belong to VfxManager (§5.10); this class only removes the sprite.
+- Parented under the BoardView GameObject, so it is torn down with the board on the next
+  `LoadLevel()`. GameBootstrap creates it **before** `SpawnEnemiesForBoard()` so it receives
+  every `EnemySpawned`.
+
 ---
 
 ## 6. Systems — NEW TO BUILD
@@ -907,8 +998,8 @@ Data:
     Health (int)            — always 1 (both types die in one hit)
 
 API:
-  SpawnEnemy(EnemyType type, GridPos pos) → int id
   EnemySystem(GridModel grid)                                  — 🔄 R5.8: takes the grid via constructor, see deviation note
+  SpawnEnemy(EnemyType type, GridPos pos) → int id
     → creates a dormant enemy at pos; fires EnemySpawned(id, type, pos); returns the new id
   ActivateEnemy(int id)
     → IsActive = true; fires EnemyActivated(id)
@@ -1803,7 +1894,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 
 ## 13. Test status
 
-**333 / 333 passing** (was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
+**343 / 343 passing** (was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
 dev-5 flip, +1 for `EndlessBoard_ContentRows_HavePorosity` — see §15.6; +6 for the tutorial
 showcase board — see §5.14; +5 for AvatarModel coyote time — see §4; +16 for R3.2 endless,
 +2 for the R3.1 steady-state guards (§15.7), +6 for R3.4 Daily Dig (§6.6); +28 for R4 Diamonds
@@ -1817,7 +1908,11 @@ score gate replacing the diamond gate (3 diamond-gate tests removed, 7 score-gat
 `EnemySystemTests`, the new core-lifecycle suite; +5 for R5.7 — Crawler lateral movement;
 +9 for R5.8 — the Boomer death blast and its chain reaction; +6 for R5.9 — the three
 activation triggers; +5 for R5.10 — avatar contact damage; +10 for R5.11 — `AwardEnemyKill`
-and `AwardBoomerBlast`; **+9 for R5.13 — campaign enemy placement**).
+and `AwardBoomerBlast`; +9 for R5.13 — campaign enemy placement; +6 for R5.18 — the BombSystem
+blast-radius split (§5.3) — `DirectBlastRadius`/`ChainBlastRadius` by arming source, plus the
+sympathetic-chain-always-radius-2 rule; **+4 for the R5.18 dodge-validation pass** — one-step
+lateral dodge, drilling two rows past a player-armed bomb, a sympathetic bomb's wider reach, and
+a player already off both bombs' cross entirely).
 Run via `run_tests` in **PlayMode** (see §14). The `tools/playtest` harness builds and runs clean.
 R4 was also confirmed live in the Unity Editor (UnityMCP): compile, full PlayMode run, and
 screenshots of the diamond counter, the `DiamondShine` tile glint, and a live score/DiamondSystem

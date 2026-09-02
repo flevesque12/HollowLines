@@ -82,7 +82,7 @@ namespace HollowLines.Core
         /// <summary>Seconds between one-cell Crawler steps (§6.5).</summary>
         public const float CrawlerMoveInterval = 0.8f;
 
-        /// <summary>Cardinal reach of a Boomer's death blast — half of BombSystem.BlastRadius (§6.5).</summary>
+        /// <summary>Cardinal reach of a Boomer's death blast — matches BombSystem.DirectBlastRadius (§6.5).</summary>
         public const int BoomerBlastRadius = 1;
 
         /// <summary>

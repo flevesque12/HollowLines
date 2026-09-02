@@ -1624,6 +1624,9 @@ namespace HollowLines.Tests
         public void BombScored_LoneBomb_ReportsFiveBlocksAtChainOne()
         {
             // Bomb at (1,1). Cross blast reaches: (1,0) up, (1,2)+(1,3) down, (0,1) left, (2,1) right = 5.
+            // Armed via ArmBombAt (non-player, ChainBlastRadius=2) so the classic 2-deep reach still
+            // applies here — this test is about the BombScored formula, not the arming source
+            // (§5.3's DirectBlastRadius vs ChainBlastRadius split has its own dedicated tests below).
             var (_, __, bombs) = Make(new[]
             {
                 "AAA",
@@ -1634,7 +1637,7 @@ namespace HollowLines.Tests
             var scored = new List<(int destroyed, int chain)>();
             bombs.BombScored += (d, c) => scored.Add((d, c));
 
-            bombs.NotifyDrilled(new GridPos(0, 1)); // arm via left neighbor
+            bombs.ArmBombAt(new GridPos(1, 1));
             bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
 
             Assert.AreEqual(1, scored.Count, "one detonation, one score event");
@@ -1686,10 +1689,9 @@ namespace HollowLines.Tests
         [Test]
         public void Blast_RadiusEdge_Cleared_BeyondRadius_Unaffected()
         {
-            // Bomb at (1,2). BlastRadius = 2.
+            // Bomb at (1,2). Armed via ArmBombAt (non-player) → ChainBlastRadius = 2.
             // (1,0): 2 above → IN radius → cleared.
             // (1,5): 3 below → OUT of radius → untouched.
-            // Arm via (0,2): its right neighbor is (1,2) = Bomb.
             var (grid, _, bombs) = Make(new[]
             {
                 "AAA",  // row 0 — (1,0): distance 2 above bomb
@@ -1699,11 +1701,278 @@ namespace HollowLines.Tests
                 "AAA",  // row 4 — distance 2 below
                 "AAA",  // row 5 — (1,5): distance 3 → outside radius
             });
-            bombs.NotifyDrilled(new GridPos(0, 2));
+            bombs.ArmBombAt(new GridPos(1, 2));
             bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
 
             Assert.AreEqual(CellType.Empty,  grid.Get(new GridPos(1, 0)), "radius-edge cell cleared");
             Assert.AreEqual(CellType.ColorA, grid.Get(new GridPos(1, 5)), "cell beyond radius unaffected");
+        }
+
+        // ── v3.2: DirectBlastRadius (player) vs ChainBlastRadius (everything else) — §5.3 ────
+
+        [Test]
+        public void Blast_ArmedByPlayerDrill_DistanceOne_Destroyed()
+        {
+            // Bomb at (1,2), armed the way the player does (NotifyDrilled) → DirectBlastRadius = 1.
+            // (1,1): distance 1 above → IN radius → cleared.
+            var (grid, _, bombs) = Make(new[]
+            {
+                "AAA",  // row 0
+                "AAA",  // row 1 — (1,1): distance 1 above bomb
+                "AXA",  // row 2 — bomb at (1,2)
+                "AAA",  // row 3
+            });
+            bombs.NotifyDrilled(new GridPos(0, 2)); // arm via left neighbor — player drill
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 1)),
+                "distance-1 cell must be destroyed even at DirectBlastRadius");
+        }
+
+        [Test]
+        public void Blast_ArmedByPlayerDrill_DistanceTwo_Survives()
+        {
+            // Bomb at (1,2), armed via player drill → DirectBlastRadius = 1.
+            // (1,0): distance 2 above → OUTSIDE DirectBlastRadius → must survive.
+            var (grid, _, bombs) = Make(new[]
+            {
+                "AAA",  // row 0 — (1,0): distance 2 above bomb
+                "AAA",  // row 1 — distance 1 above
+                "AXA",  // row 2 — bomb at (1,2)
+                "AAA",  // row 3
+            });
+            bombs.NotifyDrilled(new GridPos(0, 2)); // arm via left neighbor — player drill
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            Assert.AreEqual(CellType.ColorA, grid.Get(new GridPos(1, 0)),
+                "distance-2 cell must survive a player-armed bomb's DirectBlastRadius");
+        }
+
+        [Test]
+        public void Blast_ArmedByBurstShockwave_DistanceTwo_Destroyed()
+        {
+            // Bomb at (1,2), armed via ArmBombAt — GravitySystem.BombArmedByBurst's wiring — so it
+            // keeps ChainBlastRadius = 2, reaching a cell two rows above.
+            var (grid, _, bombs) = Make(new[]
+            {
+                "AAA",  // row 0 — (1,0): distance 2 above bomb
+                "AAA",  // row 1
+                "AXA",  // row 2 — bomb at (1,2)
+                "AAA",  // row 3
+            });
+            bombs.ArmBombAt(new GridPos(1, 2));
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 0)),
+                "a burst-armed bomb keeps the full ChainBlastRadius");
+        }
+
+        [Test]
+        public void Blast_ArmedByChunkLanding_KeepsChainBlastRadius()
+        {
+            // A single-cell chunk landing next to the bomb arms it as non-player (§5.3 item 1).
+            // Bomb at (1,2); the landed chunk's sole cell is (0,2) — its left neighbor.
+            var (grid, _, bombs) = Make(new[]
+            {
+                "AAA",  // row 0 — (1,0): distance 2 above bomb
+                "AAA",  // row 1
+                "AXA",  // row 2 — bomb at (1,2)
+                "AAA",  // row 3
+            });
+            var helperGrid = GridModel.FromStringMap(new[] { "A", "A", "A", "A" }); // cell at (0,2) among others
+            Chunk chunk = ChunkSystem.ComputeChunks(helperGrid)[0]; // the whole fused column is one chunk, contains (0,2)
+
+            bombs.NotifyChunkLanded(chunk);
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 0)),
+                "a chunk-landing-armed bomb keeps the full ChainBlastRadius");
+        }
+
+        [Test]
+        public void SympatheticChain_FirstBombPlayerRadiusOne_SecondBombChainRadiusTwo()
+        {
+            // Bomb A at (1,0) — armed by the player (NotifyDrilled) → DirectBlastRadius = 1.
+            // Bomb B at (2,0) — distance 1 from A, ignited sympathetically → ChainBlastRadius = 2.
+            // B's own blast should reach (4,0), two cells to its right (distance 2 from B).
+            var (grid, _, bombs) = Make(new[] { "AXXAA" });
+            bombs.NotifyDrilled(new GridPos(0, 0)); // arm bomb A via left neighbor — player drill
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 0)), "bomb A cleared");
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(2, 0)), "bomb B cleared (sympathetic)");
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(3, 0)),
+                "B's ChainBlastRadius (distance 1) must destroy this cell");
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(4, 0)),
+                "B's ChainBlastRadius (distance 2) must destroy this cell even though B was " +
+                "sympathetically triggered by a player-armed bomb");
+        }
+
+        [Test]
+        public void SympatheticChain_FirstBombPlayerRadiusOne_ReportsCorrectBlocksDestroyed()
+        {
+            // Same layout as above — verify BombScored's blocksDestroyed per detonation stays
+            // correct for each radius (item 4: scoring is unaffected by the radius split).
+            var (_, __, bombs) = Make(new[] { "AXXAA" });
+            var scored = new List<(int destroyed, int chain)>();
+            bombs.BombScored += (d, c) => scored.Add((d, c));
+
+            bombs.NotifyDrilled(new GridPos(0, 0)); // arm bomb A — player drill
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            Assert.AreEqual(2, scored.Count, "two detonations");
+            // Bomb A (DirectBlastRadius=1): destroys (0,0) to its left and clears bomb B's cell
+            // (hitting a bomb counts as a destroyed block, same as any other solid — the sympathetic
+            // ignition itself is scored separately when bomb B detonates).
+            Assert.AreEqual(2, scored[0].destroyed, "bomb A's radius-1 blast destroys (0,0) and bomb B's cell");
+            Assert.AreEqual(1, scored[0].chain);
+            // Bomb B (ChainBlastRadius=2): destroys (3,0) and (4,0).
+            Assert.AreEqual(2, scored[1].destroyed, "bomb B's radius-2 blast destroys both cells to its right");
+            Assert.AreEqual(2, scored[1].chain);
+        }
+
+        // ── R5.18 dodge validation: DirectBlastRadius keeps a player-armed bomb dodgeable ──────
+
+        [Test]
+        public void PlayerCanDodge_DirectBomb_WithOneStep()
+        {
+            // Bomb at (3,5). Player drills (3,4) — adjacent above — to arm it (DirectBlastRadius=1).
+            // A single-cell side-step, either direction, is a clean dodge: (2,4) and (4,4) are
+            // diagonal to the bomb — never on the cardinal cross at ANY radius. Two independent
+            // BombSystem instances (one per side) so each detonation is tested in isolation.
+            bool hitLeft = false, hitRight = false;
+
+            var (gridLeft, __, bombsLeft) = Make(new[]
+            {
+                "AAAAAAA", "AAAAAAA", "AAAAAAA", "AAAAAAA", "AAAAAAA", "AAAXAAA", "AAAAAAA",
+            });
+            bombsLeft.NotifyDrilled(new GridPos(3, 4));
+            bombsLeft.AvatarHitByBlast += _ => hitLeft = true;
+            bombsLeft.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(2, 4));
+
+            var (gridRight, ___, bombsRight) = Make(new[]
+            {
+                "AAAAAAA", "AAAAAAA", "AAAAAAA", "AAAAAAA", "AAAAAAA", "AAAXAAA", "AAAAAAA",
+            });
+            bombsRight.NotifyDrilled(new GridPos(3, 4));
+            bombsRight.AvatarHitByBlast += _ => hitRight = true;
+            bombsRight.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(4, 4));
+
+            Assert.IsFalse(hitLeft, "stepping to (2,4) must dodge a DirectBlastRadius bomb");
+            Assert.IsFalse(hitRight, "stepping to (4,4) must dodge a DirectBlastRadius bomb");
+            Assert.AreEqual(CellType.ColorA, gridLeft.Get(new GridPos(2, 4)), "(2,4) is never on the cross — untouched");
+            Assert.AreEqual(CellType.ColorA, gridRight.Get(new GridPos(4, 4)), "(4,4) is never on the cross — untouched");
+
+            // The player's OLD spot — the cell they drilled to arm the bomb — is squarely in the
+            // blast (up-axis, distance 1). This is why standing still, or drilling-and-staying, kills.
+            Assert.AreEqual(CellType.Empty, gridLeft.Get(new GridPos(3, 4)),
+                "the drilled cell (the old spot) is destroyed by the up-axis at distance 1");
+        }
+
+        [Test]
+        public void PlayerCanDodge_DirectBomb_ByDrillingDown()
+        {
+            // Same bomb (3,5), armed the same way (drill (3,4) above it, DirectBlastRadius=1).
+            //
+            // ⚠️ Correction from spec: (3,6) — one row straight down from the bomb — is NOT a safe
+            // spot. It sits on the down-axis at distance 1, which IS inside DirectBlastRadius (the
+            // cross hits all four cardinal neighbors, not just the side the player approached from)
+            // — it is destroyed exactly like (3,4), the player's old spot in the test above. It is
+            // also not "diagonal": (3,6) shares the bomb's own column, so it's on-axis by definition.
+            // Nor is it reachable in a single move from (3,4) — it's two rows away, not adjacent.
+            //
+            // What DOES work, and is what this test actually verifies: the player keeps drilling
+            // straight down PAST the immediately-dangerous row and ends up at (3,7) — still on the
+            // bomb's own column, but at distance 2, outside DirectBlastRadius. This is the payoff of
+            // the radius split: a ChainBlastRadius=2 bomb (burst/chunk-armed) would still reach that
+            // far, but a bomb the player armed themselves does not.
+            var (grid, _, bombs) = Make(new[]
+            {
+                "AAAAAAA", // row 0
+                "AAAAAAA", // row 1
+                "AAAAAAA", // row 2
+                "AAAAAAA", // row 3
+                "AAAAAAA", // row 4 — drilled cell, arms the bomb
+                "AAAXAAA", // row 5 — bomb at col 3
+                "AAAAAAA", // row 6 — distance 1 below the bomb: IN the blast
+                "AAAAAAA", // row 7 — distance 2 below the bomb: OUTSIDE DirectBlastRadius
+            });
+            bombs.NotifyDrilled(new GridPos(3, 4));
+
+            bool hit = false;
+            bombs.AvatarHitByBlast += _ => hit = true;
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(3, 7));
+
+            Assert.IsFalse(hit, "the player survives by drilling two rows down instead of stepping sideways");
+            Assert.AreEqual(CellType.ColorA, grid.Get(new GridPos(3, 7)), "distance-2-down cell must survive DirectBlastRadius");
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(3, 6)), "distance-1-down cell is still destroyed — down is on the cross too");
+        }
+
+        [Test]
+        public void SympatheticBomb_HasLargerBlast()
+        {
+            // Bomb A at (3,5), armed by the player (DirectBlastRadius=1).
+            // Bomb B at (3,4) — directly above A, distance 1 — inside A's own radius-1 reach, so A's
+            // blast ignites B sympathetically. B then detonates at ChainBlastRadius=2 (§5.3 item 3:
+            // sympathetic detonations ALWAYS get the wider radius, regardless of what triggered them).
+            var (grid, _, bombs) = Make(new[]
+            {
+                "AAAAAAA", // row 0
+                "AAAAAAA", // row 1
+                "AAAAAAA", // row 2 — distance 2 above B
+                "AAAAAAA", // row 3 — distance 1 above B
+                "AAAXAAA", // row 4 — bomb B
+                "AAAXAAA", // row 5 — bomb A
+                "AAAAAAA", // row 6
+            });
+            // Arm A directly (its left neighbor), NOT via B, so only A starts ArmedByPlayer=true.
+            bombs.NotifyDrilled(new GridPos(2, 5));
+
+            var chains = new List<int>();
+            bombs.BombScored += (_, c) => chains.Add(c);
+
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            CollectionAssert.AreEqual(new[] { 1, 2 }, chains, "A detonates first, B second (sympathetic)");
+
+            // Distance 2 from B, on B's own axes — reachable ONLY because B got ChainBlastRadius.
+            // A alone (DirectBlastRadius=1) could never reach these: they're distance 3 (up) and
+            // distance 2 laterally from A, both beyond A's own radius.
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(3, 2)), "distance 2 above B must be destroyed by B's ChainBlastRadius");
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 4)), "distance 2 left of B must be destroyed by B's ChainBlastRadius");
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(5, 4)), "distance 2 right of B must be destroyed by B's ChainBlastRadius");
+        }
+
+        [Test]
+        public void PlayerSafe_FromChainedBombs_BecauseAlreadyFar()
+        {
+            // Bomb A at (3,5), armed by the player (DirectBlastRadius=1). Bomb B at (4,5) — A's right
+            // neighbor, distance 1 — ignited sympathetically, detonates at ChainBlastRadius=2.
+            // Player is at (2,4): off both A's and B's cross entirely (different row AND different
+            // column from each bomb), so no radius — however wide — ever reaches them.
+            var (grid, _, bombs) = Make(new[]
+            {
+                "AAAAAAA", // row 0
+                "AAAAAAA", // row 1
+                "AAAAAAA", // row 2
+                "AAAAAAA", // row 3 — distance 2 above B
+                "AAAAAAA", // row 4 — player stands at (2,4) here
+                "AAAXXAA", // row 5 — bomb A (col 3), bomb B (col 4)
+                "AAAAAAA", // row 6
+                "AAAAAAA", // row 7 — distance 2 below B
+            });
+            // Arm A via its own up-neighbor — not adjacent to B, so only A starts ArmedByPlayer=true.
+            bombs.NotifyDrilled(new GridPos(3, 4));
+
+            GridPos player = new GridPos(2, 4);
+            bool hit = false;
+            bombs.AvatarHitByBlast += _ => hit = true;
+
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, player);
+
+            Assert.IsFalse(hit, "the player at (2,4) is never on bomb A's or bomb B's row/column, at any radius");
+            // Grid-state corroboration: (2,4) itself is never touched by either blast.
+            Assert.AreEqual(CellType.ColorA, grid.Get(player), "(2,4) must survive both detonations untouched");
         }
 
         [Test]
@@ -2726,13 +2995,15 @@ namespace HollowLines.Tests
             Assert.AreEqual(CellType.Bomb, grid.Get(new GridPos(col, row)), "the center bomb must exist");
 
             // Arm the center bomb the way the player does: by drilling the cell right above it.
+            // v3.2 (§5.3): this bomb gets DirectBlastRadius = 1 — it reaches the second bomb stacked
+            // directly beneath it (distance 1), whose own ChainBlastRadius = 2 then reaches the third.
             bombs.NotifyDrilled(new GridPos(col, row - 1));
 
             const float step = 1f / 60f;
             for (float t = 0f; t < 3f; t += step)
                 bombs.Tick(step, new GridPos(0, 0)); // avatar far away — measure payout, not damage
 
-            Assert.GreaterOrEqual(maxChain, 3, "the three spaced bombs must detonate sympathetically to ×3");
+            Assert.GreaterOrEqual(maxChain, 3, "the three-bomb stack must detonate sympathetically to ×3");
         }
 
         [Test]

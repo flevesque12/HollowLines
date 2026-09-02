@@ -500,7 +500,13 @@ namespace HollowLines.Core
         ///   row  12    air capsule (P) on the main path — shows the air restore
         ///   rows 13-18 CHAMBER 2 — Chunk Burst: a 10-cell ColorC chunk on ONE support over a drop zone
         ///   rows 19-23 CHAMBER 3 — Bomb chain: drilling in arms a bomb → ×3 sympathetic chain that
-        ///              blasts the floor open and drops the player to the win line (design rule 3)
+        ///              blasts the floor open and drops the player to the win line (design rule 3).
+        ///              🔄v3.2 (§5.3, CLAUDE.md): the bomb the player drills directly only blasts at
+        ///              BombSystem.DirectBlastRadius (1) — every OTHER bomb in the chain (sympathetic
+        ///              detonation, always) keeps BombSystem.ChainBlastRadius (2). So the layout is
+        ///              now a straight vertical stack: the player-armed bomb sits directly above a
+        ///              second bomb (distance 1 — reachable even at DirectBlastRadius), and THAT
+        ///              bomb's wider ChainBlastRadius reaches sideways to ignite a third.
         ///   rows 24-25 finale + bedrock (reaching row 24 wins: depth = height - WinDepthFromFloor)
         /// </summary>
         public static string[] TutorialBoard()
@@ -533,9 +539,10 @@ namespace HollowLines.Core
 
                 "A.....A", // 19  ┐ CHAMBER 3: landing
                 "ACCCCCA", // 20  │ ColorC filler the blast will score
-                "AXCXCXA", // 21  │ three bombs, each 2 apart → sympathetic ×3 chain
-                "ACCCCCA", // 22  │ more filler
-                "AAAAAAA", // 23  ┘ divider — the blast punches straight through it
+                "ACCXCCA", // 21  │ bomb 1 (col 3) — armed by the player, DirectBlastRadius = 1
+                "AXCXCCA", // 22  │ bomb 2 (col 3, distance 1 below bomb 1) + bomb 3 (col 1, distance
+                           // │   2 left of bomb 2 — reachable only at bomb 2's ChainBlastRadius = 2)
+                "AAAAAAA", // 23  ┘ divider — bombs 2 and 3 each punch straight through it below them
 
                 "A.....A", // 24  finale: reaching this row wins (depth = height - 2)
                 "AAAAAAA", // 25  bedrock

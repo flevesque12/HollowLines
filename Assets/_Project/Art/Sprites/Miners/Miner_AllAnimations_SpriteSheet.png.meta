@@ -1,0 +1,1209 @@
+fileFormatVersion: 2
+guid: a6d41d270f962194f9e97170781af264
+TextureImporter:
+  internalIDToNameTable:
+  - first:
+      213: 4775869602431493108
+    second: Miner_AllAnimations_SpriteSheet_0
+  - first:
+      213: 5012008378599656763
+    second: Miner_AllAnimations_SpriteSheet_1
+  - first:
+      213: -2435123744752152100
+    second: Miner_AllAnimations_SpriteSheet_2
+  - first:
+      213: -2520077835877367133
+    second: Miner_AllAnimations_SpriteSheet_3
+  - first:
+      213: -3576573648937921476
+    second: Miner_AllAnimations_SpriteSheet_4
+  - first:
+      213: -4600492837342691836
+    second: Miner_AllAnimations_SpriteSheet_5
+  - first:
+      213: -1458915288993858631
+    second: Miner_AllAnimations_SpriteSheet_6
+  - first:
+      213: 8243135861936801162
+    second: Miner_AllAnimations_SpriteSheet_7
+  - first:
+      213: -8979595329345723098
+    second: Miner_AllAnimations_SpriteSheet_8
+  - first:
+      213: -1651327292590019463
+    second: Miner_AllAnimations_SpriteSheet_9
+  - first:
+      213: -1605986307409598909
+    second: Miner_AllAnimations_SpriteSheet_10
+  - first:
+      213: -3311709304992738602
+    second: Miner_AllAnimations_SpriteSheet_11
+  - first:
+      213: -5586824314809437607
+    second: Miner_AllAnimations_SpriteSheet_12
+  - first:
+      213: -4089636911827695374
+    second: Miner_AllAnimations_SpriteSheet_13
+  - first:
+      213: 4240600938103001564
+    second: Miner_AllAnimations_SpriteSheet_14
+  - first:
+      213: -4935602651297656302
+    second: Miner_AllAnimations_SpriteSheet_15
+  - first:
+      213: 3316860017318030018
+    second: Miner_AllAnimations_SpriteSheet_16
+  - first:
+      213: 8801735482155816034
+    second: Miner_AllAnimations_SpriteSheet_17
+  - first:
+      213: 8183263253524934217
+    second: Miner_AllAnimations_SpriteSheet_18
+  - first:
+      213: -845005194188594352
+    second: Miner_AllAnimations_SpriteSheet_19
+  - first:
+      213: 7868426028764744692
+    second: Miner_AllAnimations_SpriteSheet_20
+  - first:
+      213: 209265001576649722
+    second: Miner_AllAnimations_SpriteSheet_21
+  - first:
+      213: 3304689502082485083
+    second: Miner_AllAnimations_SpriteSheet_22
+  - first:
+      213: -1788880006628649647
+    second: Miner_AllAnimations_SpriteSheet_23
+  - first:
+      213: -5148893999687147418
+    second: Miner_AllAnimations_SpriteSheet_24
+  - first:
+      213: 8047065818846752134
+    second: Miner_AllAnimations_SpriteSheet_25
+  - first:
+      213: 8302655546322515741
+    second: Miner_AllAnimations_SpriteSheet_26
+  - first:
+      213: -3713845129577442815
+    second: Miner_AllAnimations_SpriteSheet_27
+  - first:
+      213: -7184835445943874500
+    second: Miner_AllAnimations_SpriteSheet_28
+  - first:
+      213: -7468935069157533936
+    second: Miner_AllAnimations_SpriteSheet_29
+  - first:
+      213: -5488428272962305016
+    second: Miner_AllAnimations_SpriteSheet_30
+  - first:
+      213: -8228384126904856452
+    second: Miner_AllAnimations_SpriteSheet_31
+  - first:
+      213: 6527074387508042330
+    second: Miner_AllAnimations_SpriteSheet_32
+  - first:
+      213: 3814719473011564095
+    second: Miner_AllAnimations_SpriteSheet_33
+  - first:
+      213: 8164785483275475717
+    second: Miner_AllAnimations_SpriteSheet_34
+  - first:
+      213: -8871599505766843562
+    second: Miner_AllAnimations_SpriteSheet_35
+  - first:
+      213: 5158480626088703273
+    second: Miner_AllAnimations_SpriteSheet_36
+  - first:
+      213: -4044638121205581500
+    second: Miner_AllAnimations_SpriteSheet_37
+  - first:
+      213: -7738392533140817824
+    second: Miner_AllAnimations_SpriteSheet_38
+  - first:
+      213: 7714120616793446155
+    second: Miner_AllAnimations_SpriteSheet_39
+  - first:
+      213: 6638576716653132950
+    second: Miner_AllAnimations_SpriteSheet_40
+  - first:
+      213: -8705708956496441960
+    second: Miner_AllAnimations_SpriteSheet_41
+  externalObjects: {}
+  serializedVersion: 13
+  mipmaps:
+    mipMapMode: 0
+    enableMipMap: 0
+    sRGBTexture: 1
+    linearTexture: 0
+    fadeOut: 0
+    borderMipMap: 0
+    mipMapsPreserveCoverage: 0
+    alphaTestReferenceValue: 0.5
+    mipMapFadeDistanceStart: 1
+    mipMapFadeDistanceEnd: 3
+  bumpmap:
+    convertToNormalMap: 0
+    externalNormalMap: 0
+    heightScale: 0.25
+    normalMapFilter: 0
+    flipGreenChannel: 0
+  isReadable: 0
+  streamingMipmaps: 0
+  streamingMipmapsPriority: 0
+  vTOnly: 0
+  ignoreMipmapLimit: 0
+  grayScaleToAlpha: 0
+  generateCubemap: 6
+  cubemapConvolution: 0
+  seamlessCubemap: 0
+  textureFormat: 1
+  maxTextureSize: 2048
+  textureSettings:
+    serializedVersion: 2
+    filterMode: 1
+    aniso: 1
+    mipBias: 0
+    wrapU: 1
+    wrapV: 1
+    wrapW: 1
+  nPOTScale: 0
+  lightmap: 0
+  compressionQuality: 50
+  spriteMode: 2
+  spriteExtrude: 1
+  spriteMeshType: 1
+  alignment: 0
+  spritePivot: {x: 0.5, y: 0.5}
+  spritePixelsToUnits: 100
+  spriteBorder: {x: 0, y: 0, z: 0, w: 0}
+  spriteGenerateFallbackPhysicsShape: 1
+  alphaUsage: 1
+  alphaIsTransparency: 1
+  spriteTessellationDetail: -1
+  textureType: 8
+  textureShape: 1
+  singleChannelComponent: 0
+  flipbookRows: 1
+  flipbookColumns: 1
+  maxTextureSizeSet: 0
+  compressionQualitySet: 0
+  textureFormatSet: 0
+  ignorePngGamma: 0
+  applyGammaDecoding: 0
+  swizzle: 50462976
+  cookieLightType: 0
+  platformSettings:
+  - serializedVersion: 4
+    buildTarget: DefaultTexturePlatform
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  - serializedVersion: 4
+    buildTarget: Standalone
+    maxTextureSize: 2048
+    resizeAlgorithm: 0
+    textureFormat: -1
+    textureCompression: 1
+    compressionQuality: 50
+    crunchedCompression: 0
+    allowsAlphaSplitting: 0
+    overridden: 0
+    ignorePlatformSupport: 0
+    androidETC2FallbackOverride: 0
+    forceMaximumCompressionQuality_BC6H_BC7: 0
+  spriteSheet:
+    serializedVersion: 2
+    sprites:
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_0
+      rect:
+        serializedVersion: 2
+        x: 4
+        y: 95
+        width: 11
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4f3e38a891c474240800000000000000
+      internalID: 4775869602431493108
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_1
+      rect:
+        serializedVersion: 2
+        x: 21
+        y: 95
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b3dc6b9c01b3e8540800000000000000
+      internalID: 5012008378599656763
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_2
+      rect:
+        serializedVersion: 2
+        x: 37
+        y: 95
+        width: 8
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cd1dde12bd3b43ed0800000000000000
+      internalID: -2435123744752152100
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_3
+      rect:
+        serializedVersion: 2
+        x: 52
+        y: 95
+        width: 8
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 3a2c13a6f82e60dd0800000000000000
+      internalID: -2520077835877367133
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_4
+      rect:
+        serializedVersion: 2
+        x: 69
+        y: 95
+        width: 8
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c34580e37357d5ec0800000000000000
+      internalID: -3576573648937921476
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_5
+      rect:
+        serializedVersion: 2
+        x: 85
+        y: 95
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 40eb57e8324c720c0800000000000000
+      internalID: -4600492837342691836
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_6
+      rect:
+        serializedVersion: 2
+        x: 3
+        y: 79
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 9bb722a3644e0cbe0800000000000000
+      internalID: -1458915288993858631
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_7
+      rect:
+        serializedVersion: 2
+        x: 19
+        y: 79
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a85c6067460856270800000000000000
+      internalID: 8243135861936801162
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_8
+      rect:
+        serializedVersion: 2
+        x: 35
+        y: 79
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6256797bf91126380800000000000000
+      internalID: -8979595329345723098
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_9
+      rect:
+        serializedVersion: 2
+        x: 37
+        y: 63
+        width: 7
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 97ca345939e4519e0800000000000000
+      internalID: -1651327292590019463
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_10
+      rect:
+        serializedVersion: 2
+        x: 50
+        y: 63
+        width: 10
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 346a5b856f366b9e0800000000000000
+      internalID: -1605986307409598909
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_11
+      rect:
+        serializedVersion: 2
+        x: 51
+        y: 79
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 6d25d8ceee17a02d0800000000000000
+      internalID: -3311709304992738602
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_12
+      rect:
+        serializedVersion: 2
+        x: 69
+        y: 63
+        width: 7
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 952b44dc2ec9772b0800000000000000
+      internalID: -5586824314809437607
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_13
+      rect:
+        serializedVersion: 2
+        x: 5
+        y: 63
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2f84f2285e0be37c0800000000000000
+      internalID: -4089636911827695374
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_14
+      rect:
+        serializedVersion: 2
+        x: 21
+        y: 63
+        width: 10
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: cd151d5e514a9da30800000000000000
+      internalID: 4240600938103001564
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_15
+      rect:
+        serializedVersion: 2
+        x: 68
+        y: 47
+        width: 8
+        height: 17
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2125de0e987318bb0800000000000000
+      internalID: -4935602651297656302
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_16
+      rect:
+        serializedVersion: 2
+        x: 85
+        y: 63
+        width: 10
+        height: 15
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 2caefedbc9ad70e20800000000000000
+      internalID: 3316860017318030018
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_17
+      rect:
+        serializedVersion: 2
+        x: 4
+        y: 47
+        width: 8
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 26459d499cb062a70800000000000000
+      internalID: 8801735482155816034
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_18
+      rect:
+        serializedVersion: 2
+        x: 20
+        y: 47
+        width: 8
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 94e6cd1829ac09170800000000000000
+      internalID: 8183263253524934217
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_19
+      rect:
+        serializedVersion: 2
+        x: 36
+        y: 47
+        width: 8
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 053670fb040f544f0800000000000000
+      internalID: -845005194188594352
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_20
+      rect:
+        serializedVersion: 2
+        x: 52
+        y: 47
+        width: 8
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 4fbc5f1d8c3423d60800000000000000
+      internalID: 7868426028764744692
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_21
+      rect:
+        serializedVersion: 2
+        x: 84
+        y: 47
+        width: 8
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: af3d5e2096577e200800000000000000
+      internalID: 209265001576649722
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_22
+      rect:
+        serializedVersion: 2
+        x: 4
+        y: 31
+        width: 11
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b5bc698d79d9cdd20800000000000000
+      internalID: 3304689502082485083
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_23
+      rect:
+        serializedVersion: 2
+        x: 20
+        y: 31
+        width: 11
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 155d913ac1f9c27e0800000000000000
+      internalID: -1788880006628649647
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_24
+      rect:
+        serializedVersion: 2
+        x: 36
+        y: 31
+        width: 11
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 660e182ff247b88b0800000000000000
+      internalID: -5148893999687147418
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_25
+      rect:
+        serializedVersion: 2
+        x: 52
+        y: 31
+        width: 10
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 68d6c802abbecaf60800000000000000
+      internalID: 8047065818846752134
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_26
+      rect:
+        serializedVersion: 2
+        x: 68
+        y: 31
+        width: 10
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: d17faf2ea35f83370800000000000000
+      internalID: 8302655546322515741
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_27
+      rect:
+        serializedVersion: 2
+        x: 84
+        y: 31
+        width: 10
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 102d8bc0885c57cc0800000000000000
+      internalID: -3713845129577442815
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_28
+      rect:
+        serializedVersion: 2
+        x: 100
+        y: 31
+        width: 10
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c3c41e29a365a4c90800000000000000
+      internalID: -7184835445943874500
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_29
+      rect:
+        serializedVersion: 2
+        x: 116
+        y: 31
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 01758607023095890800000000000000
+      internalID: -7468935069157533936
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_30
+      rect:
+        serializedVersion: 2
+        x: 132
+        y: 31
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 8040fde809f25d3b0800000000000000
+      internalID: -5488428272962305016
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_31
+      rect:
+        serializedVersion: 2
+        x: 148
+        y: 31
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: c709f508b38eecd80800000000000000
+      internalID: -8228384126904856452
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_32
+      rect:
+        serializedVersion: 2
+        x: 164
+        y: 31
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: a5a97f1d293d49a50800000000000000
+      internalID: 6527074387508042330
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_33
+      rect:
+        serializedVersion: 2
+        x: 180
+        y: 31
+        width: 9
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: f3e9e92462b90f430800000000000000
+      internalID: 3814719473011564095
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_34
+      rect:
+        serializedVersion: 2
+        x: 3
+        y: 15
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 50b96ed53252f4170800000000000000
+      internalID: 8164785483275475717
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_35
+      rect:
+        serializedVersion: 2
+        x: 19
+        y: 15
+        width: 11
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 65b7c35d04fb1e480800000000000000
+      internalID: -8871599505766843562
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_36
+      rect:
+        serializedVersion: 2
+        x: 35
+        y: 15
+        width: 12
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 92570c27cca969740800000000000000
+      internalID: 5158480626088703273
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_37
+      rect:
+        serializedVersion: 2
+        x: 51
+        y: 15
+        width: 11
+        height: 14
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 449b984ee0f8ed7c0800000000000000
+      internalID: -4044638121205581500
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_38
+      rect:
+        serializedVersion: 2
+        x: 4
+        y: 0
+        width: 9
+        height: 13
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 0683b99adf4bb9490800000000000000
+      internalID: -7738392533140817824
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_39
+      rect:
+        serializedVersion: 2
+        x: 18
+        y: 0
+        width: 12
+        height: 10
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: b079d7e64df0e0b60800000000000000
+      internalID: 7714120616793446155
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_40
+      rect:
+        serializedVersion: 2
+        x: 35
+        y: 0
+        width: 11
+        height: 8
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 69cf942e956f02c50800000000000000
+      internalID: 6638576716653132950
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    - serializedVersion: 2
+      name: Miner_AllAnimations_SpriteSheet_41
+      rect:
+        serializedVersion: 2
+        x: 51
+        y: 0
+        width: 28
+        height: 6
+      alignment: 0
+      pivot: {x: 0, y: 0}
+      border: {x: 0, y: 0, z: 0, w: 0}
+      customData: 
+      outline: []
+      physicsShape: []
+      tessellationDetail: -1
+      bones: []
+      spriteID: 89dc71234db1f2780800000000000000
+      internalID: -8705708956496441960
+      vertices: []
+      indices: 
+      edges: []
+      weights: []
+    outline: []
+    customData: 
+    physicsShape: []
+    bones: []
+    spriteID: 
+    internalID: 0
+    vertices: []
+    indices: 
+    edges: []
+    weights: []
+    secondaryTextures: []
+    spriteCustomMetadata:
+      entries: []
+    nameFileIdTable:
+      Miner_AllAnimations_SpriteSheet_0: 4775869602431493108
+      Miner_AllAnimations_SpriteSheet_1: 5012008378599656763
+      Miner_AllAnimations_SpriteSheet_10: -1605986307409598909
+      Miner_AllAnimations_SpriteSheet_11: -3311709304992738602
+      Miner_AllAnimations_SpriteSheet_12: -5586824314809437607
+      Miner_AllAnimations_SpriteSheet_13: -4089636911827695374
+      Miner_AllAnimations_SpriteSheet_14: 4240600938103001564
+      Miner_AllAnimations_SpriteSheet_15: -4935602651297656302
+      Miner_AllAnimations_SpriteSheet_16: 3316860017318030018
+      Miner_AllAnimations_SpriteSheet_17: 8801735482155816034
+      Miner_AllAnimations_SpriteSheet_18: 8183263253524934217
+      Miner_AllAnimations_SpriteSheet_19: -845005194188594352
+      Miner_AllAnimations_SpriteSheet_2: -2435123744752152100
+      Miner_AllAnimations_SpriteSheet_20: 7868426028764744692
+      Miner_AllAnimations_SpriteSheet_21: 209265001576649722
+      Miner_AllAnimations_SpriteSheet_22: 3304689502082485083
+      Miner_AllAnimations_SpriteSheet_23: -1788880006628649647
+      Miner_AllAnimations_SpriteSheet_24: -5148893999687147418
+      Miner_AllAnimations_SpriteSheet_25: 8047065818846752134
+      Miner_AllAnimations_SpriteSheet_26: 8302655546322515741
+      Miner_AllAnimations_SpriteSheet_27: -3713845129577442815
+      Miner_AllAnimations_SpriteSheet_28: -7184835445943874500
+      Miner_AllAnimations_SpriteSheet_29: -7468935069157533936
+      Miner_AllAnimations_SpriteSheet_3: -2520077835877367133
+      Miner_AllAnimations_SpriteSheet_30: -5488428272962305016
+      Miner_AllAnimations_SpriteSheet_31: -8228384126904856452
+      Miner_AllAnimations_SpriteSheet_32: 6527074387508042330
+      Miner_AllAnimations_SpriteSheet_33: 3814719473011564095
+      Miner_AllAnimations_SpriteSheet_34: 8164785483275475717
+      Miner_AllAnimations_SpriteSheet_35: -8871599505766843562
+      Miner_AllAnimations_SpriteSheet_36: 5158480626088703273
+      Miner_AllAnimations_SpriteSheet_37: -4044638121205581500
+      Miner_AllAnimations_SpriteSheet_38: -7738392533140817824
+      Miner_AllAnimations_SpriteSheet_39: 7714120616793446155
+      Miner_AllAnimations_SpriteSheet_4: -3576573648937921476
+      Miner_AllAnimations_SpriteSheet_40: 6638576716653132950
+      Miner_AllAnimations_SpriteSheet_41: -8705708956496441960
+      Miner_AllAnimations_SpriteSheet_5: -4600492837342691836
+      Miner_AllAnimations_SpriteSheet_6: -1458915288993858631
+      Miner_AllAnimations_SpriteSheet_7: 8243135861936801162
+      Miner_AllAnimations_SpriteSheet_8: -8979595329345723098
+      Miner_AllAnimations_SpriteSheet_9: -1651327292590019463
+  mipmapLimitGroupName: 
+  pSDRemoveMatte: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
