@@ -8,6 +8,9 @@
 ![Platform](https://img.shields.io/badge/platform-PC%20(mobile%20stretch)-blue)
 ![Status](https://img.shields.io/badge/status-solo%20dev%2C%20in%20progress-yellow)
 
+[![Play on itch.io](https://img.shields.io/badge/Play%20on-itch.io-FA5C5C?logo=itchdotio&logoColor=white)](https://fredericlevesque.itch.io/hollow-lines)
+[![Watch on YouTube](https://img.shields.io/badge/Watch-YouTube-FF0000?logo=youtube&logoColor=white)](https://youtu.be/x_PMjnCzcxU)
+
 Drill straight down for rising color combos, undermine huge chunks so they shatter on
 impact, chain bombs together for massive bursts, blow up Boomers to amplify the chaos,
 and grab diamonds on the way past — all while the air runs out. This is a score-chaser,
@@ -15,11 +18,19 @@ not a puzzle game: **nothing ever asks you to stop descending.** Campaign teache
 ropes; Endless is the real game: how deep can you go?
 
 <p align="center">
-  <img src="Assets/Screenshots/Thumbnails/thumb_01_title.png" width="49%" alt="Hollow Lines title screen" />
+  <a href="https://youtu.be/x_PMjnCzcxU">
+    <img src="Assets/Screenshots/Thumbnails/thumb_01_title.png" width="49%" alt="Hollow Lines title screen" />
+  </a>
   <img src="Assets/Screenshots/Thumbnails/thumb_04_burst.png" width="49%" alt="A chunk burst scoring +175" />
   <br/>
   <img src="Assets/Screenshots/Thumbnails/thumb_02_streak.png" width="49%" alt="A ×6 color streak" />
   <img src="Assets/Screenshots/Thumbnails/thumb_03_bombs.png" width="49%" alt="Three bombs armed for a sympathetic chain" />
+</p>
+
+<p align="center">
+  <strong>🕹️ <a href="https://fredericlevesque.itch.io/hollow-lines">Play on itch.io</a></strong>
+  &nbsp;&nbsp;·&nbsp;&nbsp;
+  <strong>📺 <a href="https://youtu.be/x_PMjnCzcxU">Watch gameplay on YouTube</a></strong>
 </p>
 
 ---
@@ -185,6 +196,11 @@ physical position (Y↑ A↓ X← B→) and the left stick walks. Esc or Start p
 Solo development by **Frédéric Lévesque** (design, code, and — with AI-assisted
 generation for placeholder art — the tile sprites). Design DNA: *Mr. Driller*'s
 avatar-in-well physics × *Downwell*'s score-chasing depth run.
+
+- 🕹️ [Play on itch.io](https://fredericlevesque.itch.io/hollow-lines)
+- 📺 [Watch gameplay on YouTube](https://youtu.be/x_PMjnCzcxU)
+- 💻 [GitHub](https://github.com/flevesque12)
+- 🔗 [LinkedIn](https://linkedin.com/in/frederic-levesque)
 
 ## License
 
