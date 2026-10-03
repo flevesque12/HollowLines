@@ -1,3 +1,5 @@
 ﻿<Solution>
+  <Project Path="HollowLines.Core.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="HollowLines.Tests.EditMode.csproj" />
 </Solution>

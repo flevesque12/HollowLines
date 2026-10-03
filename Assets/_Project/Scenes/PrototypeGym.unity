@@ -164,7 +164,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::HollowLines.View.GameBootstrap
   hudPanelSettings: {fileID: 11400000, guid: 16cce3beef61eab4f9ff65cb40604efd, type: 2}
-  disableAir: 1
+  disableAir: 0
   invincible: 0
   useCampaign: 1
   startLevel: 1
