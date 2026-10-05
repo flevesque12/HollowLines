@@ -12,7 +12,7 @@ Added after R2.8, before R3. All input flows through **`GameInput`** (gameplay) 
 
 | Action | Keyboard | Xbox / gamepad |
 |---|---|---|
-| Walk left / right | A/D (or Q/D) | Left stick X (deadzone 0.5) |
+| Walk left / right | A/D (or Q/D) | Left stick X (deadzone 0.5) **or** D-pad ←/→ (R6.8) |
 | Drill **up** | ↑ | **Y** |
 | Drill **down** | ↓ | **A** |
 | Drill **left** | ← | **X** |
@@ -23,8 +23,8 @@ Added after R2.8, before R3. All input flows through **`GameInput`** (gameplay) 
 
 **Face-button drill mapping (gamepad):** the four face buttons drill toward their **physical
 position** on the diamond — Y↑ A↓ X← B→ — so it reads without a legend. This replaced an earlier
-D-pad drill scheme (dev call). The D-pad is currently unused in gameplay (free for a future "also
-move" binding if wanted).
+D-pad drill scheme (dev call). **R6.8 (F11):** D-pad ←/→ now also walk, OR-ed with the stick (players
+reached for the D-pad to move). D-pad ↑/↓ stay unbound in gameplay — they would only duplicate Y / A.
 
 ### Two rules that keep it from crossing wires
 

@@ -164,7 +164,7 @@ full history of design decisions and balance passes.
 
 **Controls:** A/D to walk left/right (Q/D on AZERTY), arrow keys to drill in any of the
 four directions — or an Xbox controller, where the face buttons drill toward their
-physical position (Y↑ A↓ X← B→) and the left stick walks. Esc or Start pauses.
+physical position (Y↑ A↓ X← B→) and the left stick (or D-pad) walks. Esc or Start pauses.
 
 ## Running the tests
 

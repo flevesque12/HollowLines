@@ -36,7 +36,7 @@ A is down, X is left, B is right.
 
 | Action | Keyboard | Gamepad |
 |---|---|---|
-| Walk left / right | `A` / `D` (or `Q` / `D`) | Left stick |
+| Walk left / right | `A` / `D` (or `Q` / `D`) | Left stick or D-pad |
 | Drill **up** | `↑` | **Y** |
 | Drill **down** | `↓` | **A** |
 | Drill **left** | `←` | **X** |

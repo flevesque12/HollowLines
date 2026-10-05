@@ -7,9 +7,10 @@ namespace HollowLines.View
     /// <summary>
     /// Single entry point for the Input System — no other script reads Keyboard/Gamepad directly.
     /// Desktop bindings: A/D (or Q/D) to walk, arrow keys to drill in the four directions.
-    /// Xbox / gamepad bindings: left stick to walk; the four FACE BUTTONS drill in the direction of
-    /// their physical position on the pad — Y = up, A = down, X = left, B = right. Matching the
-    /// button diamond to the drill direction makes it read without a legend.
+    /// Xbox / gamepad bindings: left stick OR D-pad left/right to walk; the four FACE BUTTONS drill
+    /// in the direction of their physical position on the pad — Y = up, A = down, X = left,
+    /// B = right. Matching the button diamond to the drill direction makes it read without a
+    /// legend. D-pad up/down stay unbound in gameplay so they never double the Y / A drills.
     ///
     /// While any full-screen overlay is up (main menu, pause, game over) Time.timeScale is 0, and we
     /// suppress all gameplay input so the same buttons the UI navigates with (D-pad, A) do not also
@@ -26,10 +27,17 @@ namespace HollowLines.View
         /// <summary>Fired once per press with a cardinal direction in GRID space (+y = down).</summary>
         public event Action<Vector2Int> DrillRequested;
 
+        /// <summary>
+        /// Set by GameBootstrap while a won level settles (R6.14): the board keeps playing out its
+        /// cascades, but the avatar no longer walks or drills.
+        /// </summary>
+        public bool Locked { get; set; }
+
         private void Update()
         {
             // An overlay is showing (timeScale frozen): the UI owns the controller, not the avatar.
-            if (Time.timeScale == 0f)
+            // Locked: a won level is settling (R6.14) — the board plays on, the avatar stands still.
+            if (Time.timeScale == 0f || Locked)
             {
                 MoveAxis = 0;
                 return;
@@ -38,7 +46,7 @@ namespace HollowLines.View
             Keyboard keyboard = Keyboard.current;
             Gamepad  gamepad  = Gamepad.current;
 
-            // ── Move (held) : keyboard A/D/Q + gamepad left stick ────────────────
+            // ── Move (held) : keyboard A/D/Q + gamepad left stick / D-pad ────────
             bool left = false, right = false;
             if (keyboard != null)
             {
@@ -50,10 +58,12 @@ namespace HollowLines.View
                 float sx = gamepad.leftStick.x.ReadValue();
                 left  |= sx < -StickDeadzone;
                 right |= sx >  StickDeadzone;
+                left  |= gamepad.dpad.left.isPressed;
+                right |= gamepad.dpad.right.isPressed;
             }
             MoveAxis = (right ? 1 : 0) - (left ? 1 : 0);
 
-            // ── Drill (edge-triggered) : keyboard arrows + gamepad D-pad ─────────
+            // ── Drill (edge-triggered) : keyboard arrows + gamepad face buttons ──
             if (keyboard != null)
             {
                 if (keyboard.leftArrowKey.wasPressedThisFrame)  DrillRequested?.Invoke(new Vector2Int(-1,  0));
