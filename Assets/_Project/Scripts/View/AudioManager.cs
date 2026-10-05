@@ -58,6 +58,7 @@ namespace HollowLines.View
         private AudioClip _boomerWakeClip;
         private AudioClip _boomerBoomClip;
         private AudioClip _enemyAlertClip;   // R6.4: an active Crawler is lining up on the avatar
+        private AudioClip _streakBreakClip;  // R6.7: the streak counter cracks
         private float     _lastEnemyAlertTime = -10f;
         private const float EnemyAlertCooldown = 0.8f;
         private AudioClip _musicLoopClip;
@@ -106,6 +107,8 @@ namespace HollowLines.View
                                    StreakTracker streak = null)
         {
             _streak = streak;
+            // R6.7: StreakTracker is persistent (Reset per board, never rebuilt), so this is wired once.
+            if (_streak != null) _streak.StreakBroken += OnStreakBroken;
             air.AirDepleted += PlayGameOver;
             health.HealthDepleted += PlayGameOver;
             campaign.LevelCompleted += _ => PlayLevelComplete();
@@ -306,6 +309,16 @@ namespace HollowLines.View
         public void PlayCrush() => _crushSource.PlayOneShot(_crushClip);
 
         /// <summary>
+        /// R6.7: a dry crack when a real streak (×2+) breaks — the audible half of the HUD counter
+        /// shattering. A broken ×1 is just "a new colour started", not a loss, so it stays silent.
+        /// </summary>
+        private void OnStreakBroken(int lostCount)
+        {
+            if (lostCount >= 2)
+                _drillSource.PlayOneShot(_streakBreakClip);
+        }
+
+        /// <summary>
         /// R6.4: EnemyView.DangerStarted — a Crawler just became a threat. Rate-limited so two
         /// Crawlers lining up together (or one wobbling across the threshold) give one warning.
         /// </summary>
@@ -359,6 +372,11 @@ namespace HollowLines.View
             // R6.4 — danger alert: a DESCENDING two-note "uh-oh". Every arpeggio in the game rises
             // (capsule, diamond, chain, fanfare = good news), so the falling one reads as a warning.
             _enemyAlertClip    = SfxSynth.Arpeggio(new[] { 987.77f, 698.46f }, 0.075f, 0.34f);
+
+            // R6.7 — streak break: a short, bright, mostly-noise crack (like glass), well above the
+            // crush thud and much shorter than the chunk shatter, so it reads as "your bonus broke",
+            // not "you got hit" or "a block burst".
+            _streakBreakClip   = SfxSynth.Shatter(0.12f, 1400f, 0.4f, noiseMix: 0.8f, lowPassFactor: 0.6f);
 
             // Crawler death: a short dry crunch. Higher low-pass than the crush clip so it reads
             // as something small breaking, not as the player getting hit.

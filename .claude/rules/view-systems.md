@@ -290,6 +290,13 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
   **Points = score delta measured around GameBootstrap's whole `Drilled` handler** — includes the
   streak multiplier and a drilled diamond's +150, duplicates no formula, and is independent of
   subscription order. Separate from the centre celebration popup (bursts/chains/Perfect Clear).
+- 🆕R6.7 **Streak counter** (F07): shown from **×2** (a ×1 is just the colour you're on), 30 → 60 px
+  with the run (capped ×10), outlined, streak colour lifted 15 % toward white, scale punch (1.35 → 1,
+  0.18 s) on every step. **Crack** when a ×2+ streak breaks (`StreakBroken(lost)`): two overflow-
+  clipped halves holding a copy of the old "×N" sit over the label (`_streakBox`, relative) — 0.12 s
+  shudder while it drains to red-grey, then the halves drift apart, fall, tilt ±22° and fade (0.6 s
+  total). A ×1 ending is silent. Paired with `AudioManager` `_streakBreakClip` (short bright mostly-
+  noise `Shatter`, 1400 Hz) on the same ×2+ condition.
 - 🆕R6.3 **"FORE POUR RESPIRER !" hint** (F02) — centred just above the air bar (not the centre
   popup slot: that's for celebrations and sits over the avatar). Shows below 30 % air, hides at 35 %
   (hysteresis, so drilling at the edge doesn't flicker) or at 0. Eased fade; pulse speeds up as the

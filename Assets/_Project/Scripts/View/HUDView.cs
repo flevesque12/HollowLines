@@ -26,6 +26,20 @@ namespace HollowLines.View
         private Label         _scoreLabel;
         private Label         _depthLabel;
         private Label         _streakLabel;
+
+        // ── R6.7 streak counter (F07) ─────────────────────────────────────────
+        // Bigger, and alive: the "×N" grows with the run and punches on every step; when a real
+        // streak (×2+) breaks, a copy of the old number shakes, splits in two and falls away.
+        private VisualElement _streakBox;                  // relative container: label + crack halves
+        private VisualElement _crackLeft, _crackRight;     // overflow-clipped halves
+        private Label         _crackLeftText, _crackRightText;
+        private float         _streakPunch;                // 1 → 0 after each step
+        private float         _crackTimer;                 // counts down CrackSeconds → 0
+        private float         _crackHalfWidth;
+        private Color         _crackColor;
+        private const float   StreakPunchSeconds = 0.18f;
+        private const float   CrackSeconds       = 0.6f;
+        private const float   CrackShakeSeconds  = 0.12f;
         private Label         _diamondLabel;
         private VisualElement _airFill;
         private Label         _airCaption;
@@ -212,7 +226,7 @@ namespace HollowLines.View
             _onChainLink      = step => ShowChain(step);
             _onChainCompleted = _    => _chainHideTimer = ChainHoldSeconds;
             _onStreakGrew     = count => ShowStreak(count);
-            _onStreakBroken   = _     => HideStreak();
+            _onStreakBroken   = lost  => BreakStreak(lost);
             _onNewDepth       = row   => RefreshDepth(row);
             _onEndlessDepth   = depth => RefreshDepth(depth);
             _onDiamondCollected = (collected, total) => RefreshDiamonds(collected, total);
@@ -305,6 +319,7 @@ namespace HollowLines.View
             TickAirBufferCue(dt);
             TickBreatheHint(dt);
             TickDrillPopups(dt);
+            TickStreakCounter(dt);
 
             if (_chainHideTimer > 0f)
             {
@@ -424,16 +439,120 @@ namespace HollowLines.View
             _diamondLabel.style.display = DisplayStyle.Flex;
         }
 
+        /// <summary>
+        /// R6.7: shown from ×2 (a ×1 "streak" is just the colour you're on), 30 → 60 px as the run grows
+        /// (capped at ×10), with a scale punch on every step.
+        /// </summary>
         private void ShowStreak(int count)
         {
-            _streakLabel.text          = $"×{count}";
-            _streakLabel.style.color   = new StyleColor(StreakColor());
-            _streakLabel.style.display = DisplayStyle.Flex;
+            if (count < 2)
+            {
+                HideStreak();
+                return;
+            }
+
+            _streakLabel.text           = $"×{count}";
+            _streakLabel.style.color    = new StyleColor(Color.Lerp(StreakColor(), Color.white, 0.15f));
+            _streakLabel.style.fontSize = 30f + 3f * Mathf.Min(count, 10);
+            _streakLabel.style.display  = DisplayStyle.Flex;
+            _streakPunch = 1f;
         }
 
         private void HideStreak()
         {
             _streakLabel.style.display = DisplayStyle.None;
+        }
+
+        /// <summary>
+        /// R6.7: StreakBroken carries the count that just ended. A ×1 ending is just a colour change —
+        /// no ceremony. A real streak cracks: a copy of the last "×N" (clipped into a left and a right
+        /// half) shakes, then the halves fall apart, tilt and fade. StreakGrew(1) for the new colour
+        /// fires right after this and keeps the live label hidden (count < 2).
+        /// </summary>
+        private void BreakStreak(int lost)
+        {
+            if (lost >= 2 && _streakLabel.style.display == DisplayStyle.Flex)
+            {
+                float w = _streakLabel.resolvedStyle.width;
+                float h = _streakLabel.resolvedStyle.height;
+                if (float.IsNaN(w) || w <= 0f) w = 80f;
+                if (float.IsNaN(h) || h <= 0f) h = 40f;
+
+                _crackHalfWidth = w * 0.5f;
+                _crackColor     = _streakLabel.resolvedStyle.color;
+                foreach (Label l in new[] { _crackLeftText, _crackRightText })
+                {
+                    l.text           = _streakLabel.text;
+                    l.style.fontSize = _streakLabel.style.fontSize;
+                    l.style.color    = new StyleColor(_crackColor);
+                    l.style.width    = w;
+                }
+                _crackLeftText.style.left  = 0f;
+                _crackRightText.style.left = -_crackHalfWidth;
+
+                _crackLeft.style.left  = 0f;
+                _crackRight.style.left = _crackHalfWidth;
+                foreach (VisualElement half in new[] { _crackLeft, _crackRight })
+                {
+                    half.style.width   = _crackHalfWidth;
+                    half.style.height  = h;
+                    half.style.display = DisplayStyle.Flex;
+                }
+                _streakBox.style.minHeight = h; // the live label hides; keep the slot while it breaks
+                _crackTimer = CrackSeconds;
+            }
+            HideStreak();
+        }
+
+        private void TickStreakCounter(float dt)
+        {
+            if (!_built) return;
+
+            if (_streakPunch > 0f)
+            {
+                _streakPunch = Mathf.Max(0f, _streakPunch - dt / StreakPunchSeconds);
+                float k = 1f + 0.35f * _streakPunch * _streakPunch;
+                _streakLabel.style.scale = new StyleScale(new Scale(new Vector3(k, k, 1f)));
+            }
+
+            if (_crackTimer <= 0f) return;
+            _crackTimer = Mathf.Max(0f, _crackTimer - dt);
+            float age = CrackSeconds - _crackTimer;
+
+            if (_crackTimer <= 0f)
+            {
+                _crackLeft.style.display   = DisplayStyle.None;
+                _crackRight.style.display  = DisplayStyle.None;
+                _streakBox.style.minHeight = StyleKeyword.Null;
+                return;
+            }
+
+            // Drained of colour as it dies: toward a dull red-grey.
+            Color dead = Color.Lerp(_crackColor, new Color(0.55f, 0.35f, 0.32f), Mathf.Clamp01(age / CrackShakeSeconds));
+            _crackLeftText.style.color  = new StyleColor(dead);
+            _crackRightText.style.color = new StyleColor(dead);
+
+            if (age < CrackShakeSeconds)
+            {
+                // Phase 1: the number shudders in place (both halves together — still one piece).
+                float shake = Mathf.Sin(age * 120f) * 4f;
+                SetCrackHalf(_crackLeft,  shake, 0f, 0f, 1f);
+                SetCrackHalf(_crackRight, shake, 0f, 0f, 1f);
+                return;
+            }
+
+            // Phase 2: it splits — halves drift apart, drop with gravity, tilt outward, fade.
+            float u = (age - CrackShakeSeconds) / (CrackSeconds - CrackShakeSeconds);
+            float fall = 60f * u * u;
+            SetCrackHalf(_crackLeft,  -18f * u, fall, -22f * u, 1f - u);
+            SetCrackHalf(_crackRight,  18f * u, fall,  22f * u, 1f - u);
+        }
+
+        private static void SetCrackHalf(VisualElement half, float dx, float dy, float degrees, float alpha)
+        {
+            half.style.translate = new Translate(dx, dy);
+            half.style.rotate    = new Rotate(new Angle(degrees, AngleUnit.Degree));
+            half.style.opacity   = alpha;
         }
 
         private Color StreakColor()
@@ -728,16 +847,49 @@ namespace HollowLines.View
             _scoreLabel.style.unityFontStyleAndWeight     = FontStyle.Bold;
             panel.Add(_scoreLabel);
 
-            // Streak counter lives under the score (§5.9), hidden while the streak is 0.
+            // Streak counter lives under the score (§5.9), hidden below ×2. R6.7: inside a relative box
+            // that also holds the two clipped halves of the crack effect, laid exactly over the label.
+            _streakBox = new VisualElement();
+            _streakBox.style.position  = Position.Relative;
+            _streakBox.style.marginTop = 2f;
+            panel.Add(_streakBox);
+
             _streakLabel = new Label("×0");
-            _streakLabel.style.fontSize                = 22f;
+            _streakLabel.style.fontSize                = 30f;
             _streakLabel.style.color                   = new StyleColor(ColAmber);
             _streakLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _streakLabel.style.marginTop               = 2f;
+            _streakLabel.style.unityTextOutlineWidth   = 0.15f;
+            _streakLabel.style.unityTextOutlineColor   = new StyleColor(Color.black);
+            _streakLabel.style.transformOrigin         = new TransformOrigin(new Length(0f), new Length(50f, LengthUnit.Percent));
             _streakLabel.style.display                 = DisplayStyle.None;
-            panel.Add(_streakLabel);
+            _streakBox.Add(_streakLabel);
+
+            (_crackLeft,  _crackLeftText)  = BuildCrackHalf(_streakBox);
+            (_crackRight, _crackRightText) = BuildCrackHalf(_streakBox);
 
             return panel;
+        }
+
+        /// <summary>R6.7: one half of the cracking "×N" — an overflow-clipped box holding a full copy of the text.</summary>
+        private static (VisualElement box, Label text) BuildCrackHalf(VisualElement parent)
+        {
+            var box = new VisualElement();
+            box.style.position = Position.Absolute;
+            box.style.top      = 0f;
+            box.style.overflow = Overflow.Hidden;
+            box.style.display  = DisplayStyle.None;
+            box.pickingMode    = PickingMode.Ignore;
+            parent.Add(box);
+
+            var text = new Label();
+            text.style.position                = Position.Absolute;
+            text.style.top                     = 0f;
+            text.style.unityFontStyleAndWeight = FontStyle.Bold;
+            text.style.unityTextOutlineWidth   = 0.15f;
+            text.style.unityTextOutlineColor   = new StyleColor(Color.black);
+            text.pickingMode                   = PickingMode.Ignore;
+            box.Add(text);
+            return (box, text);
         }
 
         private VisualElement BuildDepthPanel()

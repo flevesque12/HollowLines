@@ -559,3 +559,21 @@ GameBootstrap passes `direction == Down && oldType.CanFuse()`; drills that don't
 plain white "+40" (no "×N", base size). Score untouched. **Open design question parked on R6.11** (see
 the note under §10 R6 in `refactoring-plan.md`): the XP-to-next-tier system may change how lateral
 drills should pay.
+
+---
+
+### R6.7 — Streak counter + crack (F07) — delivered 2026-10-05
+
+View only (`HUDView`, `AudioManager`), 366/366. No Core change: `StreakTracker.StreakBroken(lost)`
+already carried the ended count. Details in §5.9. Design notes:
+
+- **Hidden at ×1.** StreakBroken is immediately followed by StreakGrew(1) for the new colour; showing
+  "×1" made every colour change look like a (tiny) streak. Now the counter only exists for a real run.
+- **The crack only plays for a ×2+ loss**, visually and audibly — losing a ×1 isn't a loss.
+- **Why clipped halves, not particles:** the thing that breaks is the number itself; two
+  `Overflow.Hidden` boxes each holding a full copy of the label (right one offset by -½ width) give a
+  clean split with zero new assets.
+- Verified in play mode at `timeScale` 0.04: ×6 teal counter after six drills down the tutorial vein,
+  then a diamond (neutral) and an amber block (break) — captured the shudder (colour draining) and the
+  split ("×" and "6" falling apart in red-grey). The diamond drill also confirmed the R6.6 rule: a white
+  "+210" (60 streak pay + 150 diamond, no "×N" because a diamond doesn't build the streak).
