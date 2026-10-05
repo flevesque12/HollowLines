@@ -612,3 +612,25 @@ restart/advance path cancels a settle in progress. Endless has no win → untouc
 around don't hold the settle (they never "finish").
 
 **Core:** `BombSystem.HasArmedBombs` (3 tests). 369/369 EditMode.
+
+---
+
+### R6.9 — Volume options (F10) — delivered 2026-10-05 — Sprint 2 complete
+
+`View/OptionsMenu.cs` (new): `VolumeSettings` (master / music / sfx, 0..1, PlayerPrefs keys
+`hl.volume.*`, default 1) and `OptionsMenu`, the three slider rows, hosted inside UIScreenManager's
+overlay panel. "Options" on the main menu and pause; details in §5.12.
+
+- **Levels scale the designed mix, never exceed it.** 100 % = the mix as tuned (`sfxVolume` 0.6,
+  `musicVolume` 0.18), so a fresh install sounds exactly as before. Général goes on
+  `AudioListener.volume` (one place for everything). `AudioManager` now keeps its SFX sources in a
+  list (`NewSource` registers them; music is removed and follows its own slider) and applies the saved
+  levels in `Awake`. A dedicated `_uiSource` plays the Effets preview, so no streak pitch leaks in.
+- **Gamepad:** a row is one focusable element; ←/→ adjusts (event swallowed so focus stays), ↑/↓ moves
+  between rows by the default navigation. B is read in `UIScreenManager.Update` (with Esc/Start) as
+  "back" while the options are open.
+- **Verified in play mode (UnityMCP):** screenshot of the screen; NavigationMoveEvent ←×2 on Général
+  → 80 %, focus stayed, `AudioListener.volume` 0.8, saved to PlayerPrefs; ↓ → Musique; ← → music
+  source 0.162 (= 0.18 × 0.9); Retour → main menu, and from pause → back to pause. Test prefs reset
+  afterwards. **Listen to it with a real pad** — the physical XInput hop can't be simulated (§16).
+  369/369 (View only, no new tests).

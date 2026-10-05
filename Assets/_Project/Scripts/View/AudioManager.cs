@@ -15,8 +15,14 @@ namespace HollowLines.View
     public sealed class AudioManager : MonoBehaviour
     {
         [Header("— Volumes —")]
+        [Tooltip("Designed SFX mix level. The player's Effets slider (R6.9) scales this — 100 % = this value.")]
         [Range(0f, 1f)] [SerializeField] private float sfxVolume = 0.6f;
+        [Tooltip("Designed music mix level. The player's Musique slider (R6.9) scales this — 100 % = this value.")]
         [Range(0f, 1f)] [SerializeField] private float musicVolume = 0.18f;
+
+        // R6.9 (F10): every SFX source, so the player's Effets level reaches all of them at once.
+        private readonly System.Collections.Generic.List<AudioSource> _sfxSources =
+            new System.Collections.Generic.List<AudioSource>();
 
         [Header("— Chain Pitch —")]
         [Tooltip("Chain step at which the rising pitch caps out.")]
@@ -75,6 +81,7 @@ namespace HollowLines.View
         private AudioSource _musicSource;
         private AudioSource _diamondSource;
         private AudioSource _enemySource;
+        private AudioSource _uiSource; // R6.9 options preview — its own source, so no streak pitch leaks in
 
         // ── Persistent systems ──────────────────────────────────────────────────
         private StreakTracker _streak;
@@ -98,9 +105,26 @@ namespace HollowLines.View
 
             _musicSource.clip = _musicLoopClip;
             _musicSource.loop = true;
-            _musicSource.volume = musicVolume;
+            _sfxSources.Remove(_musicSource); // music follows its own slider
+            ApplyVolumes(VolumeSettings.Load());
             _musicSource.Play();
         }
+
+        /// <summary>
+        /// R6.9: apply the player's levels. Général goes on the AudioListener (everything, in one
+        /// place); Musique and Effets scale the designed mix levels — never above them.
+        /// </summary>
+        public void ApplyVolumes(VolumeSettings v)
+        {
+            AudioListener.volume = Mathf.Clamp01(v.Master);
+            _musicSource.volume  = musicVolume * Mathf.Clamp01(v.Music);
+            float sfx = sfxVolume * Mathf.Clamp01(v.Sfx);
+            foreach (AudioSource src in _sfxSources)
+                src.volume = sfx;
+        }
+
+        /// <summary>R6.9: a short blip at the current Effets level, so moving the slider is heard.</summary>
+        public void PlaySfxPreview() => _uiSource.PlayOneShot(_drillClip);
 
         /// <summary>Hook the systems that live for the whole session (called once from GameBootstrap.Awake).</summary>
         public void InitPersistent(AirSystem air, HealthSystem health, CampaignManager campaign,
@@ -402,6 +426,7 @@ namespace HollowLines.View
             _musicSource     = NewSource();
             _diamondSource   = NewSource();
             _enemySource     = NewSource();
+            _uiSource        = NewSource();
         }
 
         private AudioSource NewSource()
@@ -410,6 +435,7 @@ namespace HollowLines.View
             src.playOnAwake = false;
             src.spatialBlend = 0f;
             src.volume = sfxVolume;
+            _sfxSources.Add(src);
             return src;
         }
     }

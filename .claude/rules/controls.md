@@ -20,6 +20,8 @@ Added after R2.8, before R3. All input flows through **`GameInput`** (gameplay) 
 | Pause / resume | Esc | Start |
 | Menu: navigate | arrows | D-pad / left stick |
 | Menu: select / back | Enter / Esc | A / B |
+| Options: change a volume | ← / → on the focused row | D-pad / stick ← → |
+| Options: back | Esc | B or Start |
 
 **Face-button drill mapping (gamepad):** the four face buttons drill toward their **physical
 position** on the diamond — Y↑ A↓ X← B→ — so it reads without a legend. This replaced an earlier

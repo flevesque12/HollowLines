@@ -15,7 +15,7 @@ namespace HollowLines.View
     /// </summary>
     public sealed class UIScreenManager : MonoBehaviour
     {
-        private enum ScreenState { None, MainMenu, Paused, GameOver, LevelComplete, CampaignComplete }
+        private enum ScreenState { None, MainMenu, Paused, GameOver, LevelComplete, CampaignComplete, Options }
 
         // ── Colors ────────────────────────────────────────────────────────────
         private static readonly Color ColBg      = new Color(0.09f, 0.07f, 0.055f);
@@ -59,6 +59,12 @@ namespace HollowLines.View
 
         // R6.1 death recap (F01) — the killer, a tip, and the heart-loss timeline. Game over only.
         private DeathRecapView _deathRecap;
+
+        // R6.9 volume options (F10). Reached from the main menu and the pause screen; "Retour" (or
+        // Esc / Start / B) goes back to whichever one opened it.
+        private OptionsMenu  _options;
+        private AudioManager _audio;
+        private Action       _optionsReturn;
 
         // ── Transition fade (endless segment seam) ────────────────────────────
         private VisualElement _fade;
@@ -108,6 +114,39 @@ namespace HollowLines.View
         /// </summary>
         public void SetEndless(EndlessManager endless) => _endless = endless;
 
+        /// <summary>R6.9: the options screen drives this AudioManager's volumes (null = no Options button).</summary>
+        public void SetAudio(AudioManager audio) => _audio = audio;
+
+        /// <summary>"Options" — offered on the main menu and the pause screen.</summary>
+        private void AddOptionsButton(Action returnTo)
+        {
+            if (_audio == null) return;
+            AddButton("Options", primary: false, danger: false, () => ShowOptions(returnTo));
+        }
+
+        /// <summary>R6.9 (F10): volume sliders. Time stays frozen; the run (if any) waits behind it.</summary>
+        private void ShowOptions(Action returnTo)
+        {
+            _optionsReturn   = returnTo;
+            _state           = ScreenState.Options;
+            Time.timeScale   = 0f;
+            _titleLabel.text = "OPTIONS";
+            _deathRecap.Hide();
+            SetBody("← → pour régler  ·  B / Échap pour revenir");
+            HideRunSummary();
+            ClearButtons();
+            AddButton("Retour", primary: false, danger: false, CloseOptions);
+            ShowOverlay();
+            _options.Show(); // after ShowOverlay: focus goes to the first slider row, not "Retour"
+        }
+
+        private void CloseOptions()
+        {
+            Action back = _optionsReturn ?? ShowMainMenu;
+            _optionsReturn = null;
+            back();
+        }
+
         /// <summary>
         /// Title screen shown at boot, over the (frozen) first board. "Jouer" starts the campaign.
         /// Uses the callbacks stored in Init, so it can be re-shown later (e.g. from a future menu).
@@ -126,6 +165,7 @@ namespace HollowLines.View
                 AddButton("Sans fin", primary: false, danger: false, () => _onPlayEndless.Invoke());
             if (_onPlayDaily != null)
                 AddButton("Défi du jour", primary: false, danger: false, () => _onPlayDaily.Invoke());
+            AddOptionsButton(ShowMainMenu);
             AddButton("Quitter", primary: false, danger: true,  () => _onQuit?.Invoke());
             ShowOverlay();
         }
@@ -225,6 +265,7 @@ namespace HollowLines.View
             // In endless there is no level to retry — "Recommencer" starts a whole new descent.
             AddButton(_endless != null ? "Nouvelle descente" : "Recommencer",
                       primary: false, danger: false, () => _onRestart?.Invoke());
+            AddOptionsButton(ShowPause);
             AddMainMenuButton();
             AddButton("Quitter",     primary: false, danger: true,  () => _onQuit?.Invoke());
             ShowOverlay();
@@ -333,6 +374,15 @@ namespace HollowLines.View
             // existing pause — never on the main menu or an end screen.
             bool pausePressed = (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
                              || (Gamepad.current  != null && Gamepad.current.startButton.wasPressedThisFrame);
+
+            // Options: Esc / Start / B all mean "back" to the screen that opened it.
+            if (_state == ScreenState.Options)
+            {
+                if (pausePressed || (Gamepad.current != null && Gamepad.current.buttonEast.wasPressedThisFrame))
+                    CloseOptions();
+                return;
+            }
+
             if (!pausePressed) return;
 
             if (_state == ScreenState.None)
@@ -473,6 +523,10 @@ namespace HollowLines.View
             _deathRecap = new DeathRecapView(results);
             BuildRunSummary(results);
 
+            _options = new OptionsMenu(panel);
+            _options.Changed             += v => _audio?.ApplyVolumes(v);
+            _options.SfxPreviewRequested += () => _audio?.PlaySfxPreview();
+
             // Button row
             _buttonRow = new VisualElement();
             _buttonRow.style.flexDirection  = FlexDirection.Row;
@@ -566,10 +620,12 @@ namespace HollowLines.View
             _primaryButton?.schedule.Execute(() => _primaryButton?.Focus());
         }
 
+        /// <summary>Every screen starts here, so it is also where the options block gets put away.</summary>
         private void ClearButtons()
         {
             _buttonRow.Clear();
             _primaryButton = null;
+            _options?.Hide();
         }
 
         private static void SetBorderColor(VisualElement e, Color c)

@@ -239,6 +239,7 @@ namespace HollowLines.View
             audioGo.transform.SetParent(transform, false);
             _audio = audioGo.AddComponent<AudioManager>();
             _audio.InitPersistent(_airSystem, _healthSystem, _campaign, _streakTracker);
+            _screens.SetAudio(_audio); // R6.9: the Options screen drives the volumes
 
             // ── First board load ─────────────────────────────────────────────
             LoadLevel();

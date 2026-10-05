@@ -426,6 +426,15 @@ row-clear farming as a *problem*. The markers worked against the design, so `Cre
   (D-pad/stick = Navigate, A = Submit, B = Cancel). Every screen focuses its primary button on open,
   and buttons draw a 2px focus border (reserved always, transparent → white on focus, so focus never
   shifts layout). Pause toggles on **Esc or the Start button**. See §16.
+- 🆕R6.9 **Options screen** (`ScreenState.Options`, F10) — "Options" on the main menu and the pause
+  screen; "Retour" / Esc / Start / B go back to whichever opened it (`_optionsReturn`). The rows are
+  built by `OptionsMenu` (plain class, like `DeathRecapView`): Général / Musique / Effets, 10 steps
+  each. **A row is one focusable element**: Up/Down uses the default navigation between rows,
+  Left/Right is caught in a `NavigationMoveEvent` callback and changes the value
+  (`focusController.IgnoreEvent` so it doesn't also move focus). The −/+ buttons and the segments
+  are mouse-only (`focusable = false`). Every change applies + saves at once; Effets plays a blip.
+  Volumes **scale** the designed mix (`AudioManager.sfxVolume` 0.6 / `musicVolume` 0.18) — 100 % =
+  the mix as tuned. Général → `AudioListener.volume`. Hidden by `ClearButtons()`, which every screen calls.
 
 ### 5.13 CameraShake + camera follow
 **Changes:**

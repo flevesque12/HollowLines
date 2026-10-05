@@ -94,7 +94,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R5.16 ✅ | AudioManager: enemy SFX (chirp, crunch, boop, boom) | Audio check |
 | R5.17 ✅ | EnemyView: enemy sprites on grid (dormant/active states) | Visual check, 333/333 |
 
-### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (Sprint 1 ✅ R6.1-R6.5, Sprint 2: R6.6-R6.8 ✅, R6.14 ✅ pulled forward)
+### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (Sprint 1 ✅ R6.1-R6.5, Sprint 2 ✅ R6.6-R6.9, R6.14 ✅ pulled forward)
 
 > **Source:** `FEEDBACK-COMPILATION.md` (16 items, F01–F16).
 > **Detailed prompts:** `PROMPTS-CLAUDE-CODE-R6.md` (R6.1–R6.18).
@@ -117,7 +117,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R6.6 ✅ | **Score popups on drilled blocks** — visual check, 366/366 | F07 | `View/HUDView.cs` or `View/VfxManager.cs` |
 | R6.7 ✅ | **Streak counter** — bigger, "crack" on break — visual check, 366/366 | F07 | `View/HUDView.cs`, `View/VfxManager.cs` |
 | R6.8 ✅ | **D-pad movement mapping** — D-pad ←/→ walk (OR-ed with stick), hardware check | F11 | `View/GameInput.cs` |
-| R6.9 | **Volume control menu** | F10 | 🆕 `View/OptionsMenu.cs`, `View/AudioManager.cs`, `View/UIScreenManager.cs` |
+| R6.9 ✅ | **Volume control menu** — Options screen (main menu + pause): Général / Musique / Effets, PlayerPrefs — play-mode check, 369/369 | F10 | 🆕 `View/OptionsMenu.cs`, `View/AudioManager.cs`, `View/UIScreenManager.cs` |
 
 #### Sprint 3 — "J'apprends les mécaniques" (P2 — Important)
 
