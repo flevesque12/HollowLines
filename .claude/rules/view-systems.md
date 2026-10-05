@@ -594,6 +594,23 @@ somewhere, not just triggering a menu).
 > screenshot showing the gradient building from nothing at the top of the band to a strong gold
 > wash at the final row.
 
+> **🔄 Reworked 2026-10-05 (dev playtest: "les cubes de fin de niveau manquent de feedback, les
+> couleurs sont bizarres").** Screenshot confirmed it: the full-width additive wash bleached every
+> block in the band (pink → peach, amber → yellow, bombs pale, holes khaki) — it read as a bug, not a
+> destination, and nothing marked the actual win row. Now (`BoardView.BuildExitZone`):
+> - **Blocks are never tinted.** Light only in the **empty** cells of the band — one additive sprite
+>   per cell, toggled in `OnCellChanged`, with a bottom-bright gradient sprite (the `ExitGlow` shader
+>   now samples `_MainTex`) so it reads as light rising out of the exit.
+> - **Checkered gold finish line** on the top edge of row `Height - WinDepthFromFloor` (sortingOrder 6).
+> - **Gold ▼ arrows** in both side margins (3 per side) with a light running down toward the line;
+>   faster and brighter as the avatar closes in (`exitApproachRows`, 12). `Init` takes the
+>   `AvatarModel` (optional) for that.
+> - **On reach** (`PlayExitReached`, from `GameBootstrap.BeginLevelEnd`): the line flashes white and
+>   swells, the holes flare, 28 gold sparks arc up; HUD "SORTIE !" (`ShowExitReached`). The tutorial
+>   win now also plays the level-complete jingle (`AudioManager.PlayLevelComplete`, made public) —
+>   before, only campaign levels had it.
+> Screenshot-verified (approach + reach). View only.
+
 ### 5.17 EnemyView  🆕 IMPLEMENTED (R5.17)
 One `SpriteRenderer` per living enemy, layered OVER the cell grid. Enemies are ACTORS, not
 CellTypes (§6.5), so they never enter BoardView's tile array and need their own renderers.

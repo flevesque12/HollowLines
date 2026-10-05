@@ -577,3 +577,38 @@ already carried the ended count. Details in §5.9. Design notes:
   then a diamond (neutral) and an amber block (break) — captured the shudder (colour draining) and the
   split ("×" and "6" falling apart in red-grey). The diamond drill also confirmed the R6.6 rule: a white
   "+210" (60 streak pay + 150 diamond, no "×N" because a diamond doesn't build the streak).
+
+---
+
+### R6.8 — D-pad walks (F11) — delivered 2026-10-05
+
+`GameInput`: D-pad ←/→ OR-ed into `MoveAxis` beside the left stick, so `AvatarController`'s walk
+repeat treats both the same. D-pad ↑/↓ deliberately stay unbound in gameplay — they would only
+duplicate the Y / A drills. Menus are unaffected (gameplay input is still gated on `timeScale == 0`).
+Compile-checked; **feel needs a hardware check** (§16: the XInput hop can't be simulated).
+
+---
+
+### R6.14 — Level-end settle (F14) — delivered 2026-10-05, pulled forward from Sprint 4
+
+**Bug (dev playtest):** reaching the floor fired `LevelCompleted` and showed the screen in the SAME
+frame with a score snapshot, then froze `timeScale`. Chunks still wobbling/falling, lit fuses and
+Boomer chains froze behind the overlay and were thrown away by the next `LoadLevel` — their points
+never counted, though the player could see them start.
+
+**Fix (View + one Core query):** `BeginLevelEnd(showScreen)` replaces the direct screen calls for
+the campaign level win and the tutorial win. While `_levelEnding`:
+- `GameInput.Locked` — no walk, no drill (the board plays on, the avatar stands still);
+- `OnAvatarCrushed` early-returns — nothing can hurt a player who already won;
+- the air tick is skipped (restores still land; `AirDepleted` can't fire);
+- everything else ticks normally, so late bursts/bombs/kills score through the usual events
+  (popups, VFX, SFX included).
+
+`TickLevelEnd` shows the screen once `!_gravity.IsBusy && !_bombSystem.HasArmedBombs &&
+_chainTracker.CurrentChain == 0`, after at least `LevelEndMinSeconds` (0.6 s — let the win land) and
+at most `LevelEndMaxSeconds` (4 s — never strand the player). The screen gets the FINAL score — a
+separate "Fin de niveau : +X" line was tried and dropped (dev call: read as a bonus on top). `LoadLevel()` clears the state, so every
+restart/advance path cancels a settle in progress. Endless has no win → untouched. Crawlers walking
+around don't hold the settle (they never "finish").
+
+**Core:** `BombSystem.HasArmedBombs` (3 tests). 369/369 EditMode.

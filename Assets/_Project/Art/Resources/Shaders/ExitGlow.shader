@@ -53,6 +53,7 @@ Shader "HollowLines/ExitGlow"
                 float3 worldPos : TEXCOORD1;
             };
 
+            sampler2D _MainTex;
             float _PulseSpeed;
             float _PulseStrength;
 
@@ -77,7 +78,9 @@ Shader "HollowLines/ExitGlow"
                 float seed  = Hash(floor(i.worldPos.y + 0.001));
                 float pulse = (sin(_Time.y * _PulseSpeed + seed * 6.2831853) * 0.5 + 0.5) * _PulseStrength;
 
-                fixed4 c = i.color;              // color + alpha come from SpriteRenderer.color
+                // Colour + alpha from SpriteRenderer.color, shaped by the sprite (BoardView feeds a
+                // bottom-bright gradient, so the light reads as rising out of the exit).
+                fixed4 c = tex2D(_MainTex, i.uv) * i.color;
                 c.a *= saturate(0.65 + pulse);
                 return c;
             }

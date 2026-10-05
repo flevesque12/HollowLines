@@ -121,6 +121,16 @@ namespace HollowLines.View
         // half-old, half-new systems.
         private bool _pendingSegmentAdvance;
 
+        // R6.14 (F14): a won level does not cut to the score screen on the spot. The board keeps
+        // ticking — input locked, avatar untouchable, air frozen — until the cascades, fuses and
+        // chains it already started have played out and paid, then the screen shows the FINAL score.
+        private bool        _levelEnding;
+        private float       _levelEndTimer;
+        private Action<int> _showLevelEndScreen; // takes the FINAL score, read once the board settles
+
+        private const float LevelEndMinSeconds = 0.6f; // always let the win land, even on a quiet board
+        private const float LevelEndMaxSeconds = 4f;   // never strand the player behind a long cascade
+
         // ── Grid-dependent systems (rebuilt every LoadLevel) ──────────────────
         private GridModel     _grid;
         private GridPos       _spawn;
@@ -140,6 +150,7 @@ namespace HollowLines.View
 
         // ── Rebuilt views ─────────────────────────────────────────────────────
         private GameObject _boardViewGo;
+        private BoardView  _boardView;
         private GameObject _avatarViewGo;
 
         // ─────────────────────────────────────────────────────────────────────
@@ -151,7 +162,8 @@ namespace HollowLines.View
             // ── Persistent systems ───────────────────────────────────────────
 
             _campaign = new CampaignManager(startLevel);
-            _campaign.LevelCompleted    += lvl => _screens.ShowLevelComplete(lvl, _scoreSystem.Score);
+            _campaign.LevelCompleted    += lvl => BeginLevelEnd(
+                score => _screens.ShowLevelComplete(lvl, score));
             _campaign.CampaignCompleted += ()  => _screens.ShowCampaignComplete(_scoreSystem.Score);
 
             _endlessMode = endlessMode;
@@ -258,8 +270,8 @@ namespace HollowLines.View
             _chainTracker.Tick(dt);                                             // 7. chain close timer
             _healthSystem.Tick(dt);                                             // 8. health i-frames
             _deathTracker.Tick(dt);                                             // 8b. run clock (death recap)
-            if (!disableAir)                                                     // 9. air drain (debug: skippable)
-                _airSystem.Tick(dt);
+            if (!disableAir && !_levelEnding)                                   // 9. air drain (debug: skippable;
+                _airSystem.Tick(dt);                                            //    frozen once the level is won)
             _enemySystem.Tick(dt, _avatar.Position);                            // 10. enemy movement + contact
 
             // Endless has no drill/burst event to wake buried enemies ahead of the player, so they
@@ -267,6 +279,9 @@ namespace HollowLines.View
             // there the drill and blast triggers cover it.
             if (_endlessMode)
                 ActivateEnemiesInView();
+
+            if (_levelEnding)                                                   // 11. R6.14 level-end settle
+                TickLevelEnd(dt);
 
             // Camera follows the avatar down the well (smoothed, frame-rate independent). CameraShake
             // lays its offset on top of this base, so the follow and the shake never fight.
@@ -286,6 +301,11 @@ namespace HollowLines.View
         /// </param>
         private void LoadLevel(bool freshBoard = true)
         {
+            // Every restart / advance path lands here: drop a level-end settle still in progress.
+            _levelEnding        = false;
+            _showLevelEndScreen = null;
+            _input.Locked       = false;
+
             // Tear down previous board views (queued for end-of-frame).
             if (_boardViewGo != null)  Destroy(_boardViewGo);
             if (_avatarViewGo != null) Destroy(_avatarViewGo);
@@ -467,7 +487,8 @@ namespace HollowLines.View
             // share the same depth-only win threshold, §7). Endless has no floor, and the debug
             // map has no win check at all (useCampaign gates that branch in Update()).
             bool showExitGlow = !_endlessMode && (useCampaign || _inTutorial);
-            _boardViewGo.AddComponent<BoardView>().Init(_grid, _gravity, showExitGlow);
+            _boardView = _boardViewGo.AddComponent<BoardView>();
+            _boardView.Init(_grid, _gravity, showExitGlow, _avatar);
 
             _avatarViewGo = new GameObject("AvatarView");
             _avatarViewGo.transform.SetParent(_boardViewGo.transform, false);
@@ -630,8 +651,40 @@ namespace HollowLines.View
             if (_avatar.Position.Y < _grid.Height - CampaignManager.WinDepthFromFloor) return;
 
             _tutorialWon = true;
+            _audio.PlayLevelComplete(); // campaign levels get it from LevelCompleted; the tutorial never did
+            BeginLevelEnd(score => _screens.ShowTutorialComplete(score));
+        }
+
+        /// <summary>
+        /// R6.14: the level is won, but the board may still be mid-cascade (falling chunks, lit
+        /// fuses, an open chain). Lock the avatar and let the systems finish before the screen.
+        /// </summary>
+        private void BeginLevelEnd(Action<int> showScreen)
+        {
+            _levelEnding        = true;
+            _levelEndTimer      = 0f;
+            _showLevelEndScreen = showScreen;
+            _input.Locked       = true;
+
+            // Crossing the line has to FEEL like arriving: finish-line flash + sparks, a HUD call-out.
+            _boardView.PlayExitReached();
+            _hud.ShowExitReached();
+        }
+
+        private void TickLevelEnd(float dt)
+        {
+            _levelEndTimer += dt;
+
+            bool settled = !_gravity.IsBusy && !_bombSystem.HasArmedBombs && _chainTracker.CurrentChain == 0;
+            if (_levelEndTimer < LevelEndMaxSeconds && (!settled || _levelEndTimer < LevelEndMinSeconds))
+                return;
+
+            Action<int> show = _showLevelEndScreen;
+            _levelEnding        = false;
+            _showLevelEndScreen = null;
+            _input.Locked       = false; // the screen freezes time anyway; next board starts unlocked
             _cameraShake.StopShake();
-            _screens.ShowTutorialComplete(_scoreSystem.Score);
+            show?.Invoke(_scoreSystem.Score);
         }
 
         private void AdvanceLevel()
@@ -713,6 +766,7 @@ namespace HollowLines.View
         private void OnAvatarCrushed(DeathCause cause)
         {
             if (invincible) return;                     // debug: ignore all damage
+            if (_levelEnding) return;                   // R6.14: the level is won — nothing can hurt now
             if (!_healthSystem.TryTakeDamage()) return; // i-frames active
             _deathTracker.NotifyHit(cause, _avatar.Position, _healthSystem.Hearts);
             _cameraShake.Shake(0.3f, 0.35f);

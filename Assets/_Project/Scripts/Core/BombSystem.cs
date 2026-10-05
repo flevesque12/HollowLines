@@ -45,6 +45,12 @@ namespace HollowLines.Core
 
         public bool HasPocketBomb { get; private set; }
 
+        /// <summary>
+        /// True while at least one fuse is still counting down. The level-end settle phase (R6.14)
+        /// waits on this so a lit bomb detonates — and pays — before the score screen goes up.
+        /// </summary>
+        public bool HasArmedBombs => _armed.Count > 0;
+
         /// <summary>A buried bomb's fuse was just lit.</summary>
         public event Action<GridPos> BombArmed;
 

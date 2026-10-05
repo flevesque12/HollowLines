@@ -638,6 +638,9 @@ namespace HollowLines.View
             p.Label.style.opacity = t < 0.5f ? 1f : 1f - (t - 0.5f) * 2f;
         }
 
+        /// <summary>The avatar crossed the finish line (after R6.14). A late cascade popup may replace it — fine.</summary>
+        public void ShowExitReached() => ShowPopup("SORTIE !", ColGold);
+
         /// <summary>Latest popup wins — a burst during a bomb chain replaces the older line.</summary>
         private void ShowPopup(string text, Color color)
         {

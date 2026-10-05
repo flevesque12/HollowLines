@@ -271,6 +271,12 @@ _enemySystem.Tick(dt, _avatar.Position);
 //      boards don't need it — the drill and blast triggers already cover activation there.
 if (_endlessMode)
     ActivateEnemiesInView();
+
+// 11. ✅R6.14 Level-end settle: a won level keeps ticking (input locked, damage + air drain off)
+//     until gravity is idle, no fuse is lit and the chain is closed (min 0.6 s, max 4 s) —
+//     THEN the level-complete / tutorial-complete screen shows the final score.
+if (_levelEnding)
+    TickLevelEnd(dt);
 ```
 
 > **Debug/testing toggles (serialized on GameBootstrap, §14).** Two Inspector checkboxes,

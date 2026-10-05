@@ -1655,6 +1655,37 @@ namespace HollowLines.Tests
             Assert.AreEqual(1, armCount, "BombArmed must fire exactly once per arm");
         }
 
+        // ── HasArmedBombs (R6.14 level-end settle) ───────────────────────
+
+        [Test]
+        public void HasArmedBombs_FalseOnFreshBoard()
+        {
+            var (_, __, bombs) = Make(new[] { "AXA" });
+            Assert.IsFalse(bombs.HasArmedBombs, "a buried, unlit bomb is not armed");
+        }
+
+        [Test]
+        public void HasArmedBombs_TrueWhileFuseCounts()
+        {
+            var (_, __, bombs) = Make(new[] { "AXA" });
+            bombs.NotifyDrilled(new GridPos(0, 0));
+
+            bombs.Tick(BombSystem.FuseDuration * 0.5f, new GridPos(9, 9));
+
+            Assert.IsTrue(bombs.HasArmedBombs, "fuse is half burnt — still armed");
+        }
+
+        [Test]
+        public void HasArmedBombs_FalseAfterDetonation()
+        {
+            var (_, __, bombs) = Make(new[] { "AX", ".A" });
+            bombs.NotifyDrilled(new GridPos(0, 0));
+
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            Assert.IsFalse(bombs.HasArmedBombs, "the bomb went off — nothing left ticking");
+        }
+
         // ── Fuse expiry & explosion ──────────────────────────────────────
 
         [Test]

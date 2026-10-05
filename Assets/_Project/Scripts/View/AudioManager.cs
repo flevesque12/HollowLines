@@ -331,7 +331,7 @@ namespace HollowLines.View
 
         private void PlayGameOver() => _stingerSource.PlayOneShot(_gameOverClip);
 
-        private void PlayLevelComplete() => _stingerSource.PlayOneShot(_levelCompleteClip);
+        public void PlayLevelComplete() => _stingerSource.PlayOneShot(_levelCompleteClip);
 
         // ── Setup ───────────────────────────────────────────────────────
 
