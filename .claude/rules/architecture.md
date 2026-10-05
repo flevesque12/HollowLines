@@ -59,7 +59,9 @@ Assets/_Project/Scripts/
     AvatarController.cs   — Walk-input repeat; does NOT call AvatarModel.Tick()
     AvatarView.cs         — Sprite + lerp follow for the avatar
     EnemyView.cs          — 🆕R5.17 Enemy sprites layered over the cell grid (sortingOrder 8):
-                            dim+still when dormant, shuffle/pulse when active (§6.5)
+                            🔄R6.4 eyes shut + grey + slow breath when dormant, open + bright pulse when active;
+                            "!" on wake and over a threatening Crawler; DangerStarted event (§5.17)
+    EnemySprites.cs       — 🆕R6.4 Procedural 16×16 pixel-art: lime Crawler, violet Boomer (open/shut eyes), "!" alert
     BoardView.cs          — ✅R4 One SpriteRenderer per cell, event-driven updates + wobble shake;
                             Diamond cells get the DiamondShine material instead of a tint (§5.10);
                             🆕 exit-zone glow strips for campaign/tutorial boards (§5.16)

@@ -596,3 +596,24 @@ CellTypes (§6.5), so they never enter BoardView's tile array and need their own
 - Parented under the BoardView GameObject, so it is torn down with the board on the next
   `LoadLevel()`. GameBootstrap creates it **before** `SpawnEnemiesForBoard()` so it receives
   every `EnemySpawned`.
+
+> **🔄R6.4 (F04 — "je voyais pas les ennemis") — visibility pass.** Diagnosis from the code: enemies
+> were plain unit squares (same silhouette as every block), tinted dark green (≈ teal ColorB) and
+> orange (≈ amber ColorA and the red-orange bomb), and dormant ones sat at 40 % alpha ON TOP of a solid
+> block — effectively invisible. Changes:
+> - **`EnemySprites`** (new, procedural, point-filtered 16×16): Crawler = wide bug with legs and
+>   antennae, Boomer = round body with a lit fuse; black 1 px outline so they separate from any block;
+>   **eyes shut while dormant, open once active**. Colours: **lime Crawler, violet Boomer** — no block
+>   uses either, and they match the R5.14 kill / BOOM popups. Colour is baked into the texture (the
+>   eyes must stay white), so `SpriteRenderer.color` only carries grey/alpha.
+> - **Dormant** = `dormantTint` grey at 0.95 alpha + a slow 5 % breath (alive, not a tile).
+>   **Active** = full colour + a brightness pulse (0.82 ↔ 1) on top of the R5.17 shuffle / swell.
+> - **"!" alert** (sortingOrder 9, a sibling so it doesn't inherit the body's pulse): bounces in with
+>   overshoot for 1.1 s when an enemy wakes; **blinks over an active Crawler on the avatar's row within
+>   3 columns** (Boomers never threaten — their blast never hurts the avatar). The rising edge fires
+>   `EnemyView.DangerStarted` → `AudioManager.PlayEnemyAlert()`. `Init` now takes the `AvatarModel`
+>   (optional; no avatar = no danger "!").
+> - **VfxManager**: Crawler death particles → lime, Boomer death → pale violet, Boomer halo → violet
+>   (a lit bomb and a Boomer must not glow the same orange).
+> - Verified by screenshot (UnityMCP) on open air AND on amber/pink blocks, dormant and active. First
+>   pass had a 2 px "!" that read as a hairline → widened to 3 px, scale 0.9.

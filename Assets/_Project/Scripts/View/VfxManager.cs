@@ -63,12 +63,12 @@ namespace HollowLines.View
 
         [Header("— Enemies (R5.15) —")]
         [Tooltip("Crawler death: a quick, low, earthy crunch — small and cheap, it's a bonus target.")]
-        [SerializeField] private Color crawlerDeathColor    = new Color(0.45f, 0.62f, 0.25f);
+        [SerializeField] private Color crawlerDeathColor    = new Color(0.62f, 0.95f, 0.20f); // R6.4: matches the lime Crawler
         [SerializeField] private int   crawlerDeathParticles = 8;
         [SerializeField] private float crawlerDeathDuration  = 0.28f;
 
         [Tooltip("Boomer death: bigger and brighter than the Crawler's — it's an amplifier, it should read as one.")]
-        [SerializeField] private Color boomerDeathColor     = new Color(1f, 0.72f, 0.20f);
+        [SerializeField] private Color boomerDeathColor     = new Color(0.80f, 0.60f, 1.00f); // R6.4: matches the violet Boomer
         [SerializeField] private int   boomerDeathParticles = 18;
         [SerializeField] private float boomerDeathDuration  = 0.5f;
 
@@ -77,7 +77,7 @@ namespace HollowLines.View
         [SerializeField] private float enemyWakeDuration = 0.25f;
 
         [Tooltip("Halo colour of a live Boomer — it pulses until something kills it.")]
-        [SerializeField] private Color boomerGlowColor = new Color(1f, 0.55f, 0.15f);
+        [SerializeField] private Color boomerGlowColor = new Color(0.66f, 0.38f, 1.00f); // R6.4: violet, not fuse-orange — a lit bomb and a Boomer must not look alike
         [SerializeField] private float boomerGlowScale = 1.1f;
 
         [Header("— Bomb Fuse Telegraph (v3) —")]

@@ -474,7 +474,9 @@ namespace HollowLines.View
             // Enemy sprites live under the board view, so they're torn down with it on the next load.
             var enemyViewGo = new GameObject("EnemyView");
             enemyViewGo.transform.SetParent(_boardViewGo.transform, false);
-            enemyViewGo.AddComponent<EnemyView>().Init(_enemySystem);
+            var enemyView = enemyViewGo.AddComponent<EnemyView>();
+            enemyView.Init(_enemySystem, _avatar);           // R6.4: avatar for the danger "!"
+            enemyView.DangerStarted += _ => _audio.PlayEnemyAlert();
 
             // Populate enemies LAST, so everything that renders them off EnemySpawned (EnemyView's
             // sprites, VfxManager's marker cache) is already listening when the spawn events fire.

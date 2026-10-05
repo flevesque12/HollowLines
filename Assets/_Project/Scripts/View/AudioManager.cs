@@ -57,6 +57,9 @@ namespace HollowLines.View
         private AudioClip _crawlerDeathClip;
         private AudioClip _boomerWakeClip;
         private AudioClip _boomerBoomClip;
+        private AudioClip _enemyAlertClip;   // R6.4: an active Crawler is lining up on the avatar
+        private float     _lastEnemyAlertTime = -10f;
+        private const float EnemyAlertCooldown = 0.8f;
         private AudioClip _musicLoopClip;
 
         // ── One source per category ─────────────────────────────────────────────
@@ -302,6 +305,17 @@ namespace HollowLines.View
         /// funnels through one handler there for hearts + camera shake.</summary>
         public void PlayCrush() => _crushSource.PlayOneShot(_crushClip);
 
+        /// <summary>
+        /// R6.4: EnemyView.DangerStarted — a Crawler just became a threat. Rate-limited so two
+        /// Crawlers lining up together (or one wobbling across the threshold) give one warning.
+        /// </summary>
+        public void PlayEnemyAlert()
+        {
+            if (Time.time - _lastEnemyAlertTime < EnemyAlertCooldown) return;
+            _lastEnemyAlertTime = Time.time;
+            _enemySource.PlayOneShot(_enemyAlertClip);
+        }
+
         private void PlayGameOver() => _stingerSource.PlayOneShot(_gameOverClip);
 
         private void PlayLevelComplete() => _stingerSource.PlayOneShot(_levelCompleteClip);
@@ -336,8 +350,15 @@ namespace HollowLines.View
             // R5.16 — enemies. The two activation cues sit at opposite ends of the register on
             // purpose: a Crawler chirps high (something small just started moving toward you), a
             // Boomer boops low (something heavy just woke up and is now standing there).
-            _crawlerWakeClip   = SfxSynth.Tone(1500f, 0.1f, 0.3f, 0.002f, 0.05f);
-            _boomerWakeClip    = SfxSynth.Tone(150f, 0.2f, 0.35f, 0.005f, 0.12f);
+            // R6.4 (F04): both are SWEEPS now, not pure tones. The old Crawler chirp (1500 Hz sine)
+            // was a near-twin of the bomb fuse beep (1200 Hz sine) and testers filed it as "a bomb";
+            // no other sound in the game sweeps up quickly, so the rising "bwip!" is unmistakable.
+            _crawlerWakeClip   = SfxSynth.Sweep(650f, 1700f, 0.13f, 0.32f);
+            _boomerWakeClip    = SfxSynth.Sweep(260f, 110f, 0.28f, 0.4f);
+
+            // R6.4 — danger alert: a DESCENDING two-note "uh-oh". Every arpeggio in the game rises
+            // (capsule, diamond, chain, fanfare = good news), so the falling one reads as a warning.
+            _enemyAlertClip    = SfxSynth.Arpeggio(new[] { 987.77f, 698.46f }, 0.075f, 0.34f);
 
             // Crawler death: a short dry crunch. Higher low-pass than the crush clip so it reads
             // as something small breaking, not as the player getting hit.

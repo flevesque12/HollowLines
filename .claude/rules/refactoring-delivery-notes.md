@@ -485,3 +485,25 @@ amber/pink blocks → dark pill + outline), then 26 % shown → +6 % to 32 % sti
 
 Shown every time, not only for new players — it's also the low-air warning. If playtests find it
 noisy for veterans, gate it behind R6.11's XP level rather than removing it.
+
+---
+
+### R6.4 — Enemy visibility (F04) — delivered 2026-10-05
+
+View only, 366/366 unchanged. Root cause was in the code, not the tuning: enemies were plain unit
+squares tinted from the block palette's own colour families (Crawler dark green ≈ teal blocks, Boomer
+orange ≈ amber blocks and bombs), and a dormant enemy was a 40 %-alpha square **on top of a solid
+block** — the exact cell where placement (R5.13) always puts them. Full write-up in §5.17. In short:
+new procedural silhouettes with an outline and open/shut eyes (`EnemySprites`), lime/violet colours no
+block uses, dormant breath + active brightness pulse, a "!" on wake and over a threatening Crawler.
+
+**SFX — the actual collision:** the R5.16 Crawler wake chirp was a 1500 Hz sine, 0.1 s; the bomb fuse
+beep is a 1200 Hz sine, 0.035 s. Nearly the same sound, and fuse beeps are frequent. Both wake cues are
+now **sweeps** (Crawler 650 → 1700 Hz "bwip!", Boomer 260 → 110 Hz "wom") — nothing else in the game
+sweeps that fast. New **danger alert**: a *descending* two-note arpeggio (B5 → F5); every other
+arpeggio in the game rises and means good news, so the falling one reads as "uh-oh". Rate-limited to
+one per 0.8 s.
+
+Verified: screenshots of dormant/active enemies in open air and on amber/pink blocks, the wake "!" pop,
+and the danger "!" (reflection confirmed `InDanger` on a Crawler two cells from the avatar on its row).
+Audio not measured by ear in this session — **listen to the three new clips in play mode.**
