@@ -57,6 +57,9 @@ namespace HollowLines.View
         private Label         _bombChainValue;
         private Label         _perfectValue;
 
+        // R6.1 death recap (F01) — the killer, a tip, and the heart-loss timeline. Game over only.
+        private DeathRecapView _deathRecap;
+
         // ── Transition fade (endless segment seam) ────────────────────────────
         private VisualElement _fade;
         private float         _fadeTimer;
@@ -114,7 +117,8 @@ namespace HollowLines.View
             _state           = ScreenState.MainMenu;
             Time.timeScale   = 0f;
             _titleLabel.text = "HOLLOW LINES";
-            _bodyLabel.text  = DailyMenuLine();
+            _deathRecap.Hide();
+            SetBody(DailyMenuLine());
             HideRunSummary();
             ClearButtons();
             AddButton("Jouer",   primary: true,  danger: false, () => _onPlay?.Invoke());
@@ -141,12 +145,18 @@ namespace HollowLines.View
                 : $"{tagline}\nDéfi du jour {label} — pas encore tenté";
         }
 
-        public void ShowGameOver(string reason)
+        /// <summary>
+        /// Game over. With a DeathReport (R6.1) the recap names the killer, so `reason` only carries
+        /// extra context (the Daily Dig line) and may be empty; without one, `reason` is the whole story.
+        /// </summary>
+        public void ShowGameOver(string reason, DeathReport? recap = null)
         {
             _state           = ScreenState.GameOver;
             Time.timeScale   = 0f;
             _titleLabel.text = "GAME OVER";
-            _bodyLabel.text  = reason;
+            SetBody(reason);
+            if (recap.HasValue) _deathRecap.Show(recap.Value);
+            else                _deathRecap.Hide();
             ShowRunSummary();
             ClearButtons();
             AddButton(_endless != null ? "Nouvelle descente" : "Recommencer",
@@ -161,7 +171,8 @@ namespace HollowLines.View
             _state           = ScreenState.LevelComplete;
             Time.timeScale   = 0f;
             _titleLabel.text = $"NIVEAU {level} COMPLÉTÉ !";
-            _bodyLabel.text  = $"Score : {totalScore:N0}";
+            _deathRecap.Hide();
+            SetBody($"Score : {totalScore:N0}");
             HideRunSummary(); // mid-campaign: the run is not over yet
             ClearButtons();
             AddButton("Niveau suivant", primary: true,  danger: false, () => _onNextLevel?.Invoke());
@@ -174,7 +185,8 @@ namespace HollowLines.View
             _state           = ScreenState.LevelComplete;
             Time.timeScale   = 0f;
             _titleLabel.text = "TUTORIEL TERMINÉ !";
-            _bodyLabel.text  = $"Entraînement : {totalScore:N0} pts  —  à toi de jouer.";
+            _deathRecap.Hide();
+            SetBody($"Entraînement : {totalScore:N0} pts  —  à toi de jouer.");
             HideRunSummary();
             ClearButtons();
             // Reuses the LevelComplete "next" callback: GameBootstrap.AdvanceLevel starts real level 1.
@@ -188,7 +200,8 @@ namespace HollowLines.View
             _state           = ScreenState.CampaignComplete;
             Time.timeScale   = 0f;
             _titleLabel.text = "BRAVO !";
-            _bodyLabel.text  = "Campagne complétée !";
+            _deathRecap.Hide();
+            SetBody("Campagne complétée !");
             ShowRunSummary();
             ClearButtons();
             AddButton("Rejouer",  primary: true,  danger: false, () => _onRestartCampaign?.Invoke());
@@ -202,9 +215,10 @@ namespace HollowLines.View
             _state           = ScreenState.Paused;
             Time.timeScale   = 0f;
             _titleLabel.text = "PAUSE";
-            _bodyLabel.text  = _endless != null
+            _deathRecap.Hide();
+            SetBody(_endless != null
                 ? $"Score : {_score.Score:N0}  —  Profondeur {_endless.Depth} m"
-                : $"Score : {_score.Score:N0}  —  Niveau {_campaign.CurrentLevel}";
+                : $"Score : {_score.Score:N0}  —  Niveau {_campaign.CurrentLevel}");
             HideRunSummary();
             ClearButtons();
             AddButton("Reprendre",   primary: true,  danger: false, () => Hide());
@@ -219,6 +233,13 @@ namespace HollowLines.View
         // ─────────────────────────────────────────────────────────────────────
         // Run summary
         // ─────────────────────────────────────────────────────────────────────
+
+        /// <summary>The body line collapses when empty, so a recap-only game over has no blank gap.</summary>
+        private void SetBody(string text)
+        {
+            _bodyLabel.text          = text ?? "";
+            _bodyLabel.style.display = string.IsNullOrEmpty(text) ? DisplayStyle.None : DisplayStyle.Flex;
+        }
 
         private void HideRunSummary() => _statsPanel.style.display = DisplayStyle.None;
 
@@ -440,7 +461,17 @@ namespace HollowLines.View
             _bodyLabel.style.marginBottom    = 20f;
             panel.Add(_bodyLabel);
 
-            BuildRunSummary(panel);
+            // Death recap (left) beside the run summary (right): stacked, the game-over card ran off
+            // the bottom of the screen. Every other screen hides the recap, so the summary centers.
+            var results = new VisualElement();
+            results.style.flexDirection  = FlexDirection.Row;
+            results.style.alignItems     = Align.FlexStart;
+            results.style.justifyContent = Justify.Center;
+            results.style.flexShrink     = 0f;
+            panel.Add(results);
+
+            _deathRecap = new DeathRecapView(results);
+            BuildRunSummary(results);
 
             // Button row
             _buttonRow = new VisualElement();
@@ -459,6 +490,7 @@ namespace HollowLines.View
             _statsPanel = new VisualElement();
             _statsPanel.style.alignItems   = Align.Center;
             _statsPanel.style.marginBottom = 28f;
+            _statsPanel.style.flexShrink   = 0f; // R6.1: the recap made the card tall enough to squeeze it
             _statsPanel.style.minWidth     = 320f;
             _statsPanel.style.display      = DisplayStyle.None;
             panel.Add(_statsPanel);
@@ -503,6 +535,7 @@ namespace HollowLines.View
             row.style.alignItems     = Align.Center;
             row.style.width          = new StyleLength(new Length(100f, LengthUnit.Percent));
             row.style.marginTop      = 5f;
+            row.style.flexShrink     = 0f;
             parent.Add(row);
 
             var label = new Label(caption);

@@ -100,6 +100,7 @@ namespace HollowLines.View
         private StreakTracker   _streakTracker;
         private DepthTracker    _depthTracker;
         private DiamondSystem   _diamondSystem;
+        private DeathTracker    _deathTracker;
 
         // Intro tutorial state. While _inTutorial the board is the authored showcase, not a campaign
         // level; the campaign win check is bypassed and a depth-only tutorial win takes over.
@@ -179,11 +180,19 @@ namespace HollowLines.View
             _diamondSystem = new DiamondSystem();
             _diamondSystem.DiamondCollected += (collected, total) => _scoreSystem.AwardDiamond();
 
-            _airSystem = new AirSystem();
-            _airSystem.AirDepleted += () => EndRun("Air épuisé");
+            // R6.1 (F01): every death goes through the DeathTracker, so the game-over card can name
+            // the killer. Died fires once per run, so a frame where the last heart and the last
+            // breath go together only ends the run once.
+            _deathTracker = new DeathTracker();
+            _deathTracker.Died += EndRun;
 
+            _airSystem = new AirSystem();
+            _airSystem.AirDepleted += () =>
+                _deathTracker.NotifyDeath(DeathCause.Suffocation, _avatar.Position, 0f);
+
+            // No HealthDepleted -> EndRun here: it fires INSIDE TryTakeDamage, before the hit's cause
+            // is recorded. OnAvatarCrushed declares the death itself, right after logging the hit.
             _healthSystem = new HealthSystem();
-            _healthSystem.HealthDepleted += () => EndRun("Plus de cœurs");
 
             // ── Persistent views ─────────────────────────────────────────────
 
@@ -248,6 +257,7 @@ namespace HollowLines.View
             _gravity.Tick(dt, _avatar.Position);                                // 6. chunk gravity + burst
             _chainTracker.Tick(dt);                                             // 7. chain close timer
             _healthSystem.Tick(dt);                                             // 8. health i-frames
+            _deathTracker.Tick(dt);                                             // 8b. run clock (death recap)
             if (!disableAir)                                                     // 9. air drain (debug: skippable)
                 _airSystem.Tick(dt);
             _enemySystem.Tick(dt, _avatar.Position);                            // 10. enemy movement + contact
@@ -347,6 +357,7 @@ namespace HollowLines.View
                 _streakTracker.NotifyDrill(oldType, direction);
                 _scoreSystem.AwardDrill(_streakTracker.CurrentStreak, _streakTracker.CurrentColor);
                 _airSystem.RestoreDrill();
+                _deathTracker.NotifyDrill(); // R6.1: suffocation recap's "last drill N s ago"
                 if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
                 if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(drilledCell); // R4
                 _bombSystem.NotifyDrilled(drilledCell);
@@ -377,8 +388,8 @@ namespace HollowLines.View
             _gravity.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();
             _gravity.DiamondLiberated    += pos => _diamondSystem.NotifyCollected(pos); // R4
             _gravity.BombArmedByBurst    += pos => _bombSystem.ArmBombAt(pos);
-            _gravity.AvatarHitByBurst    += OnAvatarCrushed;
-            _gravity.AvatarCrushed       += _ => OnAvatarCrushed();
+            _gravity.AvatarHitByBurst    += () => OnAvatarCrushed(DeathCause.BurstShockwave);
+            _gravity.AvatarCrushed       += _ => OnAvatarCrushed(DeathCause.ChunkCrush);
 
             // ── Bombs ────────────────────────────────────────────────────────
             _bombSystem.BombScored += (destroyed, chainMult) =>
@@ -388,7 +399,7 @@ namespace HollowLines.View
             };
             _bombSystem.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();
             _bombSystem.DiamondLiberated    += pos => _diamondSystem.NotifyCollected(pos); // R4
-            _bombSystem.AvatarHitByBlast    += _ => OnAvatarCrushed();
+            _bombSystem.AvatarHitByBlast    += _ => OnAvatarCrushed(DeathCause.BombBlast);
             _bombSystem.BombArmed           += pos => Debug.Log($"[Bomb] Armée en {pos}");
             _bombSystem.BombExploded        += pos => { _cameraShake.Shake(0.35f, 0.3f); Debug.Log($"[Bomb] BOOM en {pos}"); };
             // R5.12: the blast's chain position IS the enemy-kill bonus, so it rides along on the event.
@@ -402,7 +413,7 @@ namespace HollowLines.View
                 _scoreSystem.AwardEnemyKill(type, bonus);
                 Debug.Log($"[Enemy] {type} tué par {method} (×{bonus})");
             };
-            _enemySystem.AvatarHitByEnemy += _ => OnAvatarCrushed();
+            _enemySystem.AvatarHitByEnemy += _ => OnAvatarCrushed(DeathCause.Enemy);
 
             // The blast itself is already applied by EnemySystem (R5.8 owns the grid writes, the
             // capsule/diamond liberation and the capped chain) — GameBootstrap only banks the score
@@ -422,7 +433,7 @@ namespace HollowLines.View
                 _airSystem.RestorePerfectClear();
                 _cameraShake.Shake(0.12f, 0.2f);
             };
-            _collapse.AvatarCrushed += _ => OnAvatarCrushed();
+            _collapse.AvatarCrushed += _ => OnAvatarCrushed(DeathCause.Collapse);
 
             // Point HUD and audio at the new grid-dependent systems.
             _hud.RewireChain(_chainTracker);
@@ -500,6 +511,7 @@ namespace HollowLines.View
             _scoreSystem.Reset();
             _airSystem.Reset();
             _healthSystem.Reset();
+            _deathTracker.Reset();
             _screens.Hide();
             LoadLevel();
         }
@@ -535,6 +547,7 @@ namespace HollowLines.View
             _scoreSystem.Reset();
             _airSystem.Reset();
             _healthSystem.Reset();
+            _deathTracker.Reset();
             LoadLevel();
         }
 
@@ -582,6 +595,7 @@ namespace HollowLines.View
             _scoreSystem.Reset();
             _airSystem.Reset();
             _healthSystem.Reset();
+            _deathTracker.Reset();
             _screens.Hide();
             LoadLevel();
         }
@@ -611,6 +625,7 @@ namespace HollowLines.View
                 _scoreSystem.Reset();
                 _airSystem.Reset();
                 _healthSystem.Reset();
+                _deathTracker.Reset();
                 _screens.Hide();
                 LoadLevel(); // now builds campaign level 1 (CurrentLevel is still 1)
                 return;
@@ -620,6 +635,7 @@ namespace HollowLines.View
             if (_campaign.IsCampaignComplete) return;
             _airSystem.Reset();
             _healthSystem.Reset();
+            _deathTracker.Reset();
             _screens.Hide();
             LoadLevel();
         }
@@ -631,6 +647,7 @@ namespace HollowLines.View
             _scoreSystem.Reset();
             _airSystem.Reset();
             _healthSystem.Reset();
+            _deathTracker.Reset();
             _screens.Hide();
             LoadLevel();
         }
@@ -649,33 +666,40 @@ namespace HollowLines.View
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// The run is over (suffocated or out of hearts). Banks the Daily Dig result before the
-        /// screen goes up, so the game-over card can show today's best next to this attempt.
+        /// The run is over (suffocated or out of hearts) — DeathTracker.Died, fired once per run.
+        /// The recap names the killer (R6.1), so the body line only carries the Daily Dig result,
+        /// banked before the screen goes up so the card can show today's best next to this attempt.
         /// </summary>
-        private void EndRun(string reason)
+        private void EndRun(DeathReport report)
         {
             _cameraShake.StopShake();
+            Debug.Log($"[Death] {report.Cause} en {report.Position}, t={report.Time:0.0}s, {report.Hits.Count} coup(s)");
 
             if (_dailyDig)
             {
                 var record = DailyDigStore.Record(_dailyLabel, _endless.Depth, _scoreSystem.Score);
-                _screens.ShowGameOver($"Défi du jour {_dailyLabel} — {reason}\n" +
-                                      $"Meilleur du jour : {record.BestDepth} m ({record.Runs} descente(s))");
+                _screens.ShowGameOver($"Défi du jour {_dailyLabel}\n" +
+                                      $"Meilleur du jour : {record.BestDepth} m ({record.Runs} descente(s))",
+                                      report);
                 return;
             }
 
-            _screens.ShowGameOver(reason);
+            _screens.ShowGameOver(null, report);
         }
 
-        private void OnAvatarCrushed()
+        /// <summary>Every damage source lands here, tagged with what hit the avatar (R6.1).</summary>
+        private void OnAvatarCrushed(DeathCause cause)
         {
             if (invincible) return;                     // debug: ignore all damage
             if (!_healthSystem.TryTakeDamage()) return; // i-frames active
+            _deathTracker.NotifyHit(cause, _avatar.Position, _healthSystem.Hearts);
             _cameraShake.Shake(0.3f, 0.35f);
             _audio.PlayCrush();
-            Debug.Log($"[Health] Crush — {_healthSystem.Hearts} cœur(s) restant(s).");
+            Debug.Log($"[Health] {cause} — {_healthSystem.Hearts} cœur(s) restant(s).");
             if (_healthSystem.IsAlive)
                 _avatar.Teleport(_spawn);
+            else
+                _deathTracker.NotifyDeath(cause, _avatar.Position, _airSystem.Air);
         }
 
         // ─────────────────────────────────────────────────────────────────────

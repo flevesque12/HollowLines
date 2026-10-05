@@ -1,0 +1,435 @@
+---
+paths:
+  - "**/Core/**"
+  - "**/View/**"
+---
+
+## Delivery notes — R2.8d, R3, R4, R5
+
+> Verbose implementation notes for completed refactoring steps.
+> For the compact step tables, see `refactoring-plan.md`.
+> For R6 detailed prompts, see `PROMPTS-CLAUDE-CODE-R6.md` in project root.
+
+---
+
+### R2.8d — decided (2026-07-21): silent settle at board load
+
+`GravitySystem.Settle()` resolves the freshly generated board to a stable rest state in
+`LoadLevel()` **before** play — no telegraph, no burst, no shockwave, no crush. This kills the
+reported symptom: the board no longer demolishes itself before the player moves. Pinned by
+`Settle_DropsUnsupportedChunk_WithoutBursting`,
+`Settle_LeavesBoardAtRest_NoWobbleOrBurstOnNextTick`,
+`Settle_StacksFallingChunks_WithoutOverlap`.
+
+**Deliberately left as-is:** the *in-play* shockwave cascade (a player-caused burst still erases
+neighbor blocks and can chain — §15.1's 78-bursts-per-run mechanism). The designer chose the
+settle-only route; the shockwave keeps its block-erasing bite during play. If late-game runs still
+over-supply air once R2.8c pacing is finished, the next lever to consider is the shockwave scope or
+`BurstFallThreshold` — but re-measure with the playtest harness first, since the board no longer
+self-destructs at load and the old §15.1 numbers were taken on one that did.
+
+**Separately, §5.2 dev 5 is resolved:** the shockwave ring no longer damages the avatar (only the
+chunk footprint crushes), so a correct dodge is never punished.
+
+---
+
+### R3.1-R3.4 delivered 2026-07-26
+
+`EndlessManager` (§6.3) owns absolute depth, the drain ramp and segment chaining; the View flow
+is wired and play-mode verified (§5.15); the steady-state terrain was measured against the campaign
+and retuned (§15.7); the Daily Dig ships as a date→seed function (§6.6). **Endless and the Daily
+Dig are playable** from the main menu ("Sans fin" / "Défi du jour", with "Menu principal" to
+switch back). Only **R3.5 (leaderboard)** is left, and it is a separate ASP.NET Core project rather
+than Unity work.
+
+---
+
+### R4 delivered 2026-07-28, all 10 steps in one session
+
+`DiamondSystem` (§6.4) owns collection tracking and the campaign gate; placement is
+deterministic-exact in campaign and probabilistic in endless (§5.8); the View layer (HUD counter,
+VFX sparkle, audio chime, and a shader-driven tile shine that wasn't in the original plan) is
+fully wired and confirmed live in the Unity Editor via UnityMCP — not just compiled. The
+hand-authored tutorial showcase (§5.14) also got a Diamonds chamber demonstrating the mechanic
+before campaign level 1. Test suite: 232 → **260**.
+
+**One real bug found along the way:** `BoardView.VisualFor()` had no case for `CellType.Diamond`
+and silently rendered it as an empty cell — nobody had touched board rendering until R4.10 needed
+the shine material, so it went unnoticed through R4.1-R4.9. Fixed alongside the shader (§5.10).
+
+#### R4 step details
+
+| Step | Notes |
+|---|---|
+| R4.1 | IsDrillable true, CanFuse false, DrillResult Empty (automatic). StreakTracker neutral (automatic via CanFuse). 6 new tests (BlockTypesTests + StreakTrackerTests) |
+| R4.2 | Init, NotifyCollected, IsComplete, events. 7 new (`DiamondSystemTests`) |
+| R4.3 | Same pattern as AirCapsuleLiberated. 1 new (`Shockwave_LiberatesDiamond`) |
+| R4.4 | Same pattern as AirCapsuleLiberated. 2 new (liberated + no-diamond-no-fire) |
+| R4.5 | `ScoreSource.Diamond` added. 3 new + `Score_AccumulatesAcrossEverySource` updated |
+| R4.6 | `NotifyAvatarPosition` gained `bool diamondsComplete = true`. Levels with 0 diamonds: default keeps the gate open. 3 new |
+| R4.7 | Exact per-level count in campaign (`PlaceDiamonds`), flat 2% per-cell roll in endless (`DiamondRate`). 9 new |
+| R4.8 | Integration — 258/258 PlayMode tests + live play-mode verification (score +150, HUD updated) |
+| R4.9 | Diamond counter "💎 2/5" (campaign) / "💎 7" (Endless, per-segment — §5.9 deviation). Visual check |
+| R4.10 | Diamond collect sparkle + chime SFX; **BoardView + new `DiamondShine` shader** for persistent shimmer on undrilled diamonds (added on request, not originally scoped). Visual/audio check |
+
+---
+
+### R5 — Enemies + Arcade polish — delivered 2026-09-01
+
+> **v3.1 arcade pivot** simplifies R5: 2 enemy types (Crawler + Boomer) instead of 3, no diamond
+> gate rework needed (diamonds are already optional in scoring — just remove the CampaignManager
+> gate check), plus three arcade-feel changes (streak vertical-only, drill air restore, bomb
+> fuse 1.5s, score gate).
+
+#### R5.1 — StreakTracker vertical-only
+
+No direction enum existed anywhere in Core — `AvatarModel.TryDrill` only ever took raw `(dx, dy)`.
+Added `DrillDirection { Up, Down, Left, Right }` (`Core/DrillDirection.cs`) and had `TryDrill`
+derive it from `(dx, dy)` (`dy>0` → Down, matching `GridPos.Below`'s `Y+1`).
+`AvatarModel.Drilled` grew a third parameter (`Action<GridPos, CellType, DrillDirection>`), which
+rippled to every subscriber: `GameBootstrap`, `AudioManager.OnDrilled`, `VfxManager.OnDrilled`, and
+the `tools/playtest` harness (`Avatar.Drilled` lambda). `StreakTracker.NotifyDrill` now early-returns
+on any non-`Down` direction before the existing streak-neutral (`CanFuse()`) check — a lateral or
+upward drill never reaches the color comparison at all. All pre-existing `NotifyDrill` call sites
+(11 `StreakTrackerTests`, the tutorial-showcase streak test, `GameBootstrap`, the playtest harness)
+now pass `DrillDirection.Down` to keep their prior behavior. 263/263 PlayMode tests pass.
+
+#### R5.2 — AirSystem drill restore
+
+`AirSystem.DrillRestoreAmount = 0.5f`, matching the unit convention every other restore constant
+already uses (`BurstRestoreAmount = 0.5f`, `CapsuleRestoreAmount = 6f`, etc. are percentage-POINTS
+added directly by `Restore(amount)`, not fractions of `MaxAir`). Wired into `GameBootstrap`'s
+`Drilled` handler right after `NotifyDrill` and before `AwardDrill` — matching the §7 pseudocode
+order exactly. `RestoreEconomy_IsSmallRelativeToDrain` gained a third assertion
+(`DrillRestoreAmount <= BurstRestoreAmount`) since drill restore ties Burst as the smallest source —
+the survival floor, not a shortcut. 266/266 PlayMode tests pass.
+
+#### R5.3 — BombSystem fuse 1.5s
+
+`BombSystem.FuseDuration` 2.5f → 1.5f. No test edits needed: every fuse-timing test already ticks
+`BombSystem.FuseDuration + 0.01f` rather than a hardcoded literal (2.5 was never inlined), so all 16
+detonation tests plus the tutorial-board bomb-chain test adapted automatically. Verified the fuse
+telegraph (§5.10 `VfxManager`, §5.11 `AudioManager`) stays correct at the new tempo: both
+`OnFuseProgress` handlers key off the normalized `frac` (0→1) that `BombSystem` already computes as
+`1f - (remaining / FuseDuration)` — the beep-index quadratic (`floor(frac² × fuseBeepSteps)`) and
+the glow halo never reference the duration directly, so they compress into the shorter fuse rather
+than breaking. Fixed one stale doc reference (`hollow-lines-gdd-v3.md` §11 pseudocode still said
+"2.5 s fuse"). 266/266 PlayMode tests pass (no new tests — a constant-only change).
+
+#### R5.4 — CampaignManager score gate
+
+`NotifyAvatarPosition`'s third parameter changed from `bool diamondsComplete = true` to
+`int currentScore = int.MaxValue` — the `int.MaxValue` default always clears `ScoreMinimumForLevel`,
+preserving the exact backward-compat behavior the old `true` default gave (tutorial showcase and any
+caller that doesn't care about the gate keeps depth as the only requirement). `ScoreMinimumForLevel`
+is a new static method (no state, easy to unit test directly). `GameBootstrap` now passes
+`_scoreSystem.Score`; `_diamondSystem` is untouched otherwise — diamonds are still placed and
+collected (§6.4), they just feed the score gate as +150 pts each instead of gating directly. The 3
+old diamond-gate tests were replaced with 7 score-gate tests (block/pass/catch-up/tutorial-no-gate/
+depth-still-required/default-bypass/table-values) — net +4. Also fixed a stale doc comment in
+`StrateGenerator.DiamondCountForLevel` that still described diamonds as gating. 270/270 PlayMode
+tests pass.
+
+#### R5.5 — EnemyType + EnemyEntity
+
+Three new files, no functional tests (pure data structures, per dev instruction) — compile-checked
+and the full 270/270 suite re-run to confirm no regression. `EnemyType.cs` (Crawler, Boomer) and
+`KillMethod.cs` (Crush, Burst, Bomb — didn't exist yet) are plain enums. `EnemyEntity.cs` is a
+separate file, not folded into `EnemyType.cs` — it's a distinct data structure, matching the
+one-type-per-file convention `GridPos.cs`/`DrillDirection.cs` already use. Implemented as an
+immutable `readonly struct` with `With*`/`Activated()`/`Killed()` methods that return a new value,
+the same pattern `GridPos.Offset()` uses (no `with`-expression: plain structs don't support that
+syntax, only C# 9+ records/record structs do, and this project's other value types are plain
+structs) — `EnemySystem` (R5.6+) will own the authoritative copy and replace it wholesale on each
+state change. `Health` is always 1 for both current types (both die in one hit) but is carried on
+the struct so a future tougher enemy doesn't need a shape change. Drive-by fix: `CellType.cs`'s doc
+comment for `Bomb` still said "2.5 s fuse" (stale since R5.3).
+
+#### R5.6 — EnemySystem core lifecycle
+
+`EnemySystem.cs` — spawn, activate, query, kill-by-crush/burst/bomb, `Reset()`. Two deliberate
+deviations from the original §6.5 API sketch:
+
+- **`NotifyBombBlast` takes `chainMult` as an explicit parameter** (`NotifyBombBlast(List<GridPos>
+  blastCells, int chainMult)`), not the bare `NotifyBombBlast(List<GridPos>)` the doc drafted. The
+  §7 pseudocode's alternative — `EnemyKilled` fires, then GameBootstrap looks up
+  `BombSystem.LastChainMult` to compute the Boomer's parent bonus — would need a "last chain mult"
+  field that doesn't exist on `BombSystem` today and adds a second read after the event instead of
+  carrying the value on the call that already has it. Since the caller (whoever resolves the blast)
+  already knows the chain multiplier at the point it calls in, passing it straight through is
+  simpler and matches how `NotifyBurst` already receives `fallDist` directly.
+- **`SpawnEnemy` returns the new `int` id** in addition to firing `EnemySpawned` with it — the event
+  alone forces every caller (including every test) to capture it via a closure just to reference the
+  enemy again. Non-breaking, same id either way.
+
+`KillMethod.Crush` never fires `BoomerDetonated` — only Burst and Bomb kills amplify (§6.5); a
+Boomer crushed by a landing chunk just dies like a Crawler would. Dormant enemies die exactly like
+active ones to crush/burst/bomb (only avatar CONTACT, R5.10, will check `IsActive`) — the dev's
+initial test list had this backwards and self-corrected mid-prompt; implemented per the correction.
+19 new tests, 289/289 PlayMode tests pass.
+
+#### R5.7 — Crawler movement
+
+`EnemySystem.Tick(dt, grid, avatarPos)` — only active Crawlers move; dormant ones and every Boomer
+are untouched. Movement state (Direction, Timer) lives in a private `CrawlerState` class keyed by
+id, NOT on `EnemyEntity` — the public struct has no notion of "which way it's walking" (§6.5 didn't
+ask for one), so adding it there would leak Crawler-only concerns onto every enemy type. Default
+heading is right (`CrawlerMoveInterval = 0.8f`, a public const so tests and the future GameBootstrap
+wiring share one source of truth). Bounce logic: blocked ahead (`col < 0`, `col >= grid.Width`, or
+`grid.IsSolid`) flips `Direction` and retries once in the same interval — a Crawler pinned between
+two walls just stays put rather than oscillating in place every tick. `state.Timer` is a `while`
+loop (not `if`), so a dt larger than 0.8s steps multiple cells in one `Tick` call, matching how
+`AvatarModel.Tick`'s fall clock handles a big frame. Dead Crawlers' `CrawlerState` entries are
+removed in `KillInZone` (mirrors `AudioManager`'s fuse-index cleanup on detonation) so the
+dictionary doesn't accumulate stale entries over a long run. 5 new tests, 294/294 PlayMode tests
+pass.
+
+#### R5.8 — Boomer death explosion (biggest deviation of R5)
+
+**`EnemySystem` now takes `GridModel` via its constructor.** The dev's spec describes the Boomer
+blast as EnemySystem's OWN behavior ("quand un Boomer est tué, il explose" — destroys blocks,
+liberates capsules/diamonds, chain-kills other enemies), not something GameBootstrap assembles from a
+bare `BoomerDetonated` event. That requires read/write grid access at kill-time, and the established
+pattern for a Core system that needs one (`GravitySystem`, `BombSystem`) is constructor injection,
+not a per-call parameter — so `EnemySystem(GridModel grid)` replaces the parameterless constructor,
+and `Tick` dropped its now-redundant `GridModel grid` parameter (uses the stored field instead;
+every R5.6/R5.7 test updated — 24 call sites, `new GridModel(10, 10)` for the ones that don't
+otherwise need a real board). §6.5 and §7 above are resynced to the new constructor/Tick signatures.
+
+Every kill (zone-based or chain-cascaded) now funnels through one `KillOne(enemy, method,
+boomerBonus, chainDepth)` — the single choke point that decides whether a Boomer detonates
+(`boomerBonus.HasValue && chainDepth <= BoomerChainCap`). `DetonateBoomer` applies a radius-1
+cardinal cross using the SAME block-result table as `BombSystem.Blast` (`Core/BombSystem.cs`)
+with ONE deliberate difference: **Bomb cells are left completely untouched** — not armed, not
+destroyed — because arming them would open a second, uncapped chain reaction through real bombs
+that `BoomerChainCap` was never designed to bound (the dev's own stated reason: "pour éviter les
+boucles infinies"). Two new events, `AirCapsuleLiberated`/`DiamondLiberated`, mirror
+`BombSystem`'s naming exactly so the future GameBootstrap wiring (§7) is a straight copy-paste of
+the bomb-liberation pattern.
+
+**No avatar-hit code exists anywhere in the Boomer blast path** — that's the actual mechanism
+behind "the explosion never hurts the avatar": there's nothing to wire wrong, because nothing
+checks avatar position at all. `AvatarHitByEnemy` stays declared-but-unfired (R5.10 still owns it).
+
+Chain depth: the Boomer directly killed by a burst/bomb is depth 1 and always detonates if it has
+a bonus; each Boomer its blast kills is one depth deeper. Verified end-to-end with a 4-Boomer line
+(A→B→C→D): killing A cascades through B (depth 2) and C (depth 3, at the cap) but D (depth 4)
+dies without detonating — exactly 3 `BoomerDetonated` events, 4 `EnemyKilled` events.
+
+9 new tests (the 10th requested case — "Boomer killed → BoomerDetonated fires" — was already
+pinned by two R5.6 tests, not duplicated). 303/303 PlayMode tests pass.
+
+#### R5.9 — Activation rules
+
+Three activation entry points, all funneling through one private `ActivateAdjacent`/
+`ActivateDormantAt` pair (mirrors `BombSystem.ArmAdjacent`/`TryArm` exactly — same
+four-cardinal-neighbor shape, same "no-op if nothing dormant is there" contract):
+
+- `NotifyAdjacentDrill(GridPos)` — wakes a dormant enemy adjacent to a drilled cell.
+- `NotifyBurst`/`NotifyBombBlast` — now ALSO call `ActivateAdjacentToZone` on the full effect zone
+  (burst footprint ∪ shockwave ring, or the blast cells) before resolving kills. An enemy just
+  outside the zone wakes up without necessarily being the one that dies — verified explicitly:
+  `NotifyBurst_ShockwaveAdjacentToDormantEnemy_ActivatesIt` asserts the Crawler is BOTH active AND
+  still alive, since it's adjacent to a shockwave cell, not inside it.
+- `ActivateInViewport(int minRow, int maxRow)` — Endless has no per-board activation event (there's
+  no "drilled" or "burst" to hook), so this is a direct row-range sweep GameBootstrap calls from
+  the camera's current view bounds. Inclusive both ends.
+
+Reused `ActivateEnemy(id)` itself (not a duplicate mutation) for every trigger, so the dormant/
+already-active/dead guards and the `EnemyActivated` event only exist in one place. 6 new tests,
+309/309 PlayMode tests pass.
+
+#### R5.10 — Avatar collision
+
+One check appended to the existing Crawler loop in `Tick` — no new loop, no new per-frame
+grid/enemy scan. The loop already filters to `IsAlive && IsActive && Type == Crawler` before doing
+anything (movement included), so "only active Crawlers deal contact damage" and "dormant enemies
+never deal contact damage" both fall out of that SAME filter for free — a Boomer or a dormant enemy
+never reaches the new `if (enemy.Position == avatarPos)` line at all, there's no separate branch to
+get wrong. The check runs after the movement `while` loop and reads the (possibly just-updated)
+position, so it catches both directions of contact: a Crawler stepping onto the avatar's cell
+mid-`Tick`, and the avatar having walked onto a Crawler that didn't move at all that frame.
+
+**`AvatarHitByEnemy` fires on every overlapping frame, not just the first** — by design, per the
+dev's note that HealthSystem's i-frames are what make repeated contact harmless. De-duplicating
+here would be redundant with that cooldown and would need EnemySystem to track "have I already hit
+the avatar this overlap", state it has no other reason to keep. 5 new tests, 314/314 PlayMode
+tests pass.
+
+#### R5.11 — ScoreSystem enemy scoring
+
+`ScoreSystem.AwardEnemyKill(EnemyType, int bonus = 1)` and `AwardBoomerBlast(int blocksDestroyed,
+int parentBonus)`, plus `ScoreSource.EnemyKill` / `.BoomerBlast`. `AwardBoomerBlast` deliberately
+reuses `BombPointsPerBlock` rather than a new constant — the dev's own framing ("scores like a
+bomb") and the §8 table's formula both point at the SAME 25-per-block rate, not a parallel one that
+could drift out of sync at the next balance pass. Both bonus parameters clamp to a minimum of 1
+(matching `AwardBomb`'s `chainMult` clamp) — a plain crush kill or an unscaled blast still pays out,
+it just doesn't multiply. `Score_AccumulatesAcrossEverySource` grew the two new calls, 1030 → 1430.
+10 new tests, 324/324 PlayMode tests pass.
+
+#### R5.12 — GameBootstrap wiring
+
+Items 1 and 2 of the request were already done (R5.1/R5.2 shipped the drill direction +
+`RestoreDrill`, R5.4 shipped the score gate) — only `_enemySystem.NotifyAdjacentDrill(pos)` was
+missing from the drill handler. The rest needed **four Core additions, because the §7 draft
+referenced three members that never existed**:
+
+- **`GravitySystem.LastShockwaveCells`** (new). The draft read this inside the `ChunkBurst`
+  handler, but the ring was computed AFTER `ChunkBurst` fired — a naive property would have handed
+  every burst the PREVIOUS burst's ring. `ResolveBurst` now computes the ring *before* firing the
+  event (its effects still apply after, so the documented crush → land → burst → shockwave order is
+  unchanged). Chosen over widening the `ChunkBurst` event because that event has five subscribers
+  and only one wants the ring. It is only valid during the event — the XML doc says "never poll it".
+- **`BombSystem.BlastResolved(List<GridPos> cells, int chainMult)`** (new). Nothing exposed which
+  cells a blast touched. `Blast()` now appends every in-bounds cell it reaches to a list (plus the
+  bomb's own centre), fired next to `BombScored`.
+- **`EnemySystem.EnemyKilled` gained the bonus** (`id, type, method, bonus`). The draft had
+  GameBootstrap `switch` on `KillMethod` and read `_gravity.LastFallBonus` /
+  `_bombSystem.LastChainMult` — two more fields that don't exist, and an out-of-band read that only
+  works while the handler runs inside the originating resolution. EnemySystem already holds the exact
+  value at kill time, so it just passes it along.
+- **`EnemySystem.BoomerDetonated` gained the block count** (`pos, parentBonus, blocksDestroyed`)
+  and now fires AFTER the blast resolves, mirroring `BombSystem`'s `BombScored`. **The request
+  asked GameBootstrap to apply the Boomer blast to the grid; it must not** — R5.8 already does that
+  inside EnemySystem, so re-applying would double-destroy. GameBootstrap only scores it.
+
+Also wired `ActivateEnemiesInView()` (Endless only) to complete R5.9's contract — it derives the
+visible row band from the camera's un-shaken centre ± orthographic size, rounded outward.
+
+**⚠️ No enemy actually spawns yet.** `SpawnEnemiesForBoard()` is deliberately an empty, documented
+hook: enemies are ACTORS, not CellTypes (§6.5), so they have no map character and *cannot* appear
+in the generated `rows` — `GridModel.FromStringMap` throws on unknown characters. R5.13 therefore
+has to hand placements over out-of-band.
+
+#### R5.13 — StrateGenerator enemy placement
+
+`StrateGenerator.PlaceEnemies(board, level, rng)` + `CrawlerCountForLevel` / `BoomerCountForLevel`
+(§9 table), and R5.12's empty `SpawnEnemiesForBoard()` hook is now filled — **enemies actually
+spawn in campaign play from level 6.**
+
+**The board is NOT mutated** — enemies are ACTORS with no map character, and writing one into `rows`
+would make `GridModel.FromStringMap` throw. So `PlaceEnemies` is pure — it reads the board and
+returns coordinates, pinned by `PlaceEnemies_DoesNotMutateTheBoard`.
+
+**Spacing is enforced by construction, not by rejection sampling**: each enemy claims a whole row,
+and rows within `MinEnemyRowSpacing` (3) of a used one are skipped. That makes the hard constraint
+unfalsifiable rather than probabilistic, and sidesteps any retry loop. The two soft preferences —
+Boomers within `BoomerBombProximity` (2) rows of a buried bomb, Crawlers in rows with
+`CrawlerLateralSpace` (3) or more empty cells — are implemented as *ordering*, not filtering:
+preferred rows shuffle to the front, everything else follows as fallback, so the per-level count is
+always met. Boomers are placed first because "near a bomb" is the narrower preference. GameBootstrap
+seeds placement from the level (`level * 0x85EBCA6B`) so a level's enemies are as deterministic as
+its board, but on a different constant so the two streams aren't locked in step.
+
+Campaign only: **Endless placement is explicitly deferred to R6**. 9 new tests, 333/333 pass.
+
+#### R5.14 — HUDView enemy popups
+
+Two new popup cases on the existing `OnScore` switch, no new plumbing — `ScoreSource.EnemyKill`
+→ "+100 CRAWLER!" / "+450 BOOMER! ×3", `ScoreSource.BoomerBlast` → "+200 BOOM!". Two new colors
+so all five celebrations stay tellable apart at a glance: lime for a kill, violet for a Boomer
+blast.
+
+**`ScoreEvent` carries no enemy type — the popup recovers it by arithmetic.** `Detail` is the kill
+bonus and `AwardEnemyKill` computes `Points = basePoints × bonus`, so `Points / Detail` lands
+exactly on `CrawlerKillPoints` (100) or `BoomerKillPoints` (150). Integer division is exact.
+
+One guard: a Boomer that detonates in open air destroys 0 blocks → "+0 BOOM!". `BoomerBlast`
+popups are suppressed at 0 points.
+
+#### R5.15 — VfxManager enemy effects
+
+Four effects: Crawler death (8 small olive particles, 0.28 s), Boomer death (18 bright orange
+particles radiating evenly + its own `SpawnRipple`, 0.5 s), Crawler wake flash (one-shot expanding
+pale square), and the Boomer's standing halo.
+
+**The Boomer glow reuses the bomb-fuse material** (`EnsureFuseMaterial`, the additive radial glow
+from §5.10) — a Boomer is a bomb with legs. It pulses ~1.5 Hz, deliberately slower and calmer than
+a lit fuse (which races from 2.5 → 12 Hz).
+
+**The events don't carry enough to draw with, so the view caches positions.** `VfxManager` keeps an
+id → (type, cell) marker cache, seeded from `EnemySpawned` and refreshed from `GetAllAlive()` on a
+**0.2 s timer** rather than per frame: `GetAllAlive()` allocates a fresh list, and a Crawler only
+steps every 0.8 s, so 0.2 s is always well inside one move at 5 allocations/second instead of 60.
+
+One edge case: a Boomer killed by a plain crush never detonates (§6.5), so `BoomerDetonated` never
+fires — `OnEnemyKilled` covers that path explicitly.
+
+#### R5.16 — AudioManager enemy SFX
+
+Four procedural clips, one shared `_enemySource`, wired in `AudioManager.Rewire()`. The two
+activation cues sit at opposite ends of the register on purpose: a Crawler chirps HIGH (something
+small just started moving toward you), a Boomer boops LOW (something heavy woke up).
+
+**The Boomer boom is built from `SfxSynth.Shatter` tuned the opposite way to the chunk burst** —
+mostly TONE (`noiseMix: 0.35`) at 70 Hz with a heavy low-pass (`0.06`), so it lands round and
+bass-heavy rather than crackly. That is exactly what separates it from the bomb blast, which is
+pure `Noise` at a much brighter low-pass (0.25).
+
+**Verified by measuring the generated waveforms, not by ear:**
+
+| clip | length | zero-crossings/s |
+|---|---|---|
+| Crawler wake (Tone 1500 Hz) | 0.100 s | 2 990 (≈1 495 Hz ✓) |
+| Crawler death (Noise) | 0.150 s | 13 213 |
+| Boomer wake (Tone 150 Hz) | 0.200 s | 295 (≈147 Hz ✓) |
+| **Boomer boom** | 0.300 s | **337** |
+| *bomb blast (for contrast)* | 0.349 s | *10 884* |
+
+The Boomer boom is **32× darker than the bomb blast**.
+
+#### R5.17 — EnemyView (R5 feature-complete)
+
+`View/EnemyView.cs`: one SpriteRenderer per living enemy, parented under the BoardView GameObject
+so it's torn down with the board on the next `LoadLevel()`. Created *before*
+`SpawnEnemiesForBoard()` so it receives every `EnemySpawned`.
+
+**Sorting order 8 — above the tiles (0) and exit glow (1), below the avatar (10).** When a Crawler
+walks onto the driller's cell, the driller stays visible at the exact moment contact damage fires.
+
+Dormant vs active is the whole visual language: dormant is `dormantAlpha` (0.4) and *perfectly*
+still; waking is what makes it opaque and starts it moving. The Crawler shuffles (lateral wiggle +
+a half-rate vertical bob); the Boomer only breathes (scale pulse). Animation offsets are applied ON
+TOP of the eased base position, the same split `CameraShake` uses for follow-vs-shake.
+
+**Positions are polled, not evented** — `RefreshTargets()` reads `GetAllAlive()` every 0.1 s
+(a Crawler only steps every 0.8 s) and the per-frame lerp does the smoothing; 10 list
+allocations/second instead of 60. 333/333 tests still pass.
+
+---
+
+### R6.1 — DeathTracker + death recap (F01) — delivered 2026-10-05
+
+`PROMPTS-CLAUDE-CODE-R6.md` / `FEEDBACK-COMPILATION.md` were **not in the repo** at delivery time;
+built from the §10 R6.1 row.
+
+**Core.** `DeathCause` enum (ChunkCrush, Collapse, BurstShockwave, BombBlast, Enemy, Suffocation)
+and `DeathTracker`: logs every heart actually lost (`DamageHit`: cause, cell, run time, hearts left),
+keeps a run clock and the time since the last drill (the only meaningful "why" for suffocation in
+v3.1, where drilling is the main air source), and freezes a `DeathReport` on `NotifyDeath`. `Died`
+fires **once** per run — `NotifyDeath` returns false afterwards — which also fixes a latent
+double-`EndRun` if the last heart and the last breath went in the same frame. The report holds a
+copy of the hits, so it survives `Reset()`. Pure bookkeeping: it never deals damage. 10 tests.
+
+**Wiring.** `OnAvatarCrushed()` → `OnAvatarCrushed(DeathCause)`; each of the five damage events
+tags its cause. **`HealthDepleted` no longer calls `EndRun`** — it fires *inside*
+`TryTakeDamage`, before the hit could be logged — so `OnAvatarCrushed` logs the hit, then declares
+the death itself when `!IsAlive`. (`AudioManager` still listens to `HealthDepleted` for the game-over
+jingle.) `DeathTracker.Reset()` sits beside every `HealthSystem.Reset()` (per run and per campaign
+level, since hearts refill per level); not on the endless seam, where hearts carry over.
+
+**View.** `DeathRecapView` is a plain class (not a MonoBehaviour, no second UIDocument) that builds
+a block inside UIScreenManager's overlay panel: the killer in red, one diagnostic line
+("Dernier forage il y a 7,3 s" for suffocation, "Coup fatal à 1:16 · air restant N %" otherwise),
+a one-sentence French tip pointing at the telegraph the player missed, and the heart-loss timeline
+(last 5, fatal row in red). `ShowGameOver(string reason, DeathReport? recap = null)` — the body line
+now only carries the Daily Dig result and collapses when empty (`SetBody`).
+
+**Layout fix found by screenshot:** stacked above the run summary, the card overflowed the screen
+and UI Toolkit squeezed the rows on top of each other. The recap and the run summary now sit **side
+by side** in one row, and the rows are `flexShrink = 0`. Verified in play mode (UnityMCP): a
+3-hit death (bomb → crush → burst) and a suffocation, zero console errors.
+
+**Test-mode note:** the suite now runs in **EditMode** (PlayMode discovers 0 tests) after the
+"Change and configuration of test script" commit — §13/§14 still say PlayMode.
+

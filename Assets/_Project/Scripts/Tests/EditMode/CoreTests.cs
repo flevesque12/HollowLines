@@ -5390,4 +5390,164 @@ namespace HollowLines.Tests
             Assert.AreEqual(0, id, "the id sequence restarts after Reset");
         }
     }
+
+    [TestFixture]
+    public class DeathTrackerTests
+    {
+        private static readonly GridPos P = new GridPos(3, 10);
+
+        [Test]
+        public void Tick_AccumulatesRunTime_IgnoresNonPositiveDt()
+        {
+            var t = new DeathTracker();
+            t.Tick(1.5f);
+            t.Tick(0f);
+            t.Tick(-2f);
+            Assert.AreEqual(1.5f, t.RunTime, 1e-5f);
+        }
+
+        [Test]
+        public void NotifyHit_RecordsCausePositionTimeAndHearts()
+        {
+            var t = new DeathTracker();
+            t.Tick(2f);
+            t.NotifyHit(DeathCause.BombBlast, P, 2);
+
+            Assert.AreEqual(1, t.Hits.Count);
+            Assert.AreEqual(DeathCause.BombBlast, t.Hits[0].Cause);
+            Assert.AreEqual(P, t.Hits[0].Position);
+            Assert.AreEqual(2f, t.Hits[0].Time, 1e-5f);
+            Assert.AreEqual(2, t.Hits[0].HeartsLeft);
+        }
+
+        [Test]
+        public void NotifyHit_IgnoresNoneAndSuffocation_ClampsNegativeHearts()
+        {
+            var t = new DeathTracker();
+            t.NotifyHit(DeathCause.None, P, 2);
+            t.NotifyHit(DeathCause.Suffocation, P, 2);
+            Assert.AreEqual(0, t.Hits.Count, "neither is a heart hit");
+
+            t.NotifyHit(DeathCause.Enemy, P, -1);
+            Assert.AreEqual(0, t.Hits[0].HeartsLeft);
+        }
+
+        [Test]
+        public void TimeSinceLastDrill_CountsFromRunStart_ThenFromLastDrill()
+        {
+            var t = new DeathTracker();
+            t.Tick(3f);
+            Assert.AreEqual(3f, t.TimeSinceLastDrill, 1e-5f, "no drill yet → since run start");
+
+            t.NotifyDrill();
+            t.Tick(1.25f);
+            Assert.AreEqual(1.25f, t.TimeSinceLastDrill, 1e-5f);
+        }
+
+        [Test]
+        public void NotifyDeath_FiresOnce_WithFrozenReport()
+        {
+            var t = new DeathTracker();
+            int fired = 0;
+            DeathReport got = default;
+            t.Died += r => { fired++; got = r; };
+
+            t.Tick(4f);
+            t.NotifyHit(DeathCause.ChunkCrush, P, 2);
+            t.NotifyHit(DeathCause.BurstShockwave, P, 1);
+            t.NotifyHit(DeathCause.ChunkCrush, P, 0);
+
+            Assert.IsTrue(t.NotifyDeath(DeathCause.ChunkCrush, P, 42f));
+            Assert.IsFalse(t.NotifyDeath(DeathCause.Suffocation, P, 0f), "same frame, second cause → ignored");
+
+            Assert.AreEqual(1, fired);
+            Assert.IsTrue(t.IsDead);
+            Assert.AreEqual(DeathCause.ChunkCrush, got.Cause);
+            Assert.AreEqual(3, got.Hits.Count);
+            Assert.AreEqual(DeathCause.BurstShockwave, got.Hits[1].Cause, "hits are oldest first");
+            Assert.AreEqual(42f, got.Air, 1e-5f);
+            Assert.AreEqual(4f, got.Time, 1e-5f);
+            Assert.IsTrue(t.Report.HasValue);
+        }
+
+        [Test]
+        public void NotifyDeath_Suffocation_CarriesTimeSinceLastDrill()
+        {
+            var t = new DeathTracker();
+            t.Tick(1f);
+            t.NotifyDrill();
+            t.Tick(6f);
+
+            t.NotifyDeath(DeathCause.Suffocation, P, -3f);
+
+            Assert.AreEqual(DeathCause.Suffocation, t.Report.Value.Cause);
+            Assert.AreEqual(6f, t.Report.Value.TimeSinceLastDrill, 1e-5f);
+            Assert.AreEqual(0f, t.Report.Value.Air, "negative air clamps to 0");
+        }
+
+        [Test]
+        public void NotifyDeath_None_FallsBackToLastHit_ThenSuffocation()
+        {
+            var a = new DeathTracker();
+            a.NotifyHit(DeathCause.Enemy, P, 0);
+            a.NotifyDeath(DeathCause.None, P, 50f);
+            Assert.AreEqual(DeathCause.Enemy, a.Report.Value.Cause);
+
+            var b = new DeathTracker();
+            b.NotifyDeath(DeathCause.None, P, 0f);
+            Assert.AreEqual(DeathCause.Suffocation, b.Report.Value.Cause);
+        }
+
+        [Test]
+        public void AfterDeath_ClockHitsAndDrillsAreFrozen()
+        {
+            var t = new DeathTracker();
+            t.Tick(2f);
+            t.NotifyDeath(DeathCause.BombBlast, P, 10f);
+
+            t.Tick(5f);
+            t.NotifyHit(DeathCause.ChunkCrush, P, 0);
+            t.NotifyDrill();
+
+            Assert.AreEqual(2f, t.RunTime, 1e-5f);
+            Assert.AreEqual(0, t.Hits.Count);
+            Assert.AreEqual(2f, t.TimeSinceLastDrill, 1e-5f);
+        }
+
+        [Test]
+        public void Report_IsACopy_SurvivesReset()
+        {
+            var t = new DeathTracker();
+            t.NotifyHit(DeathCause.Collapse, P, 0);
+            t.NotifyDeath(DeathCause.Collapse, P, 0f);
+            var report = t.Report.Value;
+
+            t.Reset();
+
+            Assert.AreEqual(1, report.Hits.Count, "the recap screen keeps its data after the next run starts");
+            Assert.AreEqual(0, t.Hits.Count);
+        }
+
+        [Test]
+        public void Reset_ClearsState_AndRearmsDied()
+        {
+            var t = new DeathTracker();
+            int fired = 0;
+            t.Died += _ => fired++;
+
+            t.Tick(3f);
+            t.NotifyHit(DeathCause.ChunkCrush, P, 0);
+            t.NotifyDeath(DeathCause.ChunkCrush, P, 0f);
+            t.Reset();
+
+            Assert.IsFalse(t.IsDead);
+            Assert.IsFalse(t.Report.HasValue);
+            Assert.AreEqual(0f, t.RunTime);
+            Assert.AreEqual(0f, t.TimeSinceLastDrill);
+            Assert.AreEqual(0, t.Hits.Count);
+
+            Assert.IsTrue(t.NotifyDeath(DeathCause.Suffocation, P, 0f));
+            Assert.AreEqual(2, fired);
+        }
+    }
 }
