@@ -281,6 +281,12 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
   slides pale → cyan with `StartBufferFactor`. Polled in `Update` (`TickAirBufferCue`), because
   `AirChanged` stays silent while nothing drains. Danger red (< 25 %) always wins. The fuse was white
   first — invisible on the pale fill in a screenshot, so it's gold.
+- 🆕R6.3 **"FORE POUR RESPIRER !" hint** (F02) — centred just above the air bar (not the centre
+  popup slot: that's for celebrations and sits over the avatar). Shows below 30 % air, hides at 35 %
+  (hysteresis, so drilling at the edge doesn't flicker) or at 0. Eased fade; pulse speeds up as the
+  tank empties, amber → red under 15 %; a scale **pop on every air gain** while shown (detected in
+  `RefreshAir` as air > last value — a drill, capsule or burst all count), so the player sees the
+  advice working. Dark pill + text outline: bare amber text was unreadable over amber/pink blocks.
 
 > **Deviation:** the three popups are driven by **`ScoreSystem.OnScore`**, not by subscribing to
 > GravitySystem / BombSystem / CollapseSystem directly. Those events don't carry the point value

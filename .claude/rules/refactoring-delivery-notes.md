@@ -463,3 +463,25 @@ through the ramp (§5.9). Core gained `StartGraceRemaining` / `StartGraceDuratio
 (+1 test, 366/366). Screenshot-verified in grace (menu + live) and in the ramp. Deliberately NOT a
 centre-screen "3-2-1" (it would hide the board during the window meant for reading it, and reads as
 "wait" when the player can drill immediately) and no per-second beep (collides with the fuse beep).
+
+---
+
+### R6.3 — Drill-to-breathe hint (F02) — delivered 2026-10-05
+
+View only (`HUDView.TickBreatheHint`), no Core change, so no new tests — 366/366 still pass.
+v3.1 made drilling the main air source (+0.5 % per drill) but nothing in the game ever said so; the
+hint teaches it at the exact moment it matters. Design choices:
+
+- **Placement above the air bar**, not in the centre popup slot (celebrations live there, over the
+  avatar) — the hint sits next to the thing it explains.
+- **Hysteresis 30 % / 35 %** so a player drilling right at the threshold doesn't make it strobe.
+- **Feedback loop:** each air gain while it's up triggers a scale pop — "do this" followed by "yes,
+  that". Detected from `AirChanged` (air went up), so drills, capsules and bursts all count with no
+  new wiring.
+- **Urgency:** pulse 4 → 10 Hz as air drops, amber → red under 15 % (the bar itself turns red at 25 %).
+
+Verified in play mode (UnityMCP): screenshot at 14 % (first attempt was bare amber text, unreadable over
+amber/pink blocks → dark pill + outline), then 26 % shown → +6 % to 32 % still shown with pop → 38 % hidden.
+
+Shown every time, not only for new players — it's also the low-air warning. If playtests find it
+noisy for veterans, gate it behind R6.11's XP level rather than removing it.

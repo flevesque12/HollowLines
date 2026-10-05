@@ -37,6 +37,21 @@ namespace HollowLines.View
         private bool        _wasInGrace;
         private float       _airFlashTimer;
         private const float AirFlashSeconds = 0.35f;
+
+        // ── R6.3 "drill to breathe" hint (F02) ────────────────────────────────
+        // v3.1 made drilling the main air source, but nothing ever said so — new players watched the
+        // bar empty without knowing the answer was under their feet. Shown above the air bar (the
+        // centre is the celebration popup and the avatar), with hysteresis so drilling right at the
+        // threshold doesn't make it flicker, and a pop each time air comes back to confirm the fix.
+        private Label       _breatheHint;
+        private bool        _breatheShown;
+        private float       _breatheAlpha;      // eased 0..1 so it fades in/out instead of popping
+        private float       _breathePop;        // 1 → 0 after each air gain while shown
+        private float       _lastAir = AirSystem.MaxAir;
+        private const float BreatheShowBelow = 30f; // % air
+        private const float BreatheHideAbove = 35f;
+        private const float BreatheFadeSpeed = 6f;  // alpha per second
+        private const float BreathePopSeconds = 0.25f;
         private VisualElement[] _heartIcons;
         private Label         _chainLabel;
         private Label         _popupLabel;
@@ -265,6 +280,7 @@ namespace HollowLines.View
             float dt = Time.deltaTime;
 
             TickAirBufferCue(dt);
+            TickBreatheHint(dt);
 
             if (_chainHideTimer > 0f)
             {
@@ -422,6 +438,44 @@ namespace HollowLines.View
             float pct = Mathf.Clamp01(air / AirSystem.MaxAir);
             _airFill.style.width = new StyleLength(new Length(pct * 100f, LengthUnit.Percent));
             _airFill.style.backgroundColor = new StyleColor(AirColor(pct));
+
+            // R6.3: any air gain while the hint is up (a drill, a capsule, a burst) earns a pop —
+            // the hint says what to do, the pop says "yes, that".
+            if (_breatheShown && air > _lastAir + 0.01f)
+                _breathePop = 1f;
+            _lastAir = air;
+        }
+
+        /// <summary>
+        /// R6.3: "FORE POUR RESPIRER !" while air is low. Show below 30 %, hide above 35 % (hysteresis),
+        /// eased fade, slow pulse that speeds up as the tank empties, amber → red under 15 %.
+        /// Scaled time throughout, so it freezes with the game under the pause/game-over overlay.
+        /// </summary>
+        private void TickBreatheHint(float dt)
+        {
+            if (!_built || _air == null) return;
+
+            float air = _air.Air;
+            if (!_breatheShown && air < BreatheShowBelow && air > 0f) _breatheShown = true;
+            else if (_breatheShown && (air >= BreatheHideAbove || air <= 0f)) _breatheShown = false;
+
+            _breatheAlpha = Mathf.MoveTowards(_breatheAlpha, _breatheShown ? 1f : 0f, BreatheFadeSpeed * dt);
+            if (_breathePop > 0f) _breathePop = Mathf.Max(0f, _breathePop - dt / BreathePopSeconds);
+
+            if (_breatheAlpha <= 0f)
+            {
+                _breatheHint.style.display = DisplayStyle.None;
+                return;
+            }
+            _breatheHint.style.display = DisplayStyle.Flex;
+
+            float urgency = 1f - Mathf.Clamp01(air / BreatheShowBelow);           // 0 at 30 %, 1 at 0 %
+            float pulse   = 0.5f + 0.5f * Mathf.Sin(Time.time * Mathf.Lerp(4f, 10f, urgency));
+            _breatheHint.style.opacity = _breatheAlpha * Mathf.Lerp(0.65f, 1f, pulse);
+            _breatheHint.style.color   = new StyleColor(air < 15f ? Color.Lerp(ColAmber, ColDanger, pulse) : ColAmber);
+
+            float scale = 1f + 0.18f * _breathePop + 0.04f * pulse;
+            _breatheHint.style.scale = new StyleScale(new Scale(new Vector3(scale, scale, 1f)));
         }
 
         /// <summary>
@@ -706,6 +760,37 @@ namespace HollowLines.View
             _graceFuse.style.backgroundColor = new StyleColor(ColGold);
             _graceFuse.style.display         = DisplayStyle.None;
             bg.Add(_graceFuse);
+
+            // R6.3 hint: centred just above the bar, on the root so it isn't clipped by the section.
+            // Dark pill + outline: bare amber text vanished against the amber/pink blocks behind it.
+            var hintRow = new VisualElement();
+            hintRow.style.position   = Position.Absolute;
+            hintRow.style.left       = 0f;
+            hintRow.style.right      = 0f;
+            hintRow.style.bottom     = 48f;
+            hintRow.style.alignItems = Align.Center;
+            hintRow.pickingMode      = PickingMode.Ignore;
+            root.Add(hintRow);
+
+            _breatheHint = new Label("FORE POUR RESPIRER !");
+            _breatheHint.style.fontSize                = 26f;
+            _breatheHint.style.color                   = new StyleColor(ColAmber);
+            _breatheHint.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _breatheHint.style.unityTextAlign          = TextAnchor.MiddleCenter;
+            _breatheHint.style.unityTextOutlineWidth   = 0.15f;
+            _breatheHint.style.unityTextOutlineColor   = new StyleColor(Color.black);
+            _breatheHint.style.backgroundColor         = new StyleColor(new Color(0f, 0f, 0f, 0.75f));
+            _breatheHint.style.paddingTop              = 6f;
+            _breatheHint.style.paddingBottom           = 6f;
+            _breatheHint.style.paddingLeft             = 18f;
+            _breatheHint.style.paddingRight            = 18f;
+            _breatheHint.style.borderTopLeftRadius     = 8f;
+            _breatheHint.style.borderTopRightRadius    = 8f;
+            _breatheHint.style.borderBottomLeftRadius  = 8f;
+            _breatheHint.style.borderBottomRightRadius = 8f;
+            _breatheHint.style.display                 = DisplayStyle.None;
+            _breatheHint.pickingMode                   = PickingMode.Ignore;
+            hintRow.Add(_breatheHint);
         }
 
         // ─────────────────────────────────────────────────────────────────────

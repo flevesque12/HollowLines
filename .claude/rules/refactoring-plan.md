@@ -94,7 +94,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R5.16 ✅ | AudioManager: enemy SFX (chirp, crunch, boop, boom) | Audio check |
 | R5.17 ✅ | EnemyView: enemy sprites on grid (dormant/active states) | Visual check, 333/333 |
 
-### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (R6.1-R6.2 ✅)
+### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (R6.1-R6.3 ✅)
 
 > **Source:** `FEEDBACK-COMPILATION.md` (16 items, F01–F16).
 > **Detailed prompts:** `PROMPTS-CLAUDE-CODE-R6.md` (R6.1–R6.18).
@@ -106,7 +106,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 |---|---|---|---|
 | R6.1 ✅ | **DeathTracker** + death recap screen — 10 new, 353/353 | F01 | 🆕 `Core/DeathTracker.cs`, `View/DeathRecapView.cs`, GameBootstrap |
 | R6.2 ✅ | **AirSystem** start buffer + reduced initial drain — 13 new, 366/366, + HUD grace cue | F02 | `Core/AirSystem.cs`, `CampaignManager` |
-| R6.3 | **Drill-to-breathe popup** when air < 30% | F02 | `View/HUDView.cs` |
+| R6.3 ✅ | **Drill-to-breathe popup** when air < 30% — visual check, 366/366 | F02 | `View/HUDView.cs` |
 | R6.4 | **Enemy visibility** — unique color, pulse, "!" icon, distinct SFX | F04 | `View/EnemyView.cs`, `View/VfxManager.cs`, `View/AudioManager.cs` |
 | R6.5 | **Air capsule icon** redesign | F05 | `View/BoardView.cs`, `Resources/Tiles/` |
 
