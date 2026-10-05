@@ -38,6 +38,29 @@ namespace HollowLines.View
         private float       _airFlashTimer;
         private const float AirFlashSeconds = 0.35f;
 
+        // ── R6.6 drill score popups (F07) ─────────────────────────────────────
+        // "+30 ×3" rising off every drilled cell, so the player SEES that drilling pays (design
+        // rule 1). World-anchored: each popup keeps its world position and is re-projected every
+        // frame, so it rides with the board while the camera follows the avatar down. Pooled —
+        // a fast player drills ~7 cells/s, so allocating a Label per drill would churn the GC.
+        private sealed class DrillPopup
+        {
+            public Label   Label;
+            public Vector3 World;
+            public float   Age;
+            public bool    Live;
+        }
+        private VisualElement              _root;
+        private readonly System.Collections.Generic.List<DrillPopup> _drillPopups =
+            new System.Collections.Generic.List<DrillPopup>();
+        private const int   DrillPopupPool     = 16;
+        private const float DrillPopupLife     = 0.7f;
+        private const float DrillPopupRise     = 0.7f;  // cells risen over its life
+        private const float DrillPopupStartY   = 0.1f;  // cells above the drilled cell's centre
+        // To the RIGHT of the cell, left-aligned: drilling down, the avatar falls into the drilled cell,
+        // so a popup centred on it sat right on the driller (screenshot check).
+        private const float DrillPopupOffsetX  = 0.6f;
+
         // ── R6.3 "drill to breathe" hint (F02) ────────────────────────────────
         // v3.1 made drilling the main air source, but nothing ever said so — new players watched the
         // bar empty without knowing the answer was under their feet. Shown above the air bar (the
@@ -281,6 +304,7 @@ namespace HollowLines.View
 
             TickAirBufferCue(dt);
             TickBreatheHint(dt);
+            TickDrillPopups(dt);
 
             if (_chainHideTimer > 0f)
             {
@@ -421,6 +445,78 @@ namespace HollowLines.View
                 case CellType.ColorC: return ColBlockC;
                 default:              return Color.white;
             }
+        }
+
+        /// <summary>
+        /// R6.6: a small "+N" rising off a drilled cell. `points` is what the drill actually earned
+        /// (GameBootstrap measures the score delta, so streak × base and a drilled diamond's +150 are
+        /// both included without duplicating any formula here). Coloured and sized by the streak;
+        /// "×N" is appended from a ×2 streak up, so the multiplier is visible, not just the total.
+        /// Call after StreakTracker.NotifyDrill so the colour is the current streak's.
+        ///
+        /// `buildsStreak` = this drill was a downward drill on a fusable colour, i.e. it grew or reset
+        /// the streak. A lateral/upward drill (v3.1: streak-neutral) still PAYS the current multiplier
+        /// — rule 1, unchanged — but showing "×4" in teal over a pink block it doesn't belong to read
+        /// as "this block is part of the run". So those get a plain white "+40": same points, no claim.
+        /// (Dev playtest, 2026-10-05 — option A. See refactoring-plan.md R6.11 note before changing.)
+        /// </summary>
+        public void ShowDrillPopup(Vector3 worldCellCentre, int points, int streak, bool buildsStreak = true)
+        {
+            if (!_built || points <= 0) return;
+
+            DrillPopup p = null;
+            foreach (DrillPopup c in _drillPopups)
+                if (!c.Live) { p = c; break; }
+            if (p == null)
+            {
+                // Pool exhausted (very fast drilling): recycle the oldest one.
+                p = _drillPopups[0];
+                foreach (DrillPopup c in _drillPopups)
+                    if (c.Age > p.Age) p = c;
+            }
+
+            bool streaking = buildsStreak && streak >= 2;
+            p.Label.text = streaking ? $"+{points} ×{streak}" : $"+{points}";
+            // Lifted toward white: raw block colours (teal especially) were too dark on the black well.
+            p.Label.style.color    = new StyleColor(streaking ? Color.Lerp(StreakColor(), Color.white, 0.3f) : Color.white);
+            p.Label.style.fontSize = 18f + 2f * Mathf.Min(streaking ? streak : 1, 6);
+            p.World = worldCellCentre;
+            p.Age   = 0f;
+            p.Live  = true;
+            p.Label.style.display = DisplayStyle.Flex;
+            PlaceDrillPopup(p);
+        }
+
+        private void TickDrillPopups(float dt)
+        {
+            if (!_built) return;
+            foreach (DrillPopup p in _drillPopups)
+            {
+                if (!p.Live) continue;
+                p.Age += dt;
+                if (p.Age >= DrillPopupLife)
+                {
+                    p.Live = false;
+                    p.Label.style.display = DisplayStyle.None;
+                    continue;
+                }
+                PlaceDrillPopup(p);
+            }
+        }
+
+        /// <summary>World → panel every frame (the camera moves); rise, and fade over the second half.</summary>
+        private void PlaceDrillPopup(DrillPopup p)
+        {
+            Camera cam = Camera.main;
+            if (cam == null || _root?.panel == null) return;
+
+            float t = p.Age / DrillPopupLife;
+            Vector3 world = p.World + new Vector3(DrillPopupOffsetX, DrillPopupStartY + DrillPopupRise * (1f - (1f - t) * (1f - t)), 0f);
+            Vector2 panelPos = RuntimePanelUtils.CameraTransformWorldToPanel(_root.panel, world, cam);
+
+            p.Label.style.left    = panelPos.x;
+            p.Label.style.top     = panelPos.y;
+            p.Label.style.opacity = t < 0.5f ? 1f : 1f - (t - 0.5f) * 2f;
         }
 
         /// <summary>Latest popup wins — a burst during a bomb chain replaces the older line.</summary>
@@ -574,11 +670,32 @@ namespace HollowLines.View
             doc.panelSettings = panelSettings;
             var root = doc.rootVisualElement;
             root.style.flexGrow = 1f;
+            _root = root;
 
             BuildTopBar(root);
             BuildChainLabel(root);
             BuildPopupLabel(root);
             BuildAirBar(root);
+            BuildDrillPopups(root);
+        }
+
+        /// <summary>R6.6 pool. Left edge on the anchor, vertically centred (-50 % Y translate); never pickable.</summary>
+        private void BuildDrillPopups(VisualElement root)
+        {
+            for (int i = 0; i < DrillPopupPool; i++)
+            {
+                var l = new Label();
+                l.style.position                = Position.Absolute;
+                l.style.unityFontStyleAndWeight = FontStyle.Bold;
+                l.style.unityTextOutlineWidth   = 0.3f;
+                l.style.unityTextOutlineColor   = new StyleColor(Color.black);
+                l.style.translate               = new Translate(new Length(0f, LengthUnit.Percent),
+                                                                new Length(-50f, LengthUnit.Percent));
+                l.style.display                 = DisplayStyle.None;
+                l.pickingMode                   = PickingMode.Ignore;
+                root.Add(l);
+                _drillPopups.Add(new DrillPopup { Label = l });
+            }
         }
 
         private void BuildTopBar(VisualElement root)

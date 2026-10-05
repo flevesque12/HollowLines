@@ -281,6 +281,15 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
   slides pale → cyan with `StartBufferFactor`. Polled in `Update` (`TickAirBufferCue`), because
   `AirChanged` stays silent while nothing drains. Danger red (< 25 %) always wins. The fuse was white
   first — invisible on the pale fill in a screenshot, so it's gold.
+- 🆕R6.6 **Drill score popups** (F07): `HUDView.ShowDrillPopup(worldCellCentre, points, streak)` —
+  "+30 ×3" rising 0.7 cell over 0.7 s, fading over the second half, **right of the drilled cell**
+  (centred on it, it sat on the driller, who falls into that cell). Colour = streak colour lifted 30 %
+  toward white (raw teal was too dark on the well); size 18 → 30 px with the streak; "×N" from ×2 up.
+  Pool of 16 labels (oldest recycled), each keeps its WORLD position and is re-projected every frame
+  (`RuntimePanelUtils.CameraTransformWorldToPanel`), so it rides with the board as the camera follows.
+  **Points = score delta measured around GameBootstrap's whole `Drilled` handler** — includes the
+  streak multiplier and a drilled diamond's +150, duplicates no formula, and is independent of
+  subscription order. Separate from the centre celebration popup (bursts/chains/Perfect Clear).
 - 🆕R6.3 **"FORE POUR RESPIRER !" hint** (F02) — centred just above the air bar (not the centre
   popup slot: that's for celebrations and sits over the avatar). Shows below 30 % air, hides at 35 %
   (hysteresis, so drilling at the edge doesn't flicker) or at 0. Eased fade; pulse speeds up as the

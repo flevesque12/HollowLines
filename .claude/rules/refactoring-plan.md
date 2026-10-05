@@ -94,7 +94,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R5.16 ✅ | AudioManager: enemy SFX (chirp, crunch, boop, boom) | Audio check |
 | R5.17 ✅ | EnemyView: enemy sprites on grid (dormant/active states) | Visual check, 333/333 |
 
-### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (Sprint 1 ✅ R6.1-R6.5)
+### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (Sprint 1 ✅ R6.1-R6.5, Sprint 2: R6.6 ✅)
 
 > **Source:** `FEEDBACK-COMPILATION.md` (16 items, F01–F16).
 > **Detailed prompts:** `PROMPTS-CLAUDE-CODE-R6.md` (R6.1–R6.18).
@@ -114,7 +114,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
-| R6.6 | **Score popups on drilled blocks** | F07 | `View/HUDView.cs` or `View/VfxManager.cs` |
+| R6.6 ✅ | **Score popups on drilled blocks** — visual check, 366/366 | F07 | `View/HUDView.cs` or `View/VfxManager.cs` |
 | R6.7 | **Streak counter** — bigger, "crack" on break | F07 | `View/HUDView.cs`, `View/VfxManager.cs` |
 | R6.8 | **D-pad movement mapping** | F11 | `View/GameInput.cs` |
 | R6.9 | **Volume control menu** | F10 | 🆕 `View/OptionsMenu.cs`, `View/AudioManager.cs`, `View/UIScreenManager.cs` |
@@ -144,3 +144,12 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 > - R6.10 (puzzle tutorial) is the largest single item; may span multiple sessions.
 > - R6.18 (death replay) is the most technically complex — requires frame buffering or state snapshot.
 > - Endless enemy placement (deferred from R5.13) should be addressed as part of R6 or as R6.19.
+> - **⚠️ R6.11 design input — lateral drills and the streak (dev playtest 2026-10-05).** The dev
+>   noticed that drilling sideways through same-colour blocks never grows the streak. That is by
+>   design (v3.1 / R5.1: only DOWNWARD drills build or break it; lateral/upward are neutral). But a
+>   lateral drill still PAYS `10 × CurrentStreak`, whatever its colour — so a pink block drilled
+>   sideways mid-teal-×4 paid "+40 ×4". Interim fix shipped in R6.6 ("option A"): the popup drops the
+>   "×N" for drills that don't build the streak (score unchanged). **The dev wants XP required to
+>   pass to the next tier (R6.11), which may change this design** — if XP is earned from drilling or
+>   streaks, revisit: (B) lateral drills pay base 10 only, (C) lateral same-colour drills also build
+>   the streak, or keep option A. Any change to drill pay needs a harness re-measure (§15).

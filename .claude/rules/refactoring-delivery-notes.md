@@ -532,3 +532,30 @@ SAME path and size (512×512) — `.meta` import settings and `BoardView`'s `Res
 gloss sweep ≈ every 3 s) so a capsule and a diamond never twinkle alike. A drilled capsule falls back
 to the default material through the same path as a drilled diamond. Screenshot-verified at real cell
 size in the tutorial board; 366/366.
+
+---
+
+### R6.6 — Drill score popups (F07) — delivered 2026-10-05
+
+View only, 366/366. Every drill now shows what it earned, right where it happened: "+10", then
+"+20 ×2", "+30 ×3"… — a visible staircase that makes the streak multiplier legible (design rule 1,
+"drilling IS the reward"). Details in §5.9.
+
+- **Where the number comes from:** GameBootstrap snapshots `Score` at the top of the `Drilled` handler
+  and passes the delta at the bottom. Rejected alternatives: re-deriving `10 × streak` in the view
+  (duplicates ScoreSystem, misses a drilled diamond's +150), or pairing `OnScore(Streak)` with
+  `Drilled` in HUDView (fragile — depends on which handler GameBootstrap subscribed first).
+- **Two screenshot fixes:** centred on the cell the popup covered the avatar (it falls into the cell
+  it just drilled) → moved to the right of the cell; raw teal was too dark on the black well → colour
+  lifted 30 % toward white, outline thickened.
+- Verified in play mode: four straight-down drills on the tutorial's teal vein, frozen with
+  `timeScale = 0`, show the +10 / +20 ×2 / +30 ×3 / +40 ×4 staircase in streak colour.
+
+**R6.6 follow-up — lateral drills (dev playtest, same day).** The dev saw the streak not grow when
+drilling sideways through same-colour blocks — confirmed intended (v3.1 vertical-only streak). But the
+popup exposed a quirk: a lateral drill pays `10 × CurrentStreak` regardless of its colour, so it showed
+e.g. a teal "+40 ×4" over a pink block. **Option A shipped:** `ShowDrillPopup(..., buildsStreak)` —
+GameBootstrap passes `direction == Down && oldType.CanFuse()`; drills that don't build the streak get a
+plain white "+40" (no "×N", base size). Score untouched. **Open design question parked on R6.11** (see
+the note under §10 R6 in `refactoring-plan.md`): the XP-to-next-tier system may change how lateral
+drills should pay.

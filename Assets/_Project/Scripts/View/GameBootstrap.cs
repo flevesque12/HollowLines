@@ -365,6 +365,7 @@ namespace HollowLines.View
             // so grabbing air mid-streak is never a punishment.
             _avatar.Drilled += (drilledCell, oldType, direction) =>
             {
+                int scoreBefore = _scoreSystem.Score; // R6.6: the popup shows what THIS drill earned
                 _streakTracker.NotifyDrill(oldType, direction);
                 _scoreSystem.AwardDrill(_streakTracker.CurrentStreak, _streakTracker.CurrentColor);
                 _airSystem.RestoreDrill();
@@ -373,6 +374,14 @@ namespace HollowLines.View
                 if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(drilledCell); // R4
                 _bombSystem.NotifyDrilled(drilledCell);
                 _enemySystem.NotifyAdjacentDrill(drilledCell); // R5.9: wakes a dormant neighbor
+
+                // R6.6 (F07): "+30 ×3" off the drilled cell. Score delta, not a formula: it includes the
+                // streak multiplier and a drilled diamond's +150, and can't drift from ScoreSystem.
+                // Only a downward drill on a fusable colour builds the streak (v3.1, StreakTracker); a
+                // lateral one still pays ×streak but its popup doesn't claim the "×N" (R6.6 option A).
+                bool buildsStreak = direction == DrillDirection.Down && oldType.CanFuse();
+                _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(drilledCell)),
+                                    _scoreSystem.Score - scoreBefore, _streakTracker.CurrentStreak, buildsStreak);
             };
 
             // ── Chunk gravity + burst ────────────────────────────────────────
