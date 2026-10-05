@@ -280,7 +280,11 @@ namespace HollowLines.View
         // Level loading
         // ─────────────────────────────────────────────────────────────────────
 
-        private void LoadLevel()
+        /// <param name="freshBoard">
+        /// False only for an endless seam: the run continues, so the air start buffer (R6.2) is not
+        /// re-opened — otherwise every 60 rows would hand out a free breather.
+        /// </param>
+        private void LoadLevel(bool freshBoard = true)
         {
             // Tear down previous board views (queued for end-of-frame).
             if (_boardViewGo != null)  Destroy(_boardViewGo);
@@ -325,6 +329,13 @@ namespace HollowLines.View
                 : useCampaign
                     ? CampaignManager.DrainRateForLevel(_campaign.CurrentLevel)
                     : AirSystem.DefaultDrainRate;
+
+            // R6.2 (F02): open every fresh board with a grace window + drain ramp, so a new player can
+            // read the board before the clock bites. The tutorial reads CurrentLevel = 1 like drain/wobble.
+            if (freshBoard)
+                _airSystem.BeginStartBuffer(!_endlessMode && useCampaign
+                    ? CampaignManager.AirStartGraceForLevel(_campaign.CurrentLevel)
+                    : AirSystem.DefaultStartGrace);
 
             // Rebuild grid-dependent systems.
             _avatar       = new AvatarModel(_grid, _spawn);
@@ -561,7 +572,7 @@ namespace HollowLines.View
         {
             _cameraShake.StopShake();
             _endless.AdvanceSegment();
-            LoadLevel();
+            LoadLevel(freshBoard: false); // same run — no new air start buffer
             _screens.PlayFadeIn(SegmentFadeSeconds);
             Debug.Log($"[Endless] Segment {_endless.SegmentIndex} — profondeur {_endless.Depth} m, drain {_endless.DrainRate:0.0} %/s");
         }

@@ -28,6 +28,15 @@ namespace HollowLines.View
         private Label         _streakLabel;
         private Label         _diamondLabel;
         private VisualElement _airFill;
+        private Label         _airCaption;
+        private VisualElement _graceFuse;   // R6.2: thin strip over the air bar that burns down through the grace window
+
+        // ── R6.2 air start-buffer cue ─────────────────────────────────────────
+        // Grace: pale, slowly shimmering fill + "AIR · 3" countdown + a shrinking fuse strip.
+        // Grace end: a short white flash. Ramp: the fill slides from pale to cyan as the drain wakes up.
+        private bool        _wasInGrace;
+        private float       _airFlashTimer;
+        private const float AirFlashSeconds = 0.35f;
         private VisualElement[] _heartIcons;
         private Label         _chainLabel;
         private Label         _popupLabel;
@@ -67,6 +76,7 @@ namespace HollowLines.View
         // ── Colors (match BoardView palette) ─────────────────────────────────
         private static readonly Color ColAmber  = new Color(0.94f, 0.62f, 0.15f);
         private static readonly Color ColCyan   = new Color(0.35f, 0.85f, 0.95f);
+        private static readonly Color ColAirIdle = new Color(0.78f, 0.93f, 1.00f); // R6.2: "frozen" air (grace)
         private static readonly Color ColDanger = new Color(0.95f, 0.25f, 0.10f);
         private static readonly Color ColGold   = new Color(1.00f, 0.85f, 0.20f);
         private static readonly Color ColDim    = new Color(0.20f, 0.16f, 0.12f);
@@ -254,6 +264,8 @@ namespace HollowLines.View
         {
             float dt = Time.deltaTime;
 
+            TickAirBufferCue(dt);
+
             if (_chainHideTimer > 0f)
             {
                 _chainHideTimer -= dt;
@@ -409,7 +421,68 @@ namespace HollowLines.View
         {
             float pct = Mathf.Clamp01(air / AirSystem.MaxAir);
             _airFill.style.width = new StyleLength(new Length(pct * 100f, LengthUnit.Percent));
-            _airFill.style.backgroundColor = new StyleColor(pct < 0.25f ? ColDanger : ColCyan);
+            _airFill.style.backgroundColor = new StyleColor(AirColor(pct));
+        }
+
+        /// <summary>
+        /// Air fill color. Danger always wins; otherwise it tells the start-buffer story (R6.2):
+        /// pale + shimmer while the clock is stopped, pale→cyan while the drain ramps up, white flash
+        /// the moment it starts, plain cyan once the buffer is over.
+        /// </summary>
+        private Color AirColor(float pct)
+        {
+            if (pct < 0.25f) return ColDanger;
+
+            Color c;
+            if (_air.InStartGrace)
+            {
+                // Slow breathing shimmer — scaled time, so it freezes with the game when paused.
+                float s = 0.5f + 0.5f * Mathf.Sin(Time.time * 2.4f);
+                c = Color.Lerp(ColAirIdle, Color.white, 0.35f * s);
+            }
+            else
+            {
+                float ramp = Mathf.InverseLerp(AirSystem.StartDrainFactor, 1f, _air.StartBufferFactor);
+                c = Color.Lerp(ColAirIdle, ColCyan, ramp);
+            }
+
+            if (_airFlashTimer > 0f)
+                c = Color.Lerp(c, Color.white, _airFlashTimer / AirFlashSeconds);
+            return c;
+        }
+
+        /// <summary>
+        /// Per-frame part of the R6.2 cue. Polled, not evented: AirChanged deliberately stays silent
+        /// through the grace window (nothing drained), so the countdown and shimmer have to read the
+        /// buffer state themselves.
+        /// </summary>
+        private void TickAirBufferCue(float dt)
+        {
+            if (!_built || _air == null) return;
+
+            bool inGrace = _air.InStartGrace;
+            if (_wasInGrace && !inGrace && _air.StartBufferFactor < 1f)
+                _airFlashTimer = AirFlashSeconds; // the clock just started (not a Reset mid-grace)
+            _wasInGrace = inGrace;
+
+            if (_airFlashTimer > 0f)
+                _airFlashTimer = Mathf.Max(0f, _airFlashTimer - dt);
+
+            if (inGrace)
+            {
+                float left = _air.StartGraceRemaining;
+                _airCaption.text = $"AIR · {Mathf.CeilToInt(left)}";
+                _graceFuse.style.display = DisplayStyle.Flex;
+                float frac = _air.StartGraceDuration > 0f ? left / _air.StartGraceDuration : 0f;
+                _graceFuse.style.width = new StyleLength(new Length(frac * 100f, LengthUnit.Percent));
+            }
+            else
+            {
+                _airCaption.text = "AIR";
+                _graceFuse.style.display = DisplayStyle.None;
+            }
+
+            _airFill.style.backgroundColor = new StyleColor(AirColor(Mathf.Clamp01(_air.Air / AirSystem.MaxAir)));
         }
 
         private void RefreshHearts(int hearts)
@@ -596,10 +669,10 @@ namespace HollowLines.View
             section.style.right    = 16f;
             root.Add(section);
 
-            var caption = new Label("AIR");
-            StyleCaption(caption);
-            caption.style.marginBottom = 4f;
-            section.Add(caption);
+            _airCaption = new Label("AIR");
+            StyleCaption(_airCaption);
+            _airCaption.style.marginBottom = 4f;
+            section.Add(_airCaption);
 
             var bg = new VisualElement();
             bg.style.height                    = 10f;
@@ -621,6 +694,18 @@ namespace HollowLines.View
             _airFill.style.borderBottomLeftRadius = 5f;
             _airFill.style.backgroundColor       = new StyleColor(ColCyan);
             bg.Add(_airFill);
+
+            // R6.2 grace fuse: a 4 px gold strip along the top of the bar, burning right-to-left.
+            // Gold, not white — white vanished against the pale grace fill (screenshot check).
+            _graceFuse = new VisualElement();
+            _graceFuse.style.position        = Position.Absolute;
+            _graceFuse.style.top             = 0f;
+            _graceFuse.style.left            = 0f;
+            _graceFuse.style.height          = 4f;
+            _graceFuse.style.width           = new StyleLength(new Length(100f, LengthUnit.Percent));
+            _graceFuse.style.backgroundColor = new StyleColor(ColGold);
+            _graceFuse.style.display         = DisplayStyle.None;
+            bg.Add(_graceFuse);
         }
 
         // ─────────────────────────────────────────────────────────────────────

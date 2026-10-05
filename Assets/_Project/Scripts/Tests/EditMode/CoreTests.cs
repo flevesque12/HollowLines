@@ -726,6 +726,161 @@ namespace HollowLines.Tests
             Assert.IsFalse(air.IsEmpty);
         }
 
+        // ── R6.2 start buffer ───────────────────────────────────────
+
+        [Test]
+        public void StartBuffer_NotBegun_FactorIsOne_FullDrainFromFrameZero()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            Assert.AreEqual(1f, air.StartBufferFactor, Delta);
+            Assert.IsFalse(air.InStartGrace);
+
+            air.Tick(1f);
+            Assert.AreEqual(AirSystem.MaxAir - 4f, air.Air, Delta, "opt-in: no buffer unless BeginStartBuffer is called");
+        }
+
+        [Test]
+        public void StartBuffer_Grace_DrainsNothing_AndStaysSilent()
+        {
+            var air = new AirSystem { DrainRate = 7f };
+            int changed = 0;
+            air.AirChanged += _ => changed++;
+            air.BeginStartBuffer(3f);
+
+            air.Tick(2.9f);
+
+            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
+            Assert.IsTrue(air.InStartGrace);
+            Assert.AreEqual(0f, air.EffectiveDrainRate, Delta);
+            Assert.AreEqual(0, changed, "nothing drained → no HUD update");
+        }
+
+        [Test]
+        public void StartGraceRemaining_CountsDown_ThenZero()
+        {
+            var air = new AirSystem();
+            Assert.AreEqual(0f, air.StartGraceRemaining, Delta, "no buffer → no countdown");
+
+            air.BeginStartBuffer(3f);
+            Assert.AreEqual(3f, air.StartGraceRemaining, Delta);
+            Assert.AreEqual(3f, air.StartGraceDuration, Delta);
+
+            air.Tick(1.25f);
+            Assert.AreEqual(1.75f, air.StartGraceRemaining, Delta);
+
+            air.Tick(2f);
+            Assert.AreEqual(0f, air.StartGraceRemaining, Delta, "in the ramp, the countdown is over");
+        }
+
+        [Test]
+        public void StartBuffer_RampBeginsAtStartDrainFactor()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            air.BeginStartBuffer(0f);
+
+            Assert.IsFalse(air.InStartGrace);
+            Assert.AreEqual(AirSystem.StartDrainFactor, air.StartBufferFactor, Delta);
+            Assert.AreEqual(4f * AirSystem.StartDrainFactor, air.EffectiveDrainRate, Delta);
+        }
+
+        [Test]
+        public void StartBuffer_WholeWindow_DrainsExactlyTheRampArea()
+        {
+            // 3 s grace (0) + 12 s ramp 0.5→1 (area 0.5·12 + ½·(0.5/12)·12² = 9 full-rate seconds).
+            var air = new AirSystem { DrainRate = 4f };
+            air.BeginStartBuffer(3f);
+
+            air.Tick(3f + AirSystem.StartRampDuration);
+
+            Assert.AreEqual(AirSystem.MaxAir - 4f * 9f, air.Air, 0.01f);
+            Assert.AreEqual(1f, air.StartBufferFactor, Delta, "buffer is over");
+        }
+
+        [Test]
+        public void StartBuffer_ManySmallTicks_MatchOneBigTick()
+        {
+            var big = new AirSystem { DrainRate = 7f };
+            var small = new AirSystem { DrainRate = 7f };
+            big.BeginStartBuffer(3f);
+            small.BeginStartBuffer(3f);
+
+            big.Tick(10f);
+            for (int i = 0; i < 600; i++) small.Tick(10f / 600f);
+
+            Assert.AreEqual(big.Air, small.Air, 0.01f, "drain is integrated, not frame-rate dependent");
+        }
+
+        [Test]
+        public void StartBuffer_FrameStraddlingGraceEnd_DrainsOnlyThePostGracePart()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            air.BeginStartBuffer(3f);
+
+            air.Tick(4f); // 3 s grace + 1 s of ramp: area 0.5 + ½·(0.5/12)·1² ≈ 0.5208
+
+            Assert.AreEqual(AirSystem.MaxAir - 4f * 0.520833f, air.Air, Delta);
+        }
+
+        [Test]
+        public void StartBuffer_AfterRamp_DrainsAtFullRate()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            air.BeginStartBuffer(3f);
+            air.Tick(3f + AirSystem.StartRampDuration);
+            float before = air.Air;
+
+            air.Tick(1f);
+
+            Assert.AreEqual(before - 4f, air.Air, Delta);
+        }
+
+        [Test]
+        public void StartBuffer_Reset_CancelsIt()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            air.BeginStartBuffer(3f);
+            air.Reset();
+
+            air.Tick(1f);
+
+            Assert.AreEqual(AirSystem.MaxAir - 4f, air.Air, Delta);
+        }
+
+        [Test]
+        public void StartBuffer_BeginAgain_RestartsTheClock()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            air.BeginStartBuffer(3f);
+            air.Tick(10f);
+            float before = air.Air;
+
+            air.BeginStartBuffer(3f);
+            air.Tick(2f);
+
+            Assert.AreEqual(before, air.Air, Delta, "a new board opens a new grace window");
+        }
+
+        [Test]
+        public void StartBuffer_NegativeGrace_ClampsToZero()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            air.BeginStartBuffer(-5f);
+
+            Assert.IsFalse(air.InStartGrace);
+            Assert.AreEqual(AirSystem.StartDrainFactor, air.StartBufferFactor, Delta);
+        }
+
+        [Test]
+        public void StartBuffer_RestoresStillWorkDuringGrace()
+        {
+            var air = new AirSystem { DrainRate = 4f };
+            air.Tick(5f);                 // 80 %
+            air.BeginStartBuffer(3f);
+            air.RestoreCapsule();
+
+            Assert.AreEqual(80f + AirSystem.CapsuleRestoreAmount, air.Air, Delta);
+        }
+
         [Test]
         public void Tick_DrainsAtCorrectRate()
         {
@@ -3472,6 +3627,15 @@ namespace HollowLines.Tests
             Assert.AreEqual(0.8f, CampaignManager.WobbleDurationForLevel(3));
             Assert.AreEqual(0.6f, CampaignManager.WobbleDurationForLevel(4), "GDD wobble from level 4 on");
             Assert.AreEqual(0.6f, CampaignManager.WobbleDurationForLevel(10));
+        }
+
+        [Test]
+        public void AirStartGraceForLevel_LongerOnOnboardingLevels()
+        {
+            Assert.AreEqual(5f, CampaignManager.AirStartGraceForLevel(1));
+            Assert.AreEqual(5f, CampaignManager.AirStartGraceForLevel(3));
+            Assert.AreEqual(AirSystem.DefaultStartGrace, CampaignManager.AirStartGraceForLevel(4));
+            Assert.AreEqual(AirSystem.DefaultStartGrace, CampaignManager.AirStartGraceForLevel(10));
         }
 
         [Test]

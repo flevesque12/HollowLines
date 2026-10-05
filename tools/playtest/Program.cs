@@ -45,9 +45,34 @@ foreach (float cadence in new[] { 0.15f, 0.30f })
     {
         var sim = new Sim(StrateGenerator.CampaignBoard(level));
         sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
+        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
         sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
         var bot = new TunnelBot();
         var r = sim.Run(bot, cadence, maxTime: 400f, Dt);
+        Console.WriteLine(r.Row(level));
+    }
+    Console.WriteLine();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 1b) R6.2 (F02) newcomer: reads the board for 4 s, then plays slowly. This is the player the
+//     feedback came from — "je manque d'air tout de suite" — and the one the start buffer targets.
+// ─────────────────────────────────────────────────────────────────────────────
+foreach (var (name, make, cadence) in new (string, Func<IBot>, float)[]
+{
+    ("tunnel", () => new TunnelBot(),   0.60f),
+    ("row-clr", () => new RowClearBot(), 0.50f),
+})
+{
+    Console.WriteLine($"=== NEWCOMER — {name}, 4 s idle then 1 action / {cadence:0.00} s ===");
+    Console.WriteLine($"{"lvl",3} {"outcome",-10} {"time",6} {"air@end",7} {"airMin",6} {"hearts-",7} {"score",6} {"depth",5} {"rows",4}");
+    for (int level = 1; level <= 10; level++)
+    {
+        var sim = new Sim(StrateGenerator.CampaignBoard(level));
+        sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
+        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
+        sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
+        var r = sim.Run(new HesitantBot(make(), 4f), cadence, maxTime: 400f, Dt);
         Console.WriteLine(r.Row(level));
     }
     Console.WriteLine();
@@ -67,6 +92,7 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
     {
         var sim = new Sim(StrateGenerator.CampaignBoard(level));
         sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
+        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
         sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
         var bot = new RowClearBot();
         var r = sim.Run(bot, cadence, maxTime: 400f, Dt);
@@ -85,6 +111,7 @@ for (int level = 1; level <= 10; level++)
 {
     var sim = new Sim(StrateGenerator.CampaignBoard(level));
     sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
+    sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
     sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
     var r = sim.Run(new TunnelBot(), 0.15f, maxTime: 400f, Dt);
     Console.WriteLine(r.RowWithActions(level));
@@ -110,6 +137,7 @@ for (int level = 6; level <= 10; level++)
 
     var sim = new Sim(board);
     sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
+    sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
     sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
     var r = sim.Run(new BombBot(), 0.15f, maxTime: 400f, Dt);
     Console.WriteLine(r.RowWithBombs(level, bombsOnBoard));
@@ -213,6 +241,7 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
         {
             var sim = new Sim(StrateGenerator.CampaignBoard(level));
             sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
+            sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
             sim.Gravity.WobbleDuration = wobble;
             var r = sim.Run(new RowClearBot(), cadence, 400f, Dt);
             Console.WriteLine($"{level,3} {wobble,5:0.0}s {r.Outcome,-10} {r.Time,5:0.0}s {r.AirMin,5:0.0}% {r.HeartsLost,7} {r.Score,6} {r.Bursts,6} {r.BestStreak,6}");
@@ -268,6 +297,7 @@ static (RunResult r, int segments, float drain) RunEndless(Func<IBot> makeBot, i
     p.Endless.DepthChanged     += d    => p.Score.AwardDepth(d);
     p.Endless.DrainRateChanged += rate => p.Air.DrainRate = rate;
     p.Air.DrainRate = p.Endless.DrainRate;
+    p.Air.BeginStartBuffer(); // R6.2: once per run — the seam is the same run continuing
 
     while (!p.Dead && p.Elapsed < maxTime)
     {
@@ -350,8 +380,9 @@ sealed class RunResult
     {
         float fromCapsules = Capsules * AirSystem.CapsuleRestoreAmount;
         float fromBursts   = Bursts   * AirSystem.BurstRestoreAmount;
+        float fromDrills   = Drills   * AirSystem.DrillRestoreAmount;
         return $"{level,3} {Outcome,-10} {Time,5:0.0}s {AirEnd,6:0.0}% {AirMin,5:0.0}% {HeartsLost,7} {Score,6} {Depth,5} {ContentRows,4}" +
-               $" | drain -{AirDrained,5:0.0} caps +{fromCapsules,5:0.0}({Capsules,2}) burst +{fromBursts,5:0.0}({Bursts,2})";
+               $" | drain -{AirDrained,5:0.0} drill +{fromDrills,5:0.0} caps +{fromCapsules,5:0.0}({Capsules,2}) burst +{fromBursts,5:0.0}({Bursts,2})";
     }
 
     public string RowWithActions(int level) =>
@@ -369,6 +400,19 @@ sealed class RunResult
 }
 
 interface IBot { void Act(Sim sim); }
+
+/// <summary>
+/// R6.2 (F02): a first-time player. Stands at spawn reading the board for `idle` seconds, then plays
+/// the inner bot at whatever (slow) cadence the caller runs it. The other bots act from frame 0 at
+/// 4-7 inputs/s, which is exactly the player the air clock was never hurting.
+/// </summary>
+sealed class HesitantBot : IBot
+{
+    readonly IBot _inner;
+    readonly float _idle;
+    public HesitantBot(IBot inner, float idle) { _inner = inner; _idle = idle; }
+    public void Act(Sim sim) { if (sim.SimTime >= _idle) _inner.Act(sim); }
+}
 
 /// <summary>
 /// What survives a board swap. A campaign level is one Sim, but an endless RUN is a chain of Sims
@@ -459,6 +503,7 @@ sealed class Sim
         {
             Streak.NotifyDrill(oldType, direction);
             Score.AwardDrill(Streak.CurrentStreak, Streak.CurrentColor);
+            Air.RestoreDrill(); // R5.2 — was missing here, so every ledger before R6.2 under-counted air
             if (oldType == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
             Bombs.NotifyDrilled(cell);
             _r.Drills++;
@@ -546,10 +591,10 @@ sealed class Sim
             Gravity.Tick(dt, Avatar.Position);
             Chain.Tick(dt);
             Health.Tick(dt);
+            _r.AirDrained += Air.EffectiveDrainRate * dt; // sampled before the tick (R6.2 buffer)
             Air.Tick(dt);
 
             _r.AirMin = Math.Min(_r.AirMin, Air.Air);
-            _r.AirDrained += Air.DrainRate * dt;
 
             if (checkWin && Avatar.Position.Y >= winRow)
             {

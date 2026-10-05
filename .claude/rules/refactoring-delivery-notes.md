@@ -433,3 +433,33 @@ by side** in one row, and the rows are `flexShrink = 0`. Verified in play mode (
 **Test-mode note:** the suite now runs in **EditMode** (PlayMode discovers 0 tests) after the
 "Change and configuration of test script" commit — §13/§14 still say PlayMode.
 
+---
+
+### R6.2 — Air start buffer (F02) — delivered 2026-10-05
+
+`AirSystem.BeginStartBuffer(grace)`: `grace` s of **zero drain**, then a 12 s linear ramp from
+**0.5× to 1×** the drain rate (`DefaultStartGrace` 3 s, `StartRampDuration` 12 s, `StartDrainFactor`
+0.5). This is both halves of the plan line — the "buffer" is the grace window, the "reduced initial
+drain" is the ramp. Net gift: grace + 3 full-rate seconds (= 32 % air on lvl 1-3, 42 % on lvl 4+).
+
+- **Integrated, not sampled:** `Tick` drains `DrainRate × ∫factor`, so one long frame straddling the end
+  of the grace window drains exactly what 60 small ones would (pinned by a test).
+- **Opt-in:** without `BeginStartBuffer` the factor is 1, so no existing test or caller changed.
+  `Reset()` cancels a running buffer; GameBootstrap always resets *then* calls `LoadLevel`, which opens it.
+- **Not on the endless seam:** `LoadLevel(freshBoard: false)` from `AdvanceEndlessSegment`, otherwise
+  every 60 rows would hand out a free breather.
+- **Per-level grace in `CampaignManager.AirStartGraceForLevel`:** 5 s on levels 1-3 (same onboarding
+  split as drain and wobble), 3 s after. **`DrainRateForLevel` was NOT touched** — §15.1 says no
+  drain retune without harness evidence, and the buffer alone fixed the measured F02 failures.
+- Tick no longer fires `AirChanged` for a tick that drained nothing (grace, or `dt <= 0`).
+
+Measured with a new `NEWCOMER` harness profile — see §15.8. Also fixed the harness's missing
+`RestoreDrill()` (drift since R5.2). Play-mode verified: air held at 100 % through the 5 s grace on
+level 1, then read 94.72 % at 2.4 s into the ramp — exactly the integral. 12 new tests, 365/365.
+
+**HUD grace cue (added in the same step, on request):** pale shimmering fill + `AIR · N` countdown +
+a gold fuse strip burning down the bar during grace, a white flash when the clock starts, pale → cyan
+through the ramp (§5.9). Core gained `StartGraceRemaining` / `StartGraceDuration` for the countdown
+(+1 test, 366/366). Screenshot-verified in grace (menu + live) and in the ramp. Deliberately NOT a
+centre-screen "3-2-1" (it would hide the board during the window meant for reading it, and reads as
+"wait" when the player can drill immediately) and no per-second beep (collides with the fuse beep).

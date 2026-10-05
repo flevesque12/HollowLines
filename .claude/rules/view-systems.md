@@ -139,6 +139,13 @@ paths:
 > itself, and the in-play shockwave cascade was kept deliberately (§15.1). Re-measured on settled
 > boards the pacing holds, so these values are final — **do not re-tune them** without new harness
 > evidence.
+>
+> **🆕R6.2 start buffer (F02).** `BeginStartBuffer(grace)` opens a board with `grace` s of zero drain,
+> then a `StartRampDuration` (12 s) linear ramp from `StartDrainFactor` (0.5) to the full rate —
+> integrated, not sampled, so it's frame-rate independent. Opt-in (no call = old behavior), cancelled
+> by `Reset()`. GameBootstrap calls it in `LoadLevel()` on every fresh board, **not** on an endless
+> seam (`LoadLevel(freshBoard: false)`). Grace = `CampaignManager.AirStartGraceForLevel` (5 s on
+> levels 1-3, 3 s after), `DefaultStartGrace` (3 s) for endless/debug. Measured in §15.8.
 
 ### 5.6 ScoreSystem — FULL REWRITE
 **New API:**
@@ -268,6 +275,12 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
 - 🆕R4 **Add:** Diamond counter, under the depth panel — "💎 2/5" in campaign, "💎 7" in Endless.
   Hidden entirely when the board has none (levels 1-3).
 - Score, air bar, hearts: unchanged layout (update score source).
+- 🆕R6.2 **Air start-buffer cue** on the air bar (§5.5): during the grace window the fill turns pale
+  (`ColAirIdle`) with a slow shimmer, the caption counts down (`AIR · 3`), and a 4 px gold fuse strip
+  burns down across the top of the bar; at grace end a 0.35 s white flash; through the ramp the fill
+  slides pale → cyan with `StartBufferFactor`. Polled in `Update` (`TickAirBufferCue`), because
+  `AirChanged` stays silent while nothing drains. Danger red (< 25 %) always wins. The fuse was white
+  first — invisible on the pale fill in a screenshot, so it's gold.
 
 > **Deviation:** the three popups are driven by **`ScoreSystem.OnScore`**, not by subscribing to
 > GravitySystem / BombSystem / CollapseSystem directly. Those events don't carry the point value

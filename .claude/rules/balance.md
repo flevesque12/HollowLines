@@ -333,3 +333,26 @@ seeds so they survive seed variance but fail hard if the rates drift back.
 > ramped to ~9 %/s: for a pure speedrunner the air clock stays soft, the same residual §15.1 accepted
 > for the campaign. If endless wants real descent pressure, the lever is the drain ramp's slope
 > (R3.2 constants), not the terrain — but that needs a *dodging* bot or a human to judge.
+
+### 15.8 R6.2 air start buffer — measured (2026-10-05)
+
+**Harness drift fixed first:** `tools/playtest` never called `Air.RestoreDrill()` (R5.2), so every air
+ledger since R5.2 under-counted income. Fixed, and the ledger now prints `drill +X`.
+
+**New bot profile — `NEWCOMER`** (`HesitantBot`): stands at spawn for 4 s, then plays the tunnel bot at
+0.60 s/action or the row-clear bot at 0.50 s/action. Every other profile acts from frame 0 at 4-7
+inputs/s — exactly the player the air clock was never hurting, which is why F02 never showed up in
+the harness.
+
+| newcomer profile | before (lvl → outcome) | after |
+|---|---|---|
+| tunnel @0.60 s | 1-4 WIN, **5-6 air-death** (~20 s) | **1-6 WIN** (lvl 5-6 end at ~30 % air) |
+| row-clear @0.50 s | air-death on 1,2,3,6,7,8,10 at 16-31 s | runs +5-9 s longer; air-death on 1, 6, 10 only (24-38 s) |
+
+**Unchanged where it should be:** skilled bots (tunnel 0.15/0.30, row-clear 0.15/0.25, bomb hunter)
+keep **identical outcomes** — only `airMin` rises. The farming profiles that suffocated before (row-clear
+lvl 7 and 10, bomb hunter lvl 7-8) **still suffocate**, 3-4 s later. Rule 5 (passive = death) holds;
+the buffer buys reading time, not immunity. Endless outcomes identical (buffer once per run, not per seam).
+
+> Speed players now end levels 1-3 at 100 % air. That is the §15.1 "air is decorative for the optimal
+> line" residual, already accepted — the clock taxes farming and hesitation, not descent.

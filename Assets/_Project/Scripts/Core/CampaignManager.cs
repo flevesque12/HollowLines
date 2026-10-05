@@ -48,6 +48,13 @@ namespace HollowLines.Core
         public static float DrainRateForLevel(int level) => level <= 3 ? 4f : 7f;
 
         /// <summary>
+        /// R6.2 (F02): seconds of zero drain at the start of each campaign board (AirSystem start
+        /// buffer). Levels 1-3 get longer to read the board — same onboarding split as drain and
+        /// wobble. The ramp that follows is the same everywhere (AirSystem.StartRampDuration).
+        /// </summary>
+        public static float AirStartGraceForLevel(int level) => level <= 3 ? 5f : AirSystem.DefaultStartGrace;
+
+        /// <summary>
         /// Campaign wobble telegraph in seconds. The longer window on levels 1-3 slows crush
         /// pressure while players learn to read the telegraph.
         /// From level 4 on, the GDD's 0.6 s applies: dodging inside that window is the skill.
