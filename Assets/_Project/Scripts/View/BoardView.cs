@@ -59,6 +59,12 @@ namespace HollowLines.View
         private static Material _diamondMaterial;
         private static bool _diamondMaterialTried;
 
+        // R6.5 (F05): air capsules shimmer too — a bonus to go get should not sit as still as a block.
+        // Same DiamondShine shader, separate instance tuned slower/softer and cyan, so a capsule and a
+        // diamond never twinkle alike.
+        private static Material _capsuleMaterial;
+        private static bool _capsuleMaterialTried;
+
         // Exit-zone ambient glow (campaign/tutorial only — endless and the debug map have no
         // fixed floor to signal). One wide strip per row, loaded/cached the same way as the
         // diamond material above.
@@ -199,15 +205,38 @@ namespace HollowLines.View
         }
 
         /// <summary>
-        /// R4: Diamond cells get the DiamondShine material (a persistent shimmer, §5.10); every
-        /// other cell — including a diamond that was just drilled to Empty — uses the plain default
+        /// R4: Diamond cells get the DiamondShine material (a persistent shimmer, §5.10); R6.5: air
+        /// capsules get a gentler cyan instance of it. Every other cell — including a diamond that was just drilled to Empty — uses the plain default
         /// sprite material every other tile already renders with.
         /// </summary>
         private static void ApplyMaterial(SpriteRenderer renderer, CellType type)
         {
-            renderer.sharedMaterial = type == CellType.Diamond
-                ? (EnsureDiamondMaterial() ?? _defaultTileMaterial)
-                : _defaultTileMaterial;
+            switch (type)
+            {
+                case CellType.Diamond:    renderer.sharedMaterial = EnsureDiamondMaterial() ?? _defaultTileMaterial; break;
+                case CellType.AirCapsule: renderer.sharedMaterial = EnsureCapsuleMaterial() ?? _defaultTileMaterial; break;
+                default:                  renderer.sharedMaterial = _defaultTileMaterial; break;
+            }
+        }
+
+        private static Material EnsureCapsuleMaterial()
+        {
+            if (_capsuleMaterialTried)
+                return _capsuleMaterial;
+            _capsuleMaterialTried = true;
+
+            Shader shader = Resources.Load<Shader>("Shaders/DiamondShine");
+            if (shader == null)
+                return null;
+
+            _capsuleMaterial = new Material(shader) { name = "CapsuleShine (runtime)" };
+            _capsuleMaterial.SetColor("_ShineColor",    new Color(0.55f, 0.95f, 1f));
+            _capsuleMaterial.SetFloat("_PulseSpeed",    2.2f);  // a breath, faster than the diamond's 1.6
+            _capsuleMaterial.SetFloat("_PulseStrength", 0.18f);
+            _capsuleMaterial.SetFloat("_SweepSpeed",    0.35f); // one slow gloss pass every ~3 s
+            _capsuleMaterial.SetFloat("_SweepWidth",    0.10f);
+            _capsuleMaterial.SetFloat("_SweepStrength", 0.45f);
+            return _capsuleMaterial;
         }
 
         private static Material EnsureDiamondMaterial()

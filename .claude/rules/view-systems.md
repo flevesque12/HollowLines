@@ -334,6 +334,9 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
     tile's content, not an overlay. `BoardView.ApplyMaterial()` assigns it only to `CellType.Diamond`
     cells and reverts to the plain default material the instant one is drilled. Same missing-shader
     fallback contract as `FuseGlow`.
+  - **🆕R6.5 Air capsule shimmer (BoardView):** AirCapsule cells get a second `DiamondShine`
+    instance (`EnsureCapsuleMaterial`) — cyan, softer and slower than the diamond's, so the two
+    never twinkle alike. The tile itself is the procedural "AIR" pill from `Editor/CapsuleTileGenerator.cs`.
   - **Collect sparkle (VfxManager):** a bright icy white-blue particle burst + ripple, fired from
     `SpawnDiamondSparkle()`, wired to all three collection sources — `_avatar.Drilled` (diamond
     branch), `_gravity.DiamondLiberated`, `_bombs.DiamondLiberated` — via one shared handler,
