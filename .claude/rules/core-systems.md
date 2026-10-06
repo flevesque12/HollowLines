@@ -393,3 +393,11 @@ Pre-authored micro-puzzles for the tutorial system. Each puzzle isolates one mec
 ### 6.9 ProgressionSystem (Core/) — 🆕R6  🟡 PLANNED (R6.11)
 XP-based unlock of game mechanics. Tracks player XP across sessions (PlayerPrefs-backed).
 Determines which mechanics are available at the player's current level.
+
+> **🆕R6.13 BombSystem blast preview (2026-10-06).** `ArmedRadiusAt(cell)` (Direct/Chain radius, 0 if
+> unlit), `CopyArmedCells(list)`, and `PredictBlastZone(cell, Dictionary<GridPos,int> zone)` — the
+> cells the lit bomb will hit, chain included, mapped to chain depth (0 = own cross). It walks the same
+> cross as `Blast` (shared `CrossDx/CrossDy`; passes through everything, only the board edge stops an
+> arm) and chains through Bomb cells with `ChainBlastRadius`, so on an unchanged board it equals the
+> union of `BlastResolved` cells — pinned by `PredictBlastZone_MatchesWhatTheBlastActuallyReaches`.
+> 7 tests. Read-only: it never arms, mutates or fires anything.

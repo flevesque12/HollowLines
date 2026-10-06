@@ -94,7 +94,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R5.16 ✅ | AudioManager: enemy SFX (chirp, crunch, boop, boom) | Audio check |
 | R5.17 ✅ | EnemyView: enemy sprites on grid (dormant/active states) | Visual check, 333/333 |
 
-### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (Sprint 1 ✅ R6.1-R6.5, Sprint 2 ✅ R6.6-R6.9, Sprint 3: R6.12 ✅, R6.14 ✅ pulled forward)
+### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (Sprint 1 ✅ R6.1-R6.5, Sprint 2 ✅ R6.6-R6.9, Sprint 3: R6.12-R6.13 ✅, R6.14 ✅ pulled forward)
 
 > **Source:** `FEEDBACK-COMPILATION.md` (16 items, F01–F16).
 > **Detailed prompts:** `PROMPTS-CLAUDE-CODE-R6.md` (R6.1–R6.18).
@@ -126,7 +126,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R6.10 | **Puzzle tutorial system** | F08, F09 | 🆕 `Core/PuzzleBoard.cs`, 🆕 `View/PuzzleTutorialView.cs`, `View/UIScreenManager.cs` |
 | R6.11 | **XP progression system** | F06 | 🆕 `Core/ProgressionSystem.cs`, `View/UIScreenManager.cs`, PlayerPrefs |
 | R6.12 ✅ | **Help page in-game** — "Aide" (main menu + pause), 8 pages with board icons — play-mode check, 369/369 | F16 | 🆕 `View/HelpScreenView.cs`, `View/UIScreenManager.cs` |
-| R6.13 | **Blast radius visual feedback** | F03 | `View/VfxManager.cs`, `Core/BombSystem.cs` |
+| R6.13 ✅ | **Blast radius visual feedback** — predicted zone framed while the fuse burns (red own cross, pale-yellow chain, flares if you're inside) — 7 new, 376/376 | F03 | `View/VfxManager.cs`, `Core/BombSystem.cs` |
 
 #### Sprint 4 — Polish (P3 — Nice to have)
 

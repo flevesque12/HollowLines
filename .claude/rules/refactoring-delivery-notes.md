@@ -654,3 +654,22 @@ from `_optionsReturn` / `CloseOptions`). Details in §5.12.
   on the page; "Retour" from pause returns to pause and hides the help block. First-pass text bug
   caught on screenshot: "Plus tu marques, plus vite tu passes" misdescribed the score gate → now
   "la sortie s'ouvre dès que tu as les points". 369/369 (View only).
+
+---
+
+### R6.13 — Blast radius feedback (F03) — delivered 2026-10-06
+
+Players couldn't tell what a lit bomb would hit — especially since R5.18 made the radius depend on
+who lit it (1 for the player's own drill, 2 otherwise) and chains reach cells the first bomb never
+could. Now the answer is drawn on the board for the whole fuse.
+
+- **Core:** `BombSystem.ArmedRadiusAt`, `CopyArmedCells`, `PredictBlastZone` (§ core-systems note).
+  Prediction follows the real rules exactly (shared cross arrays, chain bombs at ChainBlastRadius) and
+  a test compares it with the actual `BlastResolved` cells. 7 new tests, **376/376**.
+- **View:** `VfxManager.AnimateBlastZones` (§5.10): red frames on the bomb's own cross, pale-yellow on
+  chain-only cells, pulse ramping with the fuse, extra flare while the avatar is inside.
+- **Verified in play mode (UnityMCP)** on the tutorial bomb chamber: player-lit bomb (radius 1) →
+  its cross red; the bomb below chains (radius 2) → its arms, including the third bomb, pale yellow;
+  after detonation all 16 pooled frames hide. **Screenshot fix:** the first frame (tinted rim + faint
+  fill) was nearly invisible on pink and amber blocks → 1 px black edge, thicker rim, hatching, and a
+  pale-yellow chain colour instead of orange.

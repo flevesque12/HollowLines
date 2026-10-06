@@ -340,6 +340,14 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
   a plain tinted halo. Halos are keyed by cell and culled by a `LastSeen` timeout, so a bomb that
   detonates, is disarmed, or is shifted by a Perfect Clear cleans up correctly.
   > **No Core change:** `FuseProgress` already existed on `BombSystem` — the telegraph is pure View.
+- 🆕R6.13 **Blast zone preview** (F03): while a fuse burns, every cell the blast will hit gets a
+  danger frame (1 px black edge, 2 px tinted rim, sparse diagonal hatching — `GetZoneFrameSprite`,
+  sortingOrder 5). **Red** = the lit bomb's own cross, **pale yellow** = cells reached only through the
+  bombs it sets off. Zone = `BombSystem.PredictBlastZone` for every `CopyArmedCells` entry, merged and
+  rebuilt each frame in `AnimateBlastZones` (follows Perfect Clear shifts and newly chained bombs),
+  frames pooled per cell. Pulse ramps with the fuse fraction (same as the halo); the whole zone pulses
+  faster and whiter while the avatar stands in it — the "step out" cue. First pass (plain tinted rim)
+  vanished on pink/amber blocks in a screenshot → black edge + hatching, chain colour orange → pale yellow.
 - 🆕R4 **Diamond shine + collect sparkle.** Two separate pieces, not one:
   - **Persistent shine (BoardView, not VfxManager):** undrilled Diamond cells render with the
     **`DiamondShine` shader** (`Resources/Shaders/DiamondShine.shader`) instead of a plain tint — a

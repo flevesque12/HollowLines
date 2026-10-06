@@ -51,6 +51,71 @@ namespace HollowLines.Core
         /// </summary>
         public bool HasArmedBombs => _armed.Count > 0;
 
+        /// <summary>
+        /// R6.13: blast radius of the lit bomb at this cell — DirectBlastRadius if the player's drill
+        /// lit it, ChainBlastRadius otherwise — or 0 when no fuse is burning there.
+        /// </summary>
+        public int ArmedRadiusAt(GridPos bombCell) =>
+            _armed.TryGetValue(bombCell, out ArmedBomb b)
+                ? (b.ArmedByPlayer ? DirectBlastRadius : ChainBlastRadius)
+                : 0;
+
+        /// <summary>R6.13: every cell with a burning fuse, appended to <paramref name="into"/> (not cleared).</summary>
+        public void CopyArmedCells(List<GridPos> into)
+        {
+            foreach (GridPos p in _armed.Keys)
+                into.Add(p);
+        }
+
+        /// <summary>
+        /// R6.13 (F03): which cells will the lit bomb at <paramref name="bombCell"/> hit if it went off
+        /// now? Fills <paramref name="zone"/> with cell → chain depth: 0 for this bomb's own cross
+        /// (its cell included), 1+ for the cross of every bomb it sets off in turn (always
+        /// ChainBlastRadius, as in ProcessExplosions). Same cross rule as Blast — it passes through
+        /// everything and only the board edge stops an arm — so on an unchanged board the prediction
+        /// is exactly what BlastResolved will report. A cell already in the zone keeps its smallest
+        /// depth. Not cleared first, so several bombs can share one map. No-op if the cell isn't lit.
+        /// </summary>
+        public void PredictBlastZone(GridPos bombCell, Dictionary<GridPos, int> zone)
+        {
+            int radius = ArmedRadiusAt(bombCell);
+            if (radius == 0) return;
+
+            var queue   = new Queue<(GridPos pos, int radius, int depth)>();
+            var visited = new HashSet<GridPos>();
+            queue.Enqueue((bombCell, radius, 0));
+
+            while (queue.Count > 0)
+            {
+                (GridPos center, int r, int depth) = queue.Dequeue();
+                if (!visited.Add(center)) continue;
+
+                Mark(zone, center, depth);
+                for (int axis = 0; axis < 4; axis++)
+                {
+                    for (int step = 1; step <= r; step++)
+                    {
+                        GridPos target = center.Offset(CrossDx[axis] * step, CrossDy[axis] * step);
+                        if (!_grid.InBounds(target)) break;
+
+                        Mark(zone, target, depth);
+                        if (_grid.Get(target) == CellType.Bomb && !visited.Contains(target))
+                            queue.Enqueue((target, ChainBlastRadius, depth + 1));
+                    }
+                }
+            }
+        }
+
+        private static void Mark(Dictionary<GridPos, int> zone, GridPos cell, int depth)
+        {
+            if (!zone.TryGetValue(cell, out int existing) || depth < existing)
+                zone[cell] = depth;
+        }
+
+        // Cross pattern shared by Blast and PredictBlastZone — 4 cardinal axes.
+        private static readonly int[] CrossDx = {  0,  0, -1,  1 };
+        private static readonly int[] CrossDy = { -1,  1,  0,  0 };
+
         /// <summary>A buried bomb's fuse was just lit.</summary>
         public event Action<GridPos> BombArmed;
 
@@ -253,9 +318,9 @@ namespace HollowLines.Core
                           Queue<(GridPos pos, bool armedByPlayer)> sympatheticQueue,
                           HashSet<GridPos> alreadyExploded, List<GridPos> reached)
         {
-            // Cross pattern — 4 cardinal axes, up to `radius` steps each.
-            int[] dx = {  0,  0, -1,  1 };
-            int[] dy = { -1,  1,  0,  0 };
+            // Cross pattern — 4 cardinal axes, up to `radius` steps each (shared with PredictBlastZone).
+            int[] dx = CrossDx;
+            int[] dy = CrossDy;
 
             int destroyed = 0;
 

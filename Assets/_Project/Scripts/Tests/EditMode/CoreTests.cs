@@ -1686,6 +1686,105 @@ namespace HollowLines.Tests
             Assert.IsFalse(bombs.HasArmedBombs, "the bomb went off — nothing left ticking");
         }
 
+        // ── Blast zone preview (R6.13) ───────────────────────────────────
+
+        [Test]
+        public void ArmedRadiusAt_PlayerLit_IsDirect_BurstLit_IsChain_Unlit_IsZero()
+        {
+            var (_, __, bombs) = Make(new[] { "AX..X" });
+            Assert.AreEqual(0, bombs.ArmedRadiusAt(new GridPos(1, 0)), "unlit bomb has no radius");
+
+            bombs.NotifyDrilled(new GridPos(0, 0));   // player lights (1,0)
+            bombs.ArmBombAt(new GridPos(4, 0));       // a shockwave lights (4,0)
+
+            Assert.AreEqual(BombSystem.DirectBlastRadius, bombs.ArmedRadiusAt(new GridPos(1, 0)));
+            Assert.AreEqual(BombSystem.ChainBlastRadius,  bombs.ArmedRadiusAt(new GridPos(4, 0)));
+        }
+
+        [Test]
+        public void PredictBlastZone_PlayerLit_IsRadiusOneCross()
+        {
+            var (_, __, bombs) = Make(new[] { ".....", "..A..", ".AXA.", "..A..", "....." });
+            bombs.NotifyDrilled(new GridPos(2, 1)); // lights the centre bomb, player-armed
+
+            var zone = new Dictionary<GridPos, int>();
+            bombs.PredictBlastZone(new GridPos(2, 2), zone);
+
+            CollectionAssert.AreEquivalent(
+                new[] { new GridPos(2, 2), new GridPos(2, 1), new GridPos(2, 3), new GridPos(1, 2), new GridPos(3, 2) },
+                zone.Keys);
+            foreach (int depth in zone.Values) Assert.AreEqual(0, depth);
+        }
+
+        [Test]
+        public void PredictBlastZone_ClipsAtTheBoardEdge()
+        {
+            var (_, __, bombs) = Make(new[] { "X.A", "..." });
+            bombs.ArmBombAt(new GridPos(0, 0)); // chain radius 2 from the corner
+
+            var zone = new Dictionary<GridPos, int>();
+            bombs.PredictBlastZone(new GridPos(0, 0), zone);
+
+            CollectionAssert.AreEquivalent(
+                new[] { new GridPos(0, 0), new GridPos(1, 0), new GridPos(2, 0), new GridPos(0, 1) },
+                zone.Keys);
+        }
+
+        [Test]
+        public void PredictBlastZone_IncludesChainedBombs_AtDepthOne_WithChainRadius()
+        {
+            // Player lights (1,0); its radius-1 cross reaches the bomb at (2,0), whose radius-2
+            // cross then reaches (4,0) — a cell the first bomb could never touch.
+            var (_, __, bombs) = Make(new[] { "AXX..", "....." });
+            bombs.NotifyDrilled(new GridPos(0, 0));
+
+            var zone = new Dictionary<GridPos, int>();
+            bombs.PredictBlastZone(new GridPos(1, 0), zone);
+
+            Assert.AreEqual(0, zone[new GridPos(1, 0)]);
+            Assert.AreEqual(0, zone[new GridPos(2, 0)], "the second bomb sits in the first cross");
+            Assert.AreEqual(1, zone[new GridPos(4, 0)], "reached only by the chained bomb");
+            Assert.AreEqual(1, zone[new GridPos(2, 1)]);
+        }
+
+        [Test]
+        public void PredictBlastZone_MatchesWhatTheBlastActuallyReaches()
+        {
+            var (_, __, bombs) = Make(new[] { "..A..", ".AXA.", "..X..", "...A.", "....." });
+            bombs.NotifyDrilled(new GridPos(2, 0)); // lights (2,1); its cross reaches the bomb at (2,2)
+
+            var zone = new Dictionary<GridPos, int>();
+            bombs.PredictBlastZone(new GridPos(2, 1), zone);
+
+            var actual = new HashSet<GridPos>();
+            bombs.BlastResolved += (cells, _) => actual.UnionWith(cells);
+            bombs.Tick(BombSystem.FuseDuration + 0.01f, new GridPos(9, 9));
+
+            CollectionAssert.AreEquivalent(actual, zone.Keys);
+        }
+
+        [Test]
+        public void PredictBlastZone_UnlitBomb_LeavesZoneEmpty()
+        {
+            var (_, __, bombs) = Make(new[] { "AXA" });
+            var zone = new Dictionary<GridPos, int>();
+            bombs.PredictBlastZone(new GridPos(1, 0), zone);
+            Assert.AreEqual(0, zone.Count);
+        }
+
+        [Test]
+        public void CopyArmedCells_ListsEveryBurningFuse()
+        {
+            var (_, __, bombs) = Make(new[] { "AX..X" });
+            bombs.NotifyDrilled(new GridPos(0, 0));
+            bombs.ArmBombAt(new GridPos(4, 0));
+
+            var cells = new List<GridPos>();
+            bombs.CopyArmedCells(cells);
+
+            CollectionAssert.AreEquivalent(new[] { new GridPos(1, 0), new GridPos(4, 0) }, cells);
+        }
+
         // ── Fuse expiry & explosion ──────────────────────────────────────
 
         [Test]

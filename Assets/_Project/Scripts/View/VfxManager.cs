@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using HollowLines.Core;
 using UnityEngine;
 
@@ -88,6 +89,12 @@ namespace HollowLines.View
         [Tooltip("Base halo size around the bomb cell, in cells.")]
         [SerializeField] private float fuseGlowScale = 1.15f;
 
+        [Header("— Blast Zone Preview (R6.13) —")]
+        [Tooltip("Frame colour on the cells a lit bomb's own cross will hit.")]
+        [SerializeField] private Color blastZoneColor  = new Color(1f, 0.22f, 0.12f);
+        [Tooltip("Frame colour on the cells reached only through the chain (bombs it sets off).")]
+        [SerializeField] private Color blastChainColor = new Color(1f, 0.92f, 0.45f);
+
         // Block palette — matches BoardView so debris reads as "that chunk".
         private static readonly Color ColBlockA = new Color(0.94f, 0.62f, 0.15f);
         private static readonly Color ColBlockB = new Color(0.11f, 0.62f, 0.46f);
@@ -118,6 +125,17 @@ namespace HollowLines.View
             new System.Collections.Generic.Dictionary<GridPos, FuseGlow>();
         private static Material _fuseMaterial;
         private static bool _fuseMaterialTried;
+
+        // R6.13 (F03): one frame per cell a lit bomb will hit — BombSystem.PredictBlastZone, merged
+        // across every burning fuse, rebuilt each frame (a handful of cells) so it follows Perfect
+        // Clear shifts and newly lit chain bombs at once. Pooled by cell; unused frames are disabled.
+        private readonly Dictionary<GridPos, SpriteRenderer> _zoneCells = new Dictionary<GridPos, SpriteRenderer>();
+        private readonly Dictionary<GridPos, int>   _zoneDepth = new Dictionary<GridPos, int>();
+        private readonly Dictionary<GridPos, float> _zoneFrac  = new Dictionary<GridPos, float>();
+        private readonly Dictionary<GridPos, int>   _zoneOne   = new Dictionary<GridPos, int>();
+        private readonly List<GridPos> _armedCells = new List<GridPos>();
+        private bool _zoneShown;
+        private static Sprite _zoneFrameSprite;
 
         private sealed class FuseGlow
         {
@@ -242,6 +260,7 @@ namespace HollowLines.View
         private void Update()
         {
             AnimateFuses();
+            AnimateBlastZones();
             RefreshEnemyMarkers();
             AnimateBoomerGlows();
 
@@ -653,6 +672,105 @@ namespace HollowLines.View
             if (stale != null)
                 foreach (GridPos p in stale)
                     RemoveFuse(p);
+        }
+
+        /// <summary>
+        /// R6.13 (F03): frame every cell the lit bombs will hit — red for a bomb's own cross, orange
+        /// for what its chain will reach. Pulse speeds up with the fuse (same ramp as the halo), and
+        /// the whole zone flares while the avatar stands inside it: that is the "step out" cue.
+        /// </summary>
+        private void AnimateBlastZones()
+        {
+            _armedCells.Clear();
+            _bombs.CopyArmedCells(_armedCells);
+            if (_armedCells.Count == 0 && !_zoneShown)
+                return;
+
+            _zoneDepth.Clear();
+            _zoneFrac.Clear();
+            foreach (GridPos bomb in _armedCells)
+            {
+                float frac = _fuses.TryGetValue(bomb, out FuseGlow g) ? g.Frac : 0f;
+                _zoneOne.Clear();
+                _bombs.PredictBlastZone(bomb, _zoneOne);
+                foreach (var kv in _zoneOne)
+                {
+                    if (!_zoneDepth.TryGetValue(kv.Key, out int d) || kv.Value < d) _zoneDepth[kv.Key] = kv.Value;
+                    if (!_zoneFrac.TryGetValue(kv.Key, out float f) || frac > f)    _zoneFrac[kv.Key]  = frac;
+                }
+            }
+
+            bool  avatarInside = _zoneDepth.ContainsKey(_avatar.Position);
+            float now = Time.time;
+
+            foreach (var kv in _zoneDepth)
+            {
+                if (!_zoneCells.TryGetValue(kv.Key, out SpriteRenderer sr))
+                {
+                    sr = CreateZoneFrame(kv.Key);
+                    _zoneCells[kv.Key] = sr;
+                }
+
+                float frac  = _zoneFrac[kv.Key];
+                float freq  = Mathf.Lerp(2f, 10f, frac) * (avatarInside ? 1.5f : 1f);
+                float phase = Mathf.Sin(now * freq * Mathf.PI * 2f) * 0.5f + 0.5f;
+                float alpha = Mathf.Lerp(0.65f, 1f, frac) * Mathf.Lerp(0.7f, 1f, phase);
+                Color c     = kv.Value == 0 ? blastZoneColor : blastChainColor;
+                if (avatarInside)
+                {
+                    alpha = Mathf.Min(1f, alpha * 1.3f);
+                    c     = Color.Lerp(c, Color.white, phase * 0.35f);
+                }
+                sr.color   = new Color(c.r, c.g, c.b, alpha);
+                sr.enabled = true;
+            }
+
+            foreach (var kv in _zoneCells)
+                if (!_zoneDepth.ContainsKey(kv.Key))
+                    kv.Value.enabled = false;
+
+            _zoneShown = _zoneDepth.Count > 0;
+        }
+
+        private SpriteRenderer CreateZoneFrame(GridPos cell)
+        {
+            var go = new GameObject("BlastZone");
+            go.transform.SetParent(transform, false);
+            go.transform.localPosition = BoardView.ToLocal(cell);
+
+            var sr = go.AddComponent<SpriteRenderer>();
+            sr.sprite       = GetZoneFrameSprite();
+            sr.sortingOrder = 5; // over tiles and the exit glow, under the fuse halo (6) and the avatar (10)
+            return sr;
+        }
+
+        /// <summary>
+        /// 16×16 danger frame: a 1 px black edge around a 2 px rim (tinted), and sparse diagonal
+        /// hatching inside. The black edge is what keeps it readable on any block colour — a tinted
+        /// rim alone vanished on pink (red frame) and amber (chain frame) in the first screenshot.
+        /// </summary>
+        private static Sprite GetZoneFrameSprite()
+        {
+            if (_zoneFrameSprite != null) return _zoneFrameSprite;
+
+            const int n = 16;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+            var px  = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    int  edge  = Mathf.Min(Mathf.Min(x, y), Mathf.Min(n - 1 - x, n - 1 - y));
+                    bool hatch = (x + y) % 6 < 2;
+                    px[y * n + x] = edge == 0 ? new Color32(0, 0, 0, 220)        // black outline (tint can't lighten it)
+                                  : edge <= 2 ? new Color32(255, 255, 255, 255)  // rim
+                                  : hatch     ? new Color32(255, 255, 255, 80)   // danger stripes
+                                              : new Color32(255, 255, 255, 0);
+                }
+            tex.SetPixels32(px);
+            tex.Apply();
+
+            _zoneFrameSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+            return _zoneFrameSprite;
         }
 
         private FuseGlow CreateFuseGlow(GridPos pos)
