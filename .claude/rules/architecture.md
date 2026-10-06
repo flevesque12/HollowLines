@@ -82,6 +82,8 @@ Assets/_Project/Scripts/
                             🔄R3 "Sans fin" / "Défi du jour" / "Menu principal", endless wording, seam fade (§5.15)
     DeathRecapView.cs     — 🆕R6.1 Game-over "why you died" block (killer, diagnostic, tip, heart timeline); plain class hosted by UIScreenManager
     DailyDigStore.cs      — 🆕R3 Local best-of-day for the Daily Dig (PlayerPrefs, §6.6)
+    HelpScreenView.cs     — 🆕R6.12 "AIDE": 8 pages (goal, controls, streak, air, burst, bombs, enemies, bonus),
+                            icons from the real tiles/enemy sprites; plain class hosted by UIScreenManager
     OptionsMenu.cs        — 🆕R6.9 Volume rows of the OPTIONS screen (plain class hosted by UIScreenManager)
                             + VolumeSettings (master/music/sfx, PlayerPrefs)
   Editor/

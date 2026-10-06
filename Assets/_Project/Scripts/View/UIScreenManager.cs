@@ -15,7 +15,7 @@ namespace HollowLines.View
     /// </summary>
     public sealed class UIScreenManager : MonoBehaviour
     {
-        private enum ScreenState { None, MainMenu, Paused, GameOver, LevelComplete, CampaignComplete, Options }
+        private enum ScreenState { None, MainMenu, Paused, GameOver, LevelComplete, CampaignComplete, Options, Help }
 
         // ── Colors ────────────────────────────────────────────────────────────
         private static readonly Color ColBg      = new Color(0.09f, 0.07f, 0.055f);
@@ -60,11 +60,12 @@ namespace HollowLines.View
         // R6.1 death recap (F01) — the killer, a tip, and the heart-loss timeline. Game over only.
         private DeathRecapView _deathRecap;
 
-        // R6.9 volume options (F10). Reached from the main menu and the pause screen; "Retour" (or
-        // Esc / Start / B) goes back to whichever one opened it.
-        private OptionsMenu  _options;
-        private AudioManager _audio;
-        private Action       _optionsReturn;
+        // R6.9 volume options (F10) and R6.12 help (F16). Both are sub-screens reached from the main
+        // menu and the pause screen; "Retour" (or Esc / Start / B) goes back to whichever opened it.
+        private OptionsMenu    _options;
+        private HelpScreenView _help;
+        private AudioManager   _audio;
+        private Action         _subScreenReturn;
 
         // ── Transition fade (endless segment seam) ────────────────────────────
         private VisualElement _fade;
@@ -124,10 +125,30 @@ namespace HollowLines.View
             AddButton("Options", primary: false, danger: false, () => ShowOptions(returnTo));
         }
 
+        /// <summary>"Aide" — offered on the main menu and the pause screen (R6.12).</summary>
+        private void AddHelpButton(Action returnTo) =>
+            AddButton("Aide", primary: false, danger: false, () => ShowHelp(returnTo));
+
+        /// <summary>R6.12 (F16): one page per mechanic. Time stays frozen; the run (if any) waits behind it.</summary>
+        private void ShowHelp(Action returnTo)
+        {
+            _subScreenReturn = returnTo;
+            _state           = ScreenState.Help;
+            Time.timeScale   = 0f;
+            _titleLabel.text = "AIDE";
+            _deathRecap.Hide();
+            SetBody("← → pour changer de page  ·  B / Échap pour revenir");
+            HideRunSummary();
+            ClearButtons();
+            AddButton("Retour", primary: false, danger: false, CloseSubScreen);
+            ShowOverlay();
+            _help.Show(); // after ShowOverlay: focus goes to the page, so ← → turn it at once
+        }
+
         /// <summary>R6.9 (F10): volume sliders. Time stays frozen; the run (if any) waits behind it.</summary>
         private void ShowOptions(Action returnTo)
         {
-            _optionsReturn   = returnTo;
+            _subScreenReturn = returnTo;
             _state           = ScreenState.Options;
             Time.timeScale   = 0f;
             _titleLabel.text = "OPTIONS";
@@ -135,15 +156,16 @@ namespace HollowLines.View
             SetBody("← → pour régler  ·  B / Échap pour revenir");
             HideRunSummary();
             ClearButtons();
-            AddButton("Retour", primary: false, danger: false, CloseOptions);
+            AddButton("Retour", primary: false, danger: false, CloseSubScreen);
             ShowOverlay();
             _options.Show(); // after ShowOverlay: focus goes to the first slider row, not "Retour"
         }
 
-        private void CloseOptions()
+        /// <summary>Leave Options / Aide for the screen that opened it.</summary>
+        private void CloseSubScreen()
         {
-            Action back = _optionsReturn ?? ShowMainMenu;
-            _optionsReturn = null;
+            Action back = _subScreenReturn ?? ShowMainMenu;
+            _subScreenReturn = null;
             back();
         }
 
@@ -165,6 +187,7 @@ namespace HollowLines.View
                 AddButton("Sans fin", primary: false, danger: false, () => _onPlayEndless.Invoke());
             if (_onPlayDaily != null)
                 AddButton("Défi du jour", primary: false, danger: false, () => _onPlayDaily.Invoke());
+            AddHelpButton(ShowMainMenu);
             AddOptionsButton(ShowMainMenu);
             AddButton("Quitter", primary: false, danger: true,  () => _onQuit?.Invoke());
             ShowOverlay();
@@ -265,6 +288,7 @@ namespace HollowLines.View
             // In endless there is no level to retry — "Recommencer" starts a whole new descent.
             AddButton(_endless != null ? "Nouvelle descente" : "Recommencer",
                       primary: false, danger: false, () => _onRestart?.Invoke());
+            AddHelpButton(ShowPause);
             AddOptionsButton(ShowPause);
             AddMainMenuButton();
             AddButton("Quitter",     primary: false, danger: true,  () => _onQuit?.Invoke());
@@ -375,11 +399,11 @@ namespace HollowLines.View
             bool pausePressed = (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
                              || (Gamepad.current  != null && Gamepad.current.startButton.wasPressedThisFrame);
 
-            // Options: Esc / Start / B all mean "back" to the screen that opened it.
-            if (_state == ScreenState.Options)
+            // Options / Aide: Esc / Start / B all mean "back" to the screen that opened it.
+            if (_state == ScreenState.Options || _state == ScreenState.Help)
             {
                 if (pausePressed || (Gamepad.current != null && Gamepad.current.buttonEast.wasPressedThisFrame))
-                    CloseOptions();
+                    CloseSubScreen();
                 return;
             }
 
@@ -523,6 +547,7 @@ namespace HollowLines.View
             _deathRecap = new DeathRecapView(results);
             BuildRunSummary(results);
 
+            _help    = new HelpScreenView(panel);
             _options = new OptionsMenu(panel);
             _options.Changed             += v => _audio?.ApplyVolumes(v);
             _options.SfxPreviewRequested += () => _audio?.PlaySfxPreview();
@@ -620,12 +645,13 @@ namespace HollowLines.View
             _primaryButton?.schedule.Execute(() => _primaryButton?.Focus());
         }
 
-        /// <summary>Every screen starts here, so it is also where the options block gets put away.</summary>
+        /// <summary>Every screen starts here, so it is also where the options / help blocks get put away.</summary>
         private void ClearButtons()
         {
             _buttonRow.Clear();
             _primaryButton = null;
             _options?.Hide();
+            _help?.Hide();
         }
 
         private static void SetBorderColor(VisualElement e, Color c)

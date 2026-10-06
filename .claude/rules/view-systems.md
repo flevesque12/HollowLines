@@ -435,6 +435,15 @@ row-clear farming as a *problem*. The markers worked against the design, so `Cre
   are mouse-only (`focusable = false`). Every change applies + saves at once; Effets plays a blip.
   Volumes **scale** the designed mix (`AudioManager.sfxVolume` 0.6 / `musicVolume` 0.18) — 100 % =
   the mix as tuned. Général → `AudioListener.volume`. Hidden by `ClearButtons()`, which every screen calls.
+- 🆕R6.12 **Help screen** (`ScreenState.Help`, F16) — "Aide" next to "Options" on the main menu and
+  pause, same back rule (`_subScreenReturn` / `CloseSubScreen`, shared with Options). `HelpScreenView`
+  (plain class): 8 pages — Le but, Contrôles, Forer et streak, L'air et les cœurs, Les blocs qui
+  tombent, Bombes, Ennemis, Bonus — each a list of icon + sentence. Icons are the real tiles
+  (`Resources/Tiles`, neutral tile tinted with BoardView's default palette) and `EnemySprites`, so the
+  player learns what they will actually see. **Numbers come from Core constants** (`ScoreSystem`,
+  `AirSystem`, `BombSystem`, `HealthSystem`, `GravitySystem`), French-formatted — the help can't drift
+  from the rules. The page body is one focusable element: ←/→ flips pages (swallowed), ↓ reaches
+  "Retour"; ◀ ▶ and the page dots are mouse-only.
 
 ### 5.13 CameraShake + camera follow
 **Changes:**

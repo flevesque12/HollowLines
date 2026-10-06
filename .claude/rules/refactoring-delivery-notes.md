@@ -634,3 +634,23 @@ overlay panel. "Options" on the main menu and pause; details in §5.12.
   source 0.162 (= 0.18 × 0.9); Retour → main menu, and from pause → back to pause. Test prefs reset
   afterwards. **Listen to it with a real pad** — the physical XInput hop can't be simulated (§16).
   369/369 (View only, no new tests).
+
+---
+
+### R6.12 — Help page (F16) — delivered 2026-10-06
+
+`View/HelpScreenView.cs` (new), wired like R6.9's Options: "Aide" on the main menu and the pause
+screen; Options and Aide now share one back target (`_subScreenReturn` / `CloseSubScreen`, renamed
+from `_optionsReturn` / `CloseOptions`). Details in §5.12.
+
+- **8 pages**, short icon + sentence lines, written to answer what playtesters asked: the goal (exit
+  line, score gate from level 4, Endless, Daily), controls, drilling and the vertical-only streak (with
+  Hard = 2 hits, Steel = explosions only), air and hearts, chunks and bursts, bombs (including "a bomb
+  YOU light has radius 1 — one sidestep"), enemies (Crawler hurts, Boomer never does), bonuses.
+- **Numbers are read from Core constants**, so a balance change updates the help automatically.
+- **Icons are the game's own sprites** (tiles from `Resources/Tiles`, procedural `EnemySprites` at
+  ×1.5 — their 16×16 canvas carries margin).
+- **Verified in play mode (UnityMCP):** screenshots of pages 1, 3, 7; ←/→ flips pages with focus kept
+  on the page; "Retour" from pause returns to pause and hides the help block. First-pass text bug
+  caught on screenshot: "Plus tu marques, plus vite tu passes" misdescribed the score gate → now
+  "la sortie s'ouvre dès que tu as les points". 369/369 (View only).
