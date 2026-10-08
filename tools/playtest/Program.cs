@@ -119,7 +119,7 @@ for (int level = 1; level <= 10; level++)
 
 static string ActionHeader() =>
     $"{"lvl",3} {"outcome",-10} {"time",6} {"airMin",6} {"hearts-",7} {"score",6} " +
-    $"{"streak",6} {"bursts",6} {"bigst",5} {"chain",5} {"bestC",5} {"PC",3} {"% S/B/Bo/D/PC",-19}";
+    $"{"peakM",6} {"bursts",6} {"bigst",5} {"chain",5} {"bestC",5} {"PC",3} {"% Dr/B/Bo/D/PC",-19}";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2c) Bomb-hunter bot (R2.8e): deliberately seeks buried bombs and digs at them to
@@ -234,7 +234,7 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
 {
     Console.WriteLine();
     Console.WriteLine($"--- ROW-CLEAR ({cadence:0.00} s) ---");
-    Console.WriteLine($"{"lvl",3} {"wobble",6} {"outcome",-10} {"time",6} {"airMin",6} {"hearts-",7} {"score",6} {"bursts",6} {"streak",6}");
+    Console.WriteLine($"{"lvl",3} {"wobble",6} {"outcome",-10} {"time",6} {"airMin",6} {"hearts-",7} {"score",6} {"bursts",6} {"peakM",6}");
     for (int level = 1; level <= 3; level++)
     {
         foreach (float wobble in new[] { 0.6f, 0.8f, 0.9f })
@@ -244,7 +244,7 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
             sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
             sim.Gravity.WobbleDuration = wobble;
             var r = sim.Run(new RowClearBot(), cadence, 400f, Dt);
-            Console.WriteLine($"{level,3} {wobble,5:0.0}s {r.Outcome,-10} {r.Time,5:0.0}s {r.AirMin,5:0.0}% {r.HeartsLost,7} {r.Score,6} {r.Bursts,6} {r.BestStreak,6}");
+            Console.WriteLine($"{level,3} {wobble,5:0.0}s {r.Outcome,-10} {r.Time,5:0.0}s {r.AirMin,5:0.0}% {r.HeartsLost,7} {r.Score,6} {r.Bursts,6} {r.PeakMomentum,6}");
         }
     }
 }
@@ -260,14 +260,14 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
 Console.WriteLine();
 Console.WriteLine("=== ENDLESS — DESCENTES (drain rampé par profondeur) ===");
 Console.WriteLine($"{"bot",-10} {"seed",6} {"outcome",-10} {"time",6} {"seg",3} {"depth",5} {"airMin",6} {"hearts-",7} " +
-                  $"{"score",7} {"streak",6} {"bursts",6} {"bigst",5} {"drain",6} {"% S/B/Bo/D/PC",-19}");
+                  $"{"score",7} {"peakM",6} {"bursts",6} {"bigst",5} {"drain",6} {"% Dr/B/Bo/D/PC",-19}");
 foreach (int seed in new[] { 101, 202, 303 })
 {
     foreach (var (name, make) in new (string, Func<IBot>)[] { ("tunnel", () => new TunnelBot()), ("row-clear", () => new RowClearBot()) })
     {
         var (r, segments, drain) = RunEndless(make, seed, 0.15f, maxTime: 400f, dt: Dt);
         Console.WriteLine($"{name,-10} {seed,6} {r.Outcome,-10} {r.Time,5:0.0}s {segments,3} {r.Depth,5} {r.AirMin,5:0.0}% {r.HeartsLost,7} " +
-                          $"{r.Score,7} {r.BestStreak,6} {r.Bursts,6} {r.BiggestBurst,5} {drain,5:0.0}% {r.PointsMix(),-19}");
+                          $"{r.Score,7} {r.PeakMomentum,6} {r.Bursts,6} {r.BiggestBurst,5} {drain,5:0.0}% {r.PointsMix(),-19}");
     }
 }
 
@@ -362,15 +362,15 @@ sealed class RunResult
 
     // v3 action-reward instrumentation (replaces the v2 line-source breakdown).
     public int PerfectClears, Bursts, BurstCells, BombChains;
-    public int BestStreak, BiggestBurst, BestBombChain;
+    public int PeakMomentum, BiggestBurst, BestBombChain; // PeakMomentum = ×1/×2/×4/×6 (R7.12)
 
     /// <summary>Where the points actually came from — the balance question v3 cares about.</summary>
-    public int PtsStreak, PtsBurst, PtsBomb, PtsDepth, PtsPerfect;
+    public int PtsDrill, PtsBurst, PtsBomb, PtsDepth, PtsPerfect;
 
     public string PointsMix()
     {
         int total = Math.Max(1, Score);
-        return $"{100 * PtsStreak / total,3}/{100 * PtsBurst / total,3}/{100 * PtsBomb / total,3}/{100 * PtsDepth / total,3}/{100 * PtsPerfect / total,3}";
+        return $"{100 * PtsDrill / total,3}/{100 * PtsBurst / total,3}/{100 * PtsBomb / total,3}/{100 * PtsDepth / total,3}/{100 * PtsPerfect / total,3}";
     }
 
     /// <summary>Air economy: what the run spent vs what it earned back, by source.</summary>
@@ -387,7 +387,7 @@ sealed class RunResult
 
     public string RowWithActions(int level) =>
         $"{level,3} {Outcome,-10} {Time,5:0.0}s {AirMin,5:0.0}% {HeartsLost,7} {Score,6} " +
-        $"{BestStreak,6} {Bursts,6} {BiggestBurst,5} {BombChains,5} {BestBombChain,5} {PerfectClears,3} {PointsMix(),-19}";
+        $"{PeakMomentum,6} {Bursts,6} {BiggestBurst,5} {BombChains,5} {BestBombChain,5} {PerfectClears,3} {PointsMix(),-19}";
 
     /// <summary>Bomb-economy view (§15.4 / R2.8e): what the bomb-hunter actually detonated and earned.
     /// <paramref name="bombsOnBoard"/> is the authored count, so 'det' vs 'bombs' shows arming reach.</summary>
@@ -443,7 +443,7 @@ sealed class Sim
     public readonly BombSystem Bombs;
     public readonly ChainTracker Chain;
     public readonly ScoreSystem Score;
-    public readonly StreakTracker Streak = new();
+    public readonly MomentumTracker Momentum = new(); // R7.12 minimal port — full v3.2 parity is R7.14
     public readonly DepthTracker Depth = new();
     public readonly AirSystem Air;
     public readonly HealthSystem Health;
@@ -487,7 +487,7 @@ sealed class Sim
             {
                 switch (evt.Source)
                 {
-                    case ScoreSource.Streak:       _r.PtsStreak  += evt.Points; break;
+                    case ScoreSource.Drill:        _r.PtsDrill   += evt.Points; break;
                     case ScoreSource.Burst:        _r.PtsBurst   += evt.Points; break;
                     case ScoreSource.Bomb:         _r.PtsBomb    += evt.Points; break;
                     case ScoreSource.Depth:        _r.PtsDepth   += evt.Points; break;
@@ -501,8 +501,9 @@ sealed class Sim
 
         Avatar.Drilled += (cell, oldType, direction) =>
         {
-            Streak.NotifyDrill(oldType, direction);
-            Score.AwardDrill(Streak.CurrentStreak, Streak.CurrentColor);
+            Momentum.NotifyDrill(oldType);
+            Score.AwardDrill(Momentum.Multiplier);
+            if (Momentum.IsInPowerDrill) Momentum.CompletePowerDrill(); // R7.14: double-drill + wave
             Air.RestoreDrill(); // R5.2 — was missing here, so every ledger before R6.2 under-counted air
             if (oldType == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
             Bombs.NotifyDrilled(cell);
@@ -590,6 +591,7 @@ sealed class Sim
             Collapse.Resolve(Avatar.Position);
             Gravity.Tick(dt, Avatar.Position);
             Chain.Tick(dt);
+            if (!Avatar.IsFalling) Momentum.Tick(dt); // §M3.3: the window is frozen in freefall
             Health.Tick(dt);
             _r.AirDrained += Air.EffectiveDrainRate * dt; // sampled before the tick (R6.2 buffer)
             Air.Tick(dt);
@@ -609,7 +611,7 @@ sealed class Sim
         _r.Depth         = _p.Endless?.Depth ?? Depth.MaxDepth;
         _r.Score         = Score.Score;
         _r.PerfectClears = Score.PerfectClears;
-        _r.BestStreak    = Score.BestStreak;
+        _r.PeakMomentum  = (int)Score.PeakMomentum;
         _r.BiggestBurst  = Score.BiggestBurst;
         _r.BestBombChain = Score.BestBombChain;
         return _r;

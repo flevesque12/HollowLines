@@ -97,7 +97,6 @@ namespace HollowLines.View
         private HealthSystem    _healthSystem;
         private CampaignManager _campaign;
         private EndlessManager  _endless;
-        private StreakTracker   _streakTracker;   // v3.1 — no longer fed since R7.6; views still hold it until R7.9-R7.12
         private MomentumTracker _momentumTracker; // v3.2 Drill Momentum (drill-momentum.md §M1)
         private GrazeSystem     _grazeSystem;     // v3.2 near-miss bonus (§M3.2)
         private DepthTracker    _depthTracker;
@@ -192,8 +191,6 @@ namespace HollowLines.View
             _scoreSystem = new ScoreSystem();
             _scoreSystem.OnScore += evt => Debug.Log($"[Score] {evt}  total={_scoreSystem.Score}");
 
-            _streakTracker = new StreakTracker();
-
             // ── v3.2 Drill Momentum (R7.6) ──────────────────────────────────
             _momentumTracker = new MomentumTracker();
             _momentumTracker.PowerDrillActivated += mult =>
@@ -245,7 +242,7 @@ namespace HollowLines.View
             hudGo.transform.SetParent(transform, false);
             _hud = hudGo.AddComponent<HUDView>();
             _hud.Init(_scoreSystem, _airSystem, _healthSystem, null,
-                      _streakTracker, _depthTracker,
+                      _depthTracker,
                       useCampaign ? _campaign : null, hudPanelSettings,
                       _diamondSystem, _momentumTracker);
             _hud.SetDepthSource(_endlessMode ? _endless : null);
@@ -363,8 +360,7 @@ namespace HollowLines.View
                 Mathf.Clamp(spawnCell.x, 0, _grid.Width  - 1),
                 Mathf.Clamp(spawnCell.y, 0, _grid.Height - 1));
 
-            // Streak and depth are per-board: a new level starts both from scratch.
-            _streakTracker.Reset();
+            // Depth is per-board: a new level starts it from scratch.
             _depthTracker.Reset();
 
             // Momentum and graze cooldown restart with a fresh board — but NOT at an endless seam,

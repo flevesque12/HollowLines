@@ -97,7 +97,7 @@ Cell enum (0–9) + helper methods. Map chars: `.` `A` `B` `C` `H` `S` `P` `X` `
 ### 6.1 ~~StreakTracker~~ → MomentumTracker (Core/)
 
 > **⚠️ v3.2 — REMPLACÉ.** `StreakTracker` (streak par couleur, v3.1) est remplacé par
-> `MomentumTracker` (streak temporel, v3.2). Le fichier `StreakTracker.cs` sera supprimé.
+> `MomentumTracker` (streak temporel, v3.2). ✅R7.12: `StreakTracker.cs` et ses tests sont supprimés.
 >
 > **Spec complète:** voir `drill-momentum.md` → §M1 (MomentumTracker) + §M2 (paliers).
 

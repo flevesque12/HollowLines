@@ -37,7 +37,7 @@ namespace HollowLines.Core
     ///
     /// === Design rationale (v3) ===
     ///
-    /// Every drill tap pays (×streak), so the player is never digging "for free" —
+    /// Every drill tap pays (×momentum, v3.2), so the player is never digging "for free" —
     /// design rule 1. Burst and Bomb both scale on spectacle, aligning what looks
     /// impressive with what scores. Perfect Clear stays a rare jackpot rather than
     /// the core loop it was in v2.1.
@@ -81,12 +81,6 @@ namespace HollowLines.Core
         /// <summary>Total score this run.</summary>
         public int Score { get; private set; }
 
-        /// <summary>Longest color streak reached this run.</summary>
-        public int BestStreak { get; private set; }
-
-        /// <summary>Which color <see cref="BestStreak"/> was built on. Empty if no color was drilled.</summary>
-        public CellType BestStreakColor { get; private set; }
-
         /// <summary>Cell count of the largest chunk burst this run.</summary>
         public int BiggestBurst { get; private set; }
 
@@ -104,6 +98,9 @@ namespace HollowLines.Core
 
         /// <summary>🆕v3.2 Highest momentum multiplier a drill was paid at this run (×1/×2/×4/×6).</summary>
         public float PeakMomentum { get; private set; }
+
+        /// <summary>🆕v3.2 (R7.12) Power Drills fired this run — one per AwardPowerShockwave.</summary>
+        public int PowerDrills { get; private set; }
 
         /// <summary>🆕v3.2 Grazes this run.</summary>
         public int Grazes { get; private set; }
@@ -123,35 +120,6 @@ namespace HollowLines.Core
         public event Action<ScoreEvent> OnScore;
 
         // ── Public API ──────────────────────────────────────────────
-
-        /// <summary>
-        /// Award points for one drill tap, scaled by the current color streak.
-        /// </summary>
-        /// <param name="streakStep">
-        ///   1-based streak count from StreakTracker.CurrentStreak.
-        ///   Values &lt; 1 are clamped to 1 — a drill always pays at least once.
-        /// </param>
-        /// <param name="streakColor">
-        ///   The color the streak is running on, recorded alongside <see cref="BestStreak"/> so the
-        ///   run summary can read "×12 amber". Optional: omit it and only the count is tracked.
-        /// </param>
-        /// <remarks>v3.1 streak path — kept only until GameBootstrap moves to momentum (R7.6) and
-        /// StreakTracker is deleted (R7.12). New code calls <see cref="AwardDrill(float)"/>.</remarks>
-        public void AwardDrill(int streakStep, CellType streakColor = CellType.Empty)
-        {
-            if (streakStep < 1) streakStep = 1;
-
-            int pts = Amplified(DrillPoints * streakStep);
-            Score += pts;
-
-            if (streakStep > BestStreak)
-            {
-                BestStreak      = streakStep;
-                BestStreakColor = streakColor;
-            }
-
-            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Streak, streakStep, CascadeMultiplier, DangerZone));
-        }
 
         /// <summary>
         /// 🆕v3.2 Award one drill tap at the current momentum (MomentumTracker.Multiplier), × cascade
@@ -185,6 +153,7 @@ namespace HollowLines.Core
 
             int pts = Amplified((int)Math.Round(blocksDestroyed * DrillPoints * momentumMult));
             Score += pts;
+            PowerDrills++;
 
             OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.PowerDrill, blocksDestroyed, CascadeMultiplier, DangerZone));
         }
@@ -369,14 +338,13 @@ namespace HollowLines.Core
         public void Reset()
         {
             Score                 = 0;
-            BestStreak            = 0;
-            BestStreakColor       = CellType.Empty;
             BiggestBurst          = 0;
             BiggestBurstFallBonus = 0;
             BestBombChain         = 0;
             PerfectClears         = 0;
             MaxDepth              = 0;
             PeakMomentum          = 0f;
+            PowerDrills           = 0;
             Grazes                = 0;
             FreefallCells         = 0;
             FissureBreaks         = 0;

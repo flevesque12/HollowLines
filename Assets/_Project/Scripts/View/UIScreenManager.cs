@@ -52,7 +52,8 @@ namespace HollowLines.View
         private VisualElement _statsPanel;
         private Label         _depthValue;
         private Label         _scoreValue;
-        private Label         _streakValue;
+        private Label         _momentumValue; // R7.12 — was the v3.1 best streak
+        private Label         _bonusValue;    // R7.12 — grazes · fissure breaks
         private Label         _burstValue;
         private Label         _bombChainValue;
         private Label         _perfectValue;
@@ -314,8 +315,16 @@ namespace HollowLines.View
             _depthValue.text = $"{_score.MaxDepth:N0} m";
             _scoreValue.text = $"{_score.Score:N0} pts";
 
-            _streakValue.text = _score.BestStreak > 0
-                ? $"×{_score.BestStreak} {ColorName(_score.BestStreakColor)}".TrimEnd()
+            // v3.2: the peak momentum the run was paid at, plus how many Power Drills it fired.
+            int peak = Mathf.RoundToInt(_score.PeakMomentum);
+            _momentumValue.text = peak >= 2
+                ? _score.PowerDrills > 0
+                    ? $"×{peak} · {_score.PowerDrills} Power Drill{(_score.PowerDrills > 1 ? "s" : "")}"
+                    : $"×{peak}"
+                : "—";
+
+            _bonusValue.text = _score.Grazes + _score.FissureBreaks > 0
+                ? $"{_score.Grazes} · {_score.FissureBreaks}"
                 : "—";
 
             _burstValue.text = _score.BiggestBurst > 0
@@ -331,18 +340,6 @@ namespace HollowLines.View
                 : $"{_score.PerfectClears} Perfect Clears";
 
             _statsPanel.style.display = DisplayStyle.Flex;
-        }
-
-        /// <summary>Palette names, so "×12 amber" matches the block the player was drilling.</summary>
-        private static string ColorName(CellType type)
-        {
-            switch (type)
-            {
-                case CellType.ColorA: return "amber";
-                case CellType.ColorB: return "teal";
-                case CellType.ColorC: return "pink";
-                default:              return "";
-            }
         }
 
         public void Hide()
@@ -599,10 +596,11 @@ namespace HollowLines.View
             _statsPanel.Add(_scoreValue);
 
             // ── Highlight stats ──────────────────────────────────────────────
-            _streakValue    = AddStatRow(_statsPanel, "MEILLEUR STREAK");
+            _momentumValue  = AddStatRow(_statsPanel, "MOMENTUM MAX");
             _burstValue     = AddStatRow(_statsPanel, "PLUS GROS BURST");
             _bombChainValue = AddStatRow(_statsPanel, "MEILLEURE CHAÎNE");
             _perfectValue   = AddStatRow(_statsPanel, "PERFECT CLEARS");
+            _bonusValue     = AddStatRow(_statsPanel, "FRÔLÉS / FISSURES");
         }
 
         /// <summary>One "LABEL ................ value" line. Returns the value label to fill in.</summary>

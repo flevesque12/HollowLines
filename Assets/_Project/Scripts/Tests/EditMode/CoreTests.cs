@@ -2773,9 +2773,9 @@ namespace HollowLines.Tests
         [Test]
         public void CampaignBoard_ProducesVerticalVeins_LongEnoughForStreaks()
         {
-            // §15.3: a straight-down driller should reach ×4+. Scored the way StreakTracker
-            // actually works — only a DIFFERENT color breaks the run. Hard/HardCracked/AirCapsule
-            // are streak-neutral by design, Empty is fallen past, and Steel/Bomb force a sidestep
+            // §15.3: veins long enough for a ×4+ run of one colour — what feeds v3.2's same-colour
+            // momentum bonus (MomentumTracker.ColorBonusRate) and chunk fusion. Only a DIFFERENT colour
+            // breaks the run here; Hard/HardCracked/AirCapsule are skipped, Empty is fallen past, and Steel/Bomb force a sidestep
             // that horizontal cohesion usually lands on the same color. So every non-color cell
             // is transparent here, which makes this a pure measure of column color coherence.
             for (int level = 1; level <= 10; level++)
@@ -3401,19 +3401,19 @@ namespace HollowLines.Tests
         }
 
         [Test]
-        public void TutorialBoard_StreakChamber_YieldsSixStreak()
+        public void TutorialBoard_VeinChamber_BuildsTier2Momentum()
         {
-            var grid   = GridModel.FromStringMap(StrateGenerator.TutorialBoard());
-            var streak = new StreakTracker();
-            int col    = StrateGenerator.TutorialSpawnColumn;
+            var grid     = GridModel.FromStringMap(StrateGenerator.TutorialBoard());
+            var momentum = new MomentumTracker();
+            int col      = StrateGenerator.TutorialSpawnColumn;
 
-            // Drill straight down the vein, as the natural first instinct does. Stops at the
-            // Diamond chamber (row 9), not the Perfect Clear row — the vein itself is only rows 3-8.
+            // Drill straight down the vein, as the natural first instinct does (no Tick: drills land
+            // well inside the 0.8 s window). Stops at the Diamond chamber (row 9) — the vein is rows 3-8.
             for (int y = StrateGenerator.SpawnRows; y < StrateGenerator.TutorialDiamondRow; y++)
-                streak.NotifyDrill(grid.Get(new GridPos(col, y)), DrillDirection.Down);
+                momentum.NotifyDrill(grid.Get(new GridPos(col, y)));
 
-            Assert.AreEqual(6, streak.CurrentStreak, "the ColorB vein must build an unbroken ×6 streak");
-            Assert.AreEqual(CellType.ColorB, streak.CurrentColor);
+            Assert.AreEqual(6, momentum.ColorChain, "the ColorB vein must be one unbroken colour");
+            Assert.AreEqual(2, momentum.CurrentTier, "1 + 5 × 1.5 = 8.5 progress → Tier 2 (×4) — the same-colour bonus at work");
         }
 
         [Test]
@@ -4115,220 +4115,6 @@ namespace HollowLines.Tests
             Assert.AreEqual(a.Length, b.Length);
             for (int i = 0; i < a.Length; i++)
                 Assert.AreEqual(a[i], b[i], $"Row {i} differs between two calls for level 6");
-        }
-    }
-
-    [TestFixture]
-    public class StreakTrackerTests
-    {
-        // ── Building a streak ───────────────────────────────────────────────
-
-        [Test]
-        public void SameColorThreeTimes_StreakReachesThree()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            Assert.AreEqual(3, streak.CurrentStreak);
-            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
-        }
-
-        [Test]
-        public void DifferentColor_ResetsStreakToOne()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
-
-            Assert.AreEqual(1, streak.CurrentStreak);
-            Assert.AreEqual(CellType.ColorB, streak.CurrentColor);
-        }
-
-        // ── Streak-neutral cells ────────────────────────────────────────────
-
-        [Test]
-        public void AirCapsule_IsStreakNeutral_DoesNotBreakOrGrow()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.AirCapsule, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            Assert.AreEqual(2, streak.CurrentStreak, "capsule must not count toward or break the streak");
-            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
-        }
-
-        [Test]
-        public void Hard_IsStreakNeutral_DoesNotBreakOrGrow()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.Hard, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            Assert.AreEqual(2, streak.CurrentStreak, "hard block must not count toward or break the streak");
-        }
-
-        [Test]
-        public void HardCracked_IsStreakNeutral_DoesNotBreakOrGrow()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
-            streak.NotifyDrill(CellType.HardCracked, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
-
-            Assert.AreEqual(2, streak.CurrentStreak);
-        }
-
-        [Test]
-        public void Diamond_IsStreakNeutral_DoesNotBreakOrGrow()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.Diamond, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            Assert.AreEqual(2, streak.CurrentStreak, "diamond must not count toward or break the streak");
-            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
-        }
-
-        // ── v3.1 arcade pivot: vertical-only streak ─────────────────────────
-
-        [Test]
-        public void LateralDrill_SameColor_DoesNotGrowStreak()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Left);
-
-            Assert.AreEqual(2, streak.CurrentStreak, "a lateral drill must not grow the streak, even same-color");
-            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
-        }
-
-        [Test]
-        public void UpwardDrill_DifferentColor_DoesNotResetStreak()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorB, DrillDirection.Up);
-
-            Assert.AreEqual(2, streak.CurrentStreak, "an upward drill must not break the streak, even a different color");
-            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
-        }
-
-        [Test]
-        public void DownwardDrill_SameColor_GrowsStreakNormally()
-        {
-            var streak = new StreakTracker();
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            Assert.AreEqual(2, streak.CurrentStreak);
-            Assert.AreEqual(CellType.ColorA, streak.CurrentColor);
-        }
-
-        // ── Events ───────────────────────────────────────────────────────────
-
-        [Test]
-        public void StreakBroken_FiresWithCountThatJustEnded()
-        {
-            var streak = new StreakTracker();
-            int? broken = null;
-            streak.StreakBroken += count => broken = count;
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            Assert.IsNull(broken, "must not fire while the streak is still alive");
-
-            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
-            Assert.AreEqual(2, broken, "must report the streak length that just ended (AA), not the new one");
-        }
-
-        [Test]
-        public void StreakBroken_DoesNotFireOnFirstEverDrill()
-        {
-            var streak = new StreakTracker();
-            bool broken = false;
-            streak.StreakBroken += _ => broken = true;
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            Assert.IsFalse(broken, "there is no prior streak to break on the very first drill");
-        }
-
-        [Test]
-        public void StreakGrew_FiresOnEveryColorDrill_WithRunningCount()
-        {
-            var streak = new StreakTracker();
-            var counts = new List<int>();
-            streak.StreakGrew += counts.Add;
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, counts);
-        }
-
-        [Test]
-        public void StreakGrew_DoesNotFireOnNeutralCells()
-        {
-            var streak = new StreakTracker();
-            int growCount = 0;
-            streak.StreakGrew += _ => growCount++;
-
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.AirCapsule, DrillDirection.Down);
-            streak.NotifyDrill(CellType.Hard, DrillDirection.Down);
-
-            Assert.AreEqual(1, growCount, "only the ColorA drill should have fired StreakGrew");
-        }
-
-        // ── Reset ────────────────────────────────────────────────────────────
-
-        [Test]
-        public void Reset_ZeroesStreakAndColor()
-        {
-            var streak = new StreakTracker();
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-
-            streak.Reset();
-
-            Assert.AreEqual(0, streak.CurrentStreak);
-            Assert.AreEqual(CellType.Empty, streak.CurrentColor);
-        }
-
-        [Test]
-        public void Reset_ThenNewColor_StartsCleanStreak_NoSpuriousBrokenEvent()
-        {
-            var streak = new StreakTracker();
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.NotifyDrill(CellType.ColorA, DrillDirection.Down);
-            streak.Reset();
-
-            bool broken = false;
-            streak.StreakBroken += _ => broken = true;
-
-            streak.NotifyDrill(CellType.ColorB, DrillDirection.Down);
-
-            Assert.IsFalse(broken, "Reset must clear prior state so the next drill starts a fresh streak");
-            Assert.AreEqual(1, streak.CurrentStreak);
-            Assert.AreEqual(CellType.ColorB, streak.CurrentColor);
         }
     }
 
@@ -5300,6 +5086,7 @@ namespace HollowLines.Tests
             score.AwardPowerShockwave(4, 6f);
 
             Assert.AreEqual(240, score.Score, "4 blocks × 10 × 6");
+            Assert.AreEqual(1, score.PowerDrills, "one shockwave = one Power Drill (run summary)");
             Assert.AreEqual(ScoreSource.PowerDrill, evt.Value.Source);
             Assert.AreEqual(4, evt.Value.Detail);
         }
@@ -5366,22 +5153,14 @@ namespace HollowLines.Tests
     [TestFixture]
     public class ScoreSystemTests
     {
-        // ── AwardDrill: 10 × streak ──────────────────────────────────────────
+        // ── AwardDrill: 10 × momentum (v3.2 — tier values are pinned in the momentum section below) ──
 
         [Test]
-        public void AwardDrill_StreakOne_ScoresTen()
+        public void AwardDrill_TimesOne_ScoresTen()
         {
             var score = new ScoreSystem();
-            score.AwardDrill(1);
+            score.AwardDrill(1f);
             Assert.AreEqual(10, score.Score);
-        }
-
-        [Test]
-        public void AwardDrill_StreakFive_ScoresFifty()
-        {
-            var score = new ScoreSystem();
-            score.AwardDrill(5);
-            Assert.AreEqual(50, score.Score);
         }
 
         // ── AwardBurst: cells × 25 × floor(fall / 2) ─────────────────────────
@@ -5632,7 +5411,7 @@ namespace HollowLines.Tests
         public void Score_AccumulatesAcrossEverySource()
         {
             var score = new ScoreSystem();
-            score.AwardDrill(3);                      //  30
+            score.AwardDrill(2f);                     //  20
             score.AwardBurst(4, 4);                   // 200
             score.AwardBomb(2, 2);                    // 100
             score.AwardDepth(9);                      //  50
@@ -5641,31 +5420,7 @@ namespace HollowLines.Tests
             score.AwardEnemyKill(EnemyType.Crawler, 2); // 200
             score.AwardBoomerBlast(4, 2);              // 200
 
-            Assert.AreEqual(1430, score.Score);
-        }
-
-        [Test]
-        public void BestStreak_TracksTheMaximum_NotTheLatest()
-        {
-            var score = new ScoreSystem();
-            score.AwardDrill(2);
-            score.AwardDrill(9);
-            score.AwardDrill(4);
-
-            Assert.AreEqual(9, score.BestStreak);
-        }
-
-        [Test]
-        public void BestStreakColor_RecordsTheColorOfTheBestStreak_NotTheLatest()
-        {
-            var score = new ScoreSystem();
-            score.AwardDrill(3, CellType.ColorA);
-            score.AwardDrill(9, CellType.ColorB); // the best one
-            score.AwardDrill(4, CellType.ColorC);
-
-            Assert.AreEqual(9, score.BestStreak);
-            Assert.AreEqual(CellType.ColorB, score.BestStreakColor,
-                "the run summary reports the color the best streak ran on");
+            Assert.AreEqual(1420, score.Score);
         }
 
         [Test]
@@ -5712,7 +5467,7 @@ namespace HollowLines.Tests
             var events = new List<ScoreEvent>();
             score.OnScore += events.Add;
 
-            score.AwardDrill(5);
+            score.AwardDrill(4f);
             score.AwardBurst(6, 4);
             score.AwardBomb(5, 3);
             score.AwardDepth(42);
@@ -5720,9 +5475,9 @@ namespace HollowLines.Tests
 
             Assert.AreEqual(5, events.Count);
 
-            Assert.AreEqual(50, events[0].Points);
-            Assert.AreEqual(ScoreSource.Streak, events[0].Source);
-            Assert.AreEqual(5, events[0].Detail, "detail = streak step");
+            Assert.AreEqual(40, events[0].Points);
+            Assert.AreEqual(ScoreSource.Drill, events[0].Source);
+            Assert.AreEqual(4, events[0].Detail, "detail = momentum multiplier");
 
             Assert.AreEqual(300, events[1].Points);
             Assert.AreEqual(ScoreSource.Burst, events[1].Source);
@@ -5744,10 +5499,10 @@ namespace HollowLines.Tests
         // ── Defensive clamping (§12: clamp, never throw) ─────────────────────
 
         [Test]
-        public void AwardDrill_StreakBelowOne_ClampsToOne()
+        public void AwardDrill_MomentumBelowOne_ClampsToOne()
         {
             var score = new ScoreSystem();
-            score.AwardDrill(0);
+            score.AwardDrill(0f);
             Assert.AreEqual(10, score.Score, "a drill always pays at least once");
         }
 
@@ -5763,17 +5518,18 @@ namespace HollowLines.Tests
         public void Reset_ZeroesEverything()
         {
             var score = new ScoreSystem();
-            score.AwardDrill(7);
+            score.AwardDrill(6f);
             score.AwardBurst(9, 6);
             score.AwardBomb(3, 4);
             score.AwardDepth(18);
             score.AwardPerfectClear(2);
+            score.AwardPowerShockwave(2, 6f);
 
             score.Reset();
 
             Assert.AreEqual(0, score.Score);
-            Assert.AreEqual(0, score.BestStreak);
-            Assert.AreEqual(CellType.Empty, score.BestStreakColor);
+            Assert.AreEqual(0f, score.PeakMomentum);
+            Assert.AreEqual(0, score.PowerDrills);
             Assert.AreEqual(0, score.BiggestBurst);
             Assert.AreEqual(0, score.BiggestBurstFallBonus);
             Assert.AreEqual(0, score.BestBombChain);
@@ -5936,13 +5692,6 @@ namespace HollowLines.Tests
             Assert.IsTrue(events[0].DangerZone);
             Assert.AreEqual(1, events[1].CascadeMult, "a flat source reports no multiplier");
             Assert.IsFalse(events[1].DangerZone);
-        }
-
-        [Test]
-        public void LegacyStreakDrill_DefaultsUnchanged_ButHonoursMultipliers()
-        {
-            Assert.AreEqual(50,  ScoreWith(1, false, s => s.AwardDrill(5)), "v3.1 path untouched at ×1 / no danger");
-            Assert.AreEqual(300, ScoreWith(3, true,  s => s.AwardDrill(5)));
         }
 
         [Test]

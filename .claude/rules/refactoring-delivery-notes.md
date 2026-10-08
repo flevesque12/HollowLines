@@ -966,3 +966,33 @@ in one drill), vs 0 before. 476/476 EditMode.
 **⚠️ Balance watch (R7.14):** at Tier 2 a straight dig now earns roughly +80 in breaks per drill on top of
 the drill's +40, plus the bursts the collapsing walls cause. Measure total income and crush deaths in the
 harness — more falling mass means more crush risk whenever the driller stops (Hard / Steel).
+
+---
+
+### R7.12 — StreakTracker removed — delivered 2026-10-08 (v3.2 migration complete)
+
+**Core:** `StreakTracker.cs` deleted; `ScoreSystem` lost the v3.1 `AwardDrill(int, CellType)`, `BestStreak`
+and `BestStreakColor`; `ScoreSource.Streak` removed (no enum value is persisted anywhere). New run stat
+`ScoreSystem.PowerDrills` (one per `AwardPowerShockwave`).
+
+**Tests:** `StreakTrackerTests` (15) and 4 streak-only `ScoreSystemTests` deleted; the tutorial vein test
+became `TutorialBoard_VeinChamber_BuildsTier2Momentum` (6 ColorB drills → 8.5 progress → Tier 2). The
+`CampaignBoard_ProducesVerticalVeins_*` test is kept — veins still feed the colour bonus and chunk fusion.
+457/457 EditMode.
+
+**View:** GameBootstrap / HUDView no longer hold a StreakTracker; `AvatarView.SetStreakTint` →
+`SetMomentumTint`. Run summary: "MEILLEUR STREAK" → **"MOMENTUM MAX"** ("×6 · 1 Power Drill") + a new
+**"FRÔLÉS / FISSURES"** row (grazes · fissure breaks). Help: "FORER ET STREAK" → "FORER ET MOMENTUM",
+a new page **"MOMENTUM ×4 ET ×6"** (fissures, Power Drill, graze, freefall), a Danger Zone line on the air
+page and a CASCADE line on the falling-blocks page — 9 pages now, numbers read from Core constants.
+
+**Harness:** minimal port so it compiles and scores like the game — `MomentumTracker` drill pay, window
+frozen in freefall, Power Drill completed immediately. **Full parity (graze, freefall, fissures + breaks,
+cascade, danger, the Power Drill burst) is R7.14.** First run already shows v3.2 scores well above the
+v3.1 pass (tunnel bot lvl 7: 16 810).
+
+**Verified in play mode (screenshots):** help pages 3/9 and 4/9; the game-over summary after a run with
+one Power Drill reads "×6 · 1 Power Drill" and fits the card.
+
+**Left for R7.13:** `StrateGenerator`'s level-2 "streak tutorial" vein and its test name
+(`CampaignBoard_Level2_StreakVein_*`) still speak streak — R7.13 replaces the vein with a momentum zone.

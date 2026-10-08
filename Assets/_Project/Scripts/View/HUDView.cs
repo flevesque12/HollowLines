@@ -114,7 +114,6 @@ namespace HollowLines.View
         private AirSystem       _air;
         private HealthSystem    _health;
         private ChainTracker    _chain;
-        private StreakTracker   _streak;   // v3.1 — unused since R7.9, removed in R7.12
         private MomentumTracker _momentum; // v3.2 — persistent (Reset per fresh board, never rebuilt)
         private DepthTracker    _depth;
         private DiamondSystem   _diamonds; // R4: per-board collection state; see RefreshDiamonds
@@ -166,7 +165,7 @@ namespace HollowLines.View
         /// this component's Start() runs.
         /// </summary>
         public void Init(ScoreSystem score, AirSystem air, HealthSystem health, ChainTracker chain,
-                         StreakTracker streak = null, DepthTracker depth = null,
+                         DepthTracker depth = null,
                          CampaignManager campaign = null, PanelSettings ps = null,
                          DiamondSystem diamonds = null, MomentumTracker momentum = null)
         {
@@ -174,7 +173,6 @@ namespace HollowLines.View
             _air      = air;
             _health   = health;
             _chain    = chain;
-            _streak   = streak;
             _depth    = depth;
             _campaign = campaign;
             _diamonds = diamonds;

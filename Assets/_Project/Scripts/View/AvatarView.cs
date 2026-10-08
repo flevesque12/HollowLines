@@ -40,14 +40,14 @@ namespace HollowLines.View
         /// Blend the driller toward a streak color. VfxManager drives this from ×3 up so the
         /// avatar itself shows what color run you are on. <paramref name="t"/> is 0 → base color.
         /// </summary>
-        public void SetStreakTint(Color streakColor, float t)
+        public void SetMomentumTint(Color tierColor, float t)
         {
             if (_renderer == null) return;
-            _renderer.color = Color.Lerp(avatarColor, streakColor, Mathf.Clamp01(t));
+            _renderer.color = Color.Lerp(avatarColor, tierColor, Mathf.Clamp01(t));
         }
 
         /// <summary>Back to the driller's own color (streak broken or reset).</summary>
-        public void ClearStreakTint()
+        public void ClearMomentumTint()
         {
             if (_renderer == null) return;
             _renderer.color = avatarColor;

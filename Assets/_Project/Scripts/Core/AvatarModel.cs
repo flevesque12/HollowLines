@@ -33,7 +33,7 @@ namespace HollowLines.Core
         /// <summary>
         /// Fired after a successful drill. Second arg is the cell type BEFORE the hit
         /// (e.g. Hard, AirCapsule) so listeners can react to what was drilled. Third arg is the
-        /// cardinal direction drilled — StreakTracker (§6.1) uses it to keep the streak vertical-only.
+        /// cardinal direction drilled (the v3.2 momentum ignores it; the Power Drill pierces along it).
         /// </summary>
         public event Action<GridPos, CellType, DrillDirection> Drilled;
 

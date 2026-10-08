@@ -414,10 +414,10 @@ namespace HollowLines.View
             if (_avatarView == null) return;
             if (to <= 0)
             {
-                _avatarView.ClearStreakTint();
+                _avatarView.ClearMomentumTint();
                 return;
             }
-            _avatarView.SetStreakTint(TierColor(to), Mathf.Lerp(0.45f, 1f, (to - 1) / 2f));
+            _avatarView.SetMomentumTint(TierColor(to), Mathf.Lerp(0.45f, 1f, (to - 1) / 2f));
         }
 
         /// <summary>Tier 3: white screen flash + a wide white ring off the driller (§M8). Shake is GameBootstrap's.</summary>

@@ -79,7 +79,7 @@ chance of continuing straight down), while survival required fast descent. The t
 fought for the same input (drill direction). Every successful arcade game aligns these:
 Downwell, Tetris, NecroDancer, Pac-Man CE.
 
-**v3.2 changes — 🟡 PLANNED (see `drill-momentum.md` for full directives):**
+**v3.2 changes — ✅ SHIPPED R7.1-R7.12 (2026-10-08); 🟡 R7.13-R7.15 tutorial + balance left (see `drill-momentum.md`):**
 - **Color Streak → Drill Momentum:** `StreakTracker` replaced by `MomentumTracker`. Time-based
   (0.8s window), not color-based. All drill directions count equally. 4 tiers: ×1 → ×2 → ×4 → ×6.
   Tier 3 = **Power Drill** (pierce 2 blocks + mini shockwave), then cycle resets to Tier 1.
