@@ -18,6 +18,7 @@ Player grid position, drill in 4 directions, step-up, gravity.
 | `Tick(dt)` | Avatar gravity (fall if void below); accumulates the fall clock for coyote |
 | `Position` | Current GridPos |
 | `CoyoteTime` / `InCoyoteWindow` | 🆕 grace window (default 0.12 s) at the start of a fall |
+| `FreefallCells` / `FreefallCell` event | 🆕R7.3 void cells traversed in the current fall (`Action<int>`, running count); 0 on landing/`Teleport`; the drop into a cell you just drilled DOWN never counts |
 
 > **🆕 Coyote time (added post-v3).** `TryMove` used to hard-lock all horizontal control while
 > `IsFalling` ("falling is a commitment"). That made it impossible to step back onto a ledge you'd

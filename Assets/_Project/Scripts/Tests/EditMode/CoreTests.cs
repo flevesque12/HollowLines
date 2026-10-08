@@ -711,6 +711,141 @@ namespace HollowLines.Tests
             Assert.IsFalse(avatar.TryDrill(-1, 0), "drilling stays locked while falling");
             Assert.AreEqual(CellType.ColorC, grid.Get(new GridPos(1, 2)), "the block was not drilled");
         }
+
+        // ── v3.2 Freefall (drill-momentum.md §M3.3) ──────────────────────────
+
+        private static List<int> RecordFreefall(AvatarModel avatar)
+        {
+            var counts = new List<int>();
+            avatar.FreefallCell += counts.Add;
+            return counts;
+        }
+
+        private static void TickAvatar(AvatarModel avatar, float seconds)
+        {
+            for (float t = 0f; t < seconds; t += 1f / 60f)
+                avatar.Tick(1f / 60f);
+        }
+
+        [Test]
+        public void Freefall_ThroughVoid_CountsEveryCell()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".", ".", ".", ".", "A" });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+            var counts = RecordFreefall(avatar);
+
+            TickAvatar(avatar, 1f);
+
+            Assert.AreEqual(new GridPos(0, 3), avatar.Position);
+            CollectionAssert.AreEqual(new[] { 1, 2, 3 }, counts, "one event per void cell, running count");
+        }
+
+        [Test]
+        public void Freefall_CounterResetsOnLanding()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".", ".", ".", "A" });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+
+            TickAvatar(avatar, 1f);
+
+            Assert.IsFalse(avatar.IsFalling);
+            Assert.AreEqual(0, avatar.FreefallCells);
+        }
+
+        [Test]
+        public void Freefall_DrillDownIntoSolid_PaysNothing()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".", "A", "A" });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+            var counts = RecordFreefall(avatar);
+
+            Assert.IsTrue(avatar.TryDrill(0, 1));
+            TickAvatar(avatar, 0.5f);
+
+            Assert.AreEqual(new GridPos(0, 1), avatar.Position, "dropped into the drilled cell");
+            CollectionAssert.IsEmpty(counts, "the drill's own follow-through is not freefall");
+        }
+
+        [Test]
+        public void Freefall_DrillIntoShaft_SkipsDrilledCell_PaysTheVoid()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".", "A", ".", ".", "A" });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+            var counts = RecordFreefall(avatar);
+
+            avatar.TryDrill(0, 1);
+            TickAvatar(avatar, 1f);
+
+            Assert.AreEqual(new GridPos(0, 3), avatar.Position);
+            CollectionAssert.AreEqual(new[] { 1, 2 }, counts, "drilled cell skipped, the 2 void cells below pay");
+        }
+
+        [Test]
+        public void Freefall_WalkingOffALedge_Pays()
+        {
+            var grid = GridModel.FromStringMap(new[]
+            {
+                "..",
+                "A.",
+                "A.",
+                "AA"
+            });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+            var counts = RecordFreefall(avatar);
+
+            Assert.IsTrue(avatar.TryMove(1));
+            TickAvatar(avatar, 1f);
+
+            Assert.AreEqual(new GridPos(1, 2), avatar.Position);
+            CollectionAssert.AreEqual(new[] { 1, 2 }, counts);
+        }
+
+        [Test]
+        public void Freefall_SidewaysDrill_DoesNotSuppressTheNextFall()
+        {
+            var grid = GridModel.FromStringMap(new[]
+            {
+                "..",
+                "A.",
+                "A.",
+                "AA"
+            });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+            var counts = RecordFreefall(avatar);
+
+            grid.Set(new GridPos(1, 0), CellType.ColorB);
+            Assert.IsTrue(avatar.TryDrill(1, 0), "sideways drill");
+            avatar.TryMove(1);
+            TickAvatar(avatar, 1f);
+
+            CollectionAssert.AreEqual(new[] { 1, 2 }, counts, "only a DOWN drill marks a follow-through cell");
+        }
+
+        [Test]
+        public void Freefall_Teleport_ResetsTheCount()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".", ".", ".", ".", ".", "A" });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+            avatar.Tick(0.13f); // two fall steps
+            Assert.AreEqual(2, avatar.FreefallCells);
+
+            avatar.Teleport(new GridPos(0, 0));
+
+            Assert.AreEqual(0, avatar.FreefallCells);
+        }
+
+        [Test]
+        public void Freefall_Grounded_IsZero_NoEvent()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".", "A" });
+            var avatar = new AvatarModel(grid, new GridPos(0, 0));
+            var counts = RecordFreefall(avatar);
+
+            TickAvatar(avatar, 0.5f);
+
+            Assert.AreEqual(0, avatar.FreefallCells);
+            CollectionAssert.IsEmpty(counts);
+        }
     }
 
     [TestFixture]

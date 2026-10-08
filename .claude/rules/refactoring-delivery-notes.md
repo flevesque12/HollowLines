@@ -713,3 +713,22 @@ Extras for the HUD: `TimeRemaining`, `Progress`. 24 new tests, 400/400 EditMode.
   drill through. Options: drop it, or substitute "adjacent to a wobbling chunk" (a real 0.6 s danger).
 
 13 new tests, 413/413 EditMode.
+
+---
+
+### R7.3 — AvatarModel freefall — delivered 2026-10-07
+
+`AvatarModel.FreefallCells` + `event Action<int> FreefallCell` (running count for this fall), per
+drill-momentum.md §M3.3. Counted in `Tick`'s fall loop — one per cell stepped into; back to 0 on
+landing and on `Teleport` (respawn). Nothing wired yet (R7.6 → `ScoreSystem.AwardFreefall()`, R7.5).
+
+- **The drill follow-through never counts.** Drilling DOWN makes the avatar drop into the cell it
+  just emptied; without a guard every downward drill would also pay a freefall cell. `TryDrill`
+  remembers that cell (`_drilledBelow`) and the first fall step into it is skipped; any void below
+  it pays normally. Sideways/up drills don't mark anything. Cleared on landing so it can't go stale.
+- **Event carries the running count** (`Action<int>`) for a possible "FREEFALL ×N" HUD — §7 showed `()`.
+- **⚠️ Balance watch (R7.14):** walking off a 1-row step and stepping back up pays +15 per loop.
+  Probably harmless (air keeps draining while grounded and it never descends), but if the harness
+  or playtests show farming, add a minimum drop (e.g. ≥ 2 cells) or pay only below the deepest row.
+
+8 new tests, 421/421 EditMode.

@@ -37,9 +37,25 @@ namespace HollowLines.Core
         /// </summary>
         public event Action<GridPos, CellType, DrillDirection> Drilled;
 
+        /// <summary>
+        /// v3.2 Freefall (drill-momentum.md §M3.3): empty cells traversed in the current fall.
+        /// Back to 0 on landing. The cell you just drilled out from under yourself never counts.
+        /// </summary>
+        public int FreefallCells { get; private set; }
+
+        /// <summary>
+        /// Fired for every empty cell traversed in free fall, with the running count for this fall.
+        /// ScoreSystem pays a flat amount per cell (§M3.3) — not for the drop into a freshly drilled cell.
+        /// </summary>
+        public event Action<int> FreefallCell;
+
         private readonly GridModel _grid;
         private float _fallTimer;
         private float _fallElapsed; // continuous time spent in the current fall — drives the coyote window
+
+        // The cell just drilled out from under the avatar. Its fall step is the drill's own follow-through,
+        // not "void found" — otherwise every downward drill would also pay a freefall cell.
+        private GridPos? _drilledBelow;
 
         public AvatarModel(GridModel grid, GridPos spawn)
         {
@@ -117,6 +133,9 @@ namespace HollowLines.Core
             if (!_grid.Drill(target))
                 return false;
 
+            if (dy > 0)
+                _drilledBelow = target;
+
             Drilled?.Invoke(target, oldType, DirectionOf(dx, dy));
             return true;
         }
@@ -135,6 +154,8 @@ namespace HollowLines.Core
             {
                 _fallTimer = 0f;
                 _fallElapsed = 0f; // back on solid ground: the coyote window recharges for the next fall
+                FreefallCells = 0;
+                _drilledBelow = null;
                 return;
             }
 
@@ -146,7 +167,17 @@ namespace HollowLines.Core
             while (_fallTimer >= FallStepInterval && IsFalling)
             {
                 _fallTimer -= FallStepInterval;
-                MoveTo(Position.Below);
+                GridPos next = Position.Below;
+                bool drilledFollowThrough = _drilledBelow.HasValue && _drilledBelow.Value == next;
+                _drilledBelow = null;
+
+                MoveTo(next);
+
+                if (!drilledFollowThrough)
+                {
+                    FreefallCells++;
+                    FreefallCell?.Invoke(FreefallCells);
+                }
             }
         }
 
@@ -155,6 +186,8 @@ namespace HollowLines.Core
         {
             if (!_grid.InBounds(target))
                 throw new ArgumentOutOfRangeException(nameof(target));
+            FreefallCells = 0;
+            _drilledBelow = null;
             MoveTo(target);
         }
 
