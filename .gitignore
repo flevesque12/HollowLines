@@ -81,3 +81,7 @@ packages/
 # Si tu build localement aussi
 build/
 Builds/
+
+# Playtest harness build output
+/tools/playtest/bin/
+/tools/playtest/obj/
