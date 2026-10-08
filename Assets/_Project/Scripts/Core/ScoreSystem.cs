@@ -10,7 +10,7 @@ namespace HollowLines.Core
     ///
     ///   Action          Formula                                  Example
     ///   ──────────────  ───────────────────────────────────────  ───────
-    ///   Drill           DrillPoints × streakStep                 streak 5 → 50
+    ///   Drill           DrillPoints × momentumMult               Tier 3 (×6) → 60   (🔄v3.2)
     ///   Chunk Burst     cells × BurstPointsPerCell × fallBonus   6 cells, fall 4 → 300
     ///                     fallBonus = floor(fallDistance / 2)
     ///   Bomb            blocks × BombPointsPerBlock × chainMult  5 blocks, chain 3 → 375
@@ -19,6 +19,19 @@ namespace HollowLines.Core
     ///   Diamond         DiamondPoints (flat)                     +150 per diamond, however collected
     ///   Enemy Kill      killPoints × bonus                       Crawler 100/Boomer 150, ×fall_bonus/chain_mult/1
     ///   Boomer Blast    blocks × BombPointsPerBlock × parentBonus  Boomer's death explosion scores like a bomb
+    ///   Graze           GrazePoints (flat)                       +50 near-miss            (🆕v3.2)
+    ///   Freefall        FreefallPointsPerCell (flat)             +15 per void cell fallen (🆕v3.2)
+    ///
+    /// === v3.2 global multipliers (drill-momentum.md §M5) ===
+    ///
+    ///   score = base × momentum × cascade × danger_zone  +  graze + freefall
+    ///
+    ///   CascadeMultiplier and DangerZone are INPUTS the caller keeps current (Core systems don't
+    ///   reference each other). ScoreSystem alone decides which source each one scales:
+    ///     × cascade × danger — Drill, Burst, Bomb, EnemyKill, BoomerBlast
+    ///     × danger only      — PerfectClear (rule 7: a cascade never scales the jackpot)
+    ///     flat               — Depth, Diamond, Graze, Freefall (⚡D3)
+    ///   With the defaults (×1, no danger) every v3.1 formula is unchanged.
     ///
     /// === Design rationale (v3) ===
     ///
@@ -40,9 +53,26 @@ namespace HollowLines.Core
         public const int DiamondPoints      = 150;
         public const int CrawlerKillPoints  = 100;
         public const int BoomerKillPoints   = 150;
+        public const int GrazePoints           = 50;  // 🆕v3.2 §M3.2
+        public const int FreefallPointsPerCell = 15;  // 🆕v3.2 §M3.3
+        public const int DangerZoneMultiplier  = 2;   // 🆕v3.2 §M3.4
 
         /// <summary>Rows per +1 burst multiplier: fallBonus = floor(fallDistance / BurstFallDivisor).</summary>
         public const int BurstFallDivisor = 2;
+
+        // ── v3.2 multiplier inputs (kept current by the caller) ─────
+
+        private int _cascadeMultiplier = 1;
+
+        /// <summary>Running cascade multiplier (×1 when idle). Values &lt; 1 clamp to 1.</summary>
+        public int CascadeMultiplier
+        {
+            get => _cascadeMultiplier;
+            set => _cascadeMultiplier = value < 1 ? 1 : value;
+        }
+
+        /// <summary>Mirror of AirSystem.IsDangerZone — doubles base points while true (§M3.4).</summary>
+        public bool DangerZone { get; set; }
 
         // ── Observable state ────────────────────────────────────────
 
@@ -70,6 +100,15 @@ namespace HollowLines.Core
         /// <summary>Deepest row index reached this run — the headline stat on the run summary.</summary>
         public int MaxDepth { get; private set; }
 
+        /// <summary>🆕v3.2 Highest momentum multiplier a drill was paid at this run (×1/×2/×4/×6).</summary>
+        public float PeakMomentum { get; private set; }
+
+        /// <summary>🆕v3.2 Grazes this run.</summary>
+        public int Grazes { get; private set; }
+
+        /// <summary>🆕v3.2 Void cells fallen through this run.</summary>
+        public int FreefallCells { get; private set; }
+
         // ── Events ──────────────────────────────────────────────────
 
         /// <summary>
@@ -91,11 +130,13 @@ namespace HollowLines.Core
         ///   The color the streak is running on, recorded alongside <see cref="BestStreak"/> so the
         ///   run summary can read "×12 amber". Optional: omit it and only the count is tracked.
         /// </param>
+        /// <remarks>v3.1 streak path — kept only until GameBootstrap moves to momentum (R7.6) and
+        /// StreakTracker is deleted (R7.12). New code calls <see cref="AwardDrill(float)"/>.</remarks>
         public void AwardDrill(int streakStep, CellType streakColor = CellType.Empty)
         {
             if (streakStep < 1) streakStep = 1;
 
-            int pts = DrillPoints * streakStep;
+            int pts = Amplified(DrillPoints * streakStep);
             Score += pts;
 
             if (streakStep > BestStreak)
@@ -104,7 +145,45 @@ namespace HollowLines.Core
                 BestStreakColor = streakColor;
             }
 
-            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Streak, streakStep));
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Streak, streakStep, CascadeMultiplier, DangerZone));
+        }
+
+        /// <summary>
+        /// 🆕v3.2 Award one drill tap at the current momentum (MomentumTracker.Multiplier), × cascade
+        /// × danger. Every drill pays at least DrillPoints (rule 1): a multiplier below 1 — or NaN —
+        /// clamps to ×1. Event Detail = the momentum multiplier, rounded.
+        /// </summary>
+        public void AwardDrill(float momentumMult)
+        {
+            if (!(momentumMult >= 1f)) momentumMult = 1f; // also catches NaN
+
+            int pts = Amplified((int)Math.Round(DrillPoints * momentumMult));
+            Score += pts;
+
+            if (momentumMult > PeakMomentum)
+                PeakMomentum = momentumMult;
+
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Drill, (int)Math.Round(momentumMult),
+                                           CascadeMultiplier, DangerZone));
+        }
+
+        /// <summary>🆕v3.2 Flat near-miss bonus (§M3.2). Never multiplied (⚡D3).</summary>
+        public void AwardGraze()
+        {
+            Score += GrazePoints;
+            Grazes++;
+            OnScore?.Invoke(new ScoreEvent(GrazePoints, ScoreSource.Graze, Grazes));
+        }
+
+        /// <summary>
+        /// 🆕v3.2 Flat bonus for one void cell fallen through (§M3.3) — wire to AvatarModel.FreefallCell.
+        /// Never multiplied (⚡D3).
+        /// </summary>
+        public void AwardFreefall()
+        {
+            Score += FreefallPointsPerCell;
+            FreefallCells++;
+            OnScore?.Invoke(new ScoreEvent(FreefallPointsPerCell, ScoreSource.Freefall, 1));
         }
 
         /// <summary>
@@ -118,7 +197,7 @@ namespace HollowLines.Core
             if (fallDistance < 0) fallDistance = 0;
 
             int fallBonus = fallDistance / BurstFallDivisor; // integer division IS the floor
-            int pts       = cellCount * BurstPointsPerCell * fallBonus;
+            int pts       = Amplified(cellCount * BurstPointsPerCell * fallBonus);
 
             Score += pts;
 
@@ -128,7 +207,7 @@ namespace HollowLines.Core
                 BiggestBurstFallBonus = fallBonus;
             }
 
-            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Burst, cellCount));
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Burst, cellCount, CascadeMultiplier, DangerZone));
         }
 
         /// <summary>
@@ -141,13 +220,13 @@ namespace HollowLines.Core
             if (blocksDestroyed < 0) blocksDestroyed = 0;
             if (chainMult       < 1) chainMult       = 1;
 
-            int pts = blocksDestroyed * BombPointsPerBlock * chainMult;
+            int pts = Amplified(blocksDestroyed * BombPointsPerBlock * chainMult);
             Score += pts;
 
             if (chainMult > BestBombChain)
                 BestBombChain = chainMult;
 
-            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Bomb, chainMult));
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Bomb, chainMult, CascadeMultiplier, DangerZone));
         }
 
         /// <summary>
@@ -186,11 +265,12 @@ namespace HollowLines.Core
         {
             if (cascadeStep < 1) cascadeStep = 1;
 
-            int pts = PerfectClearBase;
+            // v3.2: the Danger Zone doubles the jackpot like any base action; the cascade never does (rule 7).
+            int pts = DangerZone ? PerfectClearBase * DangerZoneMultiplier : PerfectClearBase;
             Score += pts;
             PerfectClears++;
 
-            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.PerfectClear, cascadeStep));
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.PerfectClear, cascadeStep, 1, DangerZone));
         }
 
         /// <summary>
@@ -222,10 +302,10 @@ namespace HollowLines.Core
             if (bonus < 1) bonus = 1;
 
             int basePoints = type == EnemyType.Boomer ? BoomerKillPoints : CrawlerKillPoints;
-            int pts = basePoints * bonus;
+            int pts = Amplified(basePoints * bonus);
             Score += pts;
 
-            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.EnemyKill, bonus));
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.EnemyKill, bonus, CascadeMultiplier, DangerZone));
         }
 
         /// <summary>
@@ -240,10 +320,10 @@ namespace HollowLines.Core
             if (blocksDestroyed < 0) blocksDestroyed = 0;
             if (parentBonus     < 1) parentBonus     = 1;
 
-            int pts = blocksDestroyed * BombPointsPerBlock * parentBonus;
+            int pts = Amplified(blocksDestroyed * BombPointsPerBlock * parentBonus);
             Score += pts;
 
-            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.BoomerBlast, parentBonus));
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.BoomerBlast, parentBonus, CascadeMultiplier, DangerZone));
         }
 
         /// <summary>Reset all state for a new run.</summary>
@@ -257,6 +337,18 @@ namespace HollowLines.Core
             BestBombChain         = 0;
             PerfectClears         = 0;
             MaxDepth              = 0;
+            PeakMomentum          = 0f;
+            Grazes                = 0;
+            FreefallCells         = 0;
+            CascadeMultiplier     = 1;
+            DangerZone            = false;
+        }
+
+        /// <summary>base × cascade × danger — the shared multiplier for every "base action" (§M5).</summary>
+        private int Amplified(int basePoints)
+        {
+            int pts = basePoints * CascadeMultiplier;
+            return DangerZone ? pts * DangerZoneMultiplier : pts;
         }
     }
 }

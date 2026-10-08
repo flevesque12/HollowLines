@@ -12,6 +12,9 @@ namespace HollowLines.Core
     ///   Diamond      — 🆕R4: flat award per diamond collected (drilled, bombed, or burst-liberated).
     ///   EnemyKill    — 🆕R5.11: Crawler/Boomer kill, scaled by the parent bonus (fall_bonus/chain_mult/1).
     ///   BoomerBlast  — 🆕R5.11: a Boomer's death explosion. Scores like a bomb blast (§6.5).
+    ///   Drill        — 🆕R7.5: every drill tap × momentum (v3.2). Replaces Streak, which goes in R7.12.
+    ///   Graze        — 🆕R7.5: flat near-miss bonus (drill-momentum.md §M3.2).
+    ///   Freefall     — 🆕R7.5: flat bonus per void cell fallen through (§M3.3).
     /// </summary>
     public enum ScoreSource
     {
@@ -22,6 +25,9 @@ namespace HollowLines.Core
         PerfectClear,
         Diamond,
         EnemyKill,
-        BoomerBlast
+        BoomerBlast,
+        Drill,
+        Graze,
+        Freefall
     }
 }

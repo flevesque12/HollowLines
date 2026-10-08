@@ -6,7 +6,7 @@ paths:
 
 ## 13. Test status
 
-**429 / 429 passing** (EditMode; +8 for R7.4 Danger Zone; +8 for R7.3 AvatarModel freefall; +13 for R7.2 `GrazeSystemTests`; +24 for R7.1 `MomentumTrackerTests`; +13 for R6.2 — 12 `AirSystemTests` start-buffer cases incl. the HUD countdown's `StartGraceRemaining` + `AirStartGraceForLevel`; +10 for R6.1 `DeathTrackerTests`; was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
+**447 / 447 passing** (EditMode; +18 for R7.5 ScoreSystem v3.2; +8 for R7.4 Danger Zone; +8 for R7.3 AvatarModel freefall; +13 for R7.2 `GrazeSystemTests`; +24 for R7.1 `MomentumTrackerTests`; +13 for R6.2 — 12 `AirSystemTests` start-buffer cases incl. the HUD countdown's `StartGraceRemaining` + `AirStartGraceForLevel`; +10 for R6.1 `DeathTrackerTests`; was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
 dev-5 flip, +1 for `EndlessBoard_ContentRows_HavePorosity` — see §15.6; +6 for the tutorial
 showcase board — see §5.14; +5 for AvatarModel coyote time — see §4; +16 for R3.2 endless,
 +2 for the R3.1 steady-state guards (§15.7), +6 for R3.4 Daily Dig (§6.6); +28 for R4 Diamonds
@@ -51,6 +51,7 @@ delta on collection — not just `dotnet build` against the Core sources.
 | `GrazeSystemTests` | 🆕R7.2 13 tests: graze on all four cardinal sides, on the drilled cell itself (zone danger), never diagonal or 2 cells away, null/empty never grazes (and starts no cooldown), several dangers = one graze, event carries the drilled cell, cooldown suppresses / re-arms at exactly 0.5 s / counts down and clamps, negative dt ignored, `Reset` re-arms, tuning constants |
 | `AvatarModelTests` (freefall) | 🆕R7.3 8 tests: every void cell counts (running count), reset on landing, drill-down into solid pays nothing, drill into a shaft skips the drilled cell and pays the void, walking off a ledge pays, a sideways drill does not suppress the next fall, `Teleport` resets, grounded = 0 / no event |
 | `AirSystemTests` (danger zone) | 🆕R7.4 8 tests: off at full air, strictly below 15 % (15.0 is not danger), `DangerZoneChanged(true)` once on entering, `false` when a restore lifts air out, a small restore that stays inside never flips, `Reset` leaves the zone, fires after `AirChanged`, still on at 0 air |
+| `ScoreSystemTests` (v3.2) | 🆕R7.5 18 tests: `AwardDrill(float)` ×1/×2/×4/×6 → 10/20/40/60, <1 and NaN clamp to 10, `Drill` source with Detail = mult, `PeakMomentum`, `AwardGraze` +50 / `AwardFreefall` +15 counted with their sources, cascade scales every base action, danger doubles every base action, full stack ×36, Perfect Clear ×danger never ×cascade, Depth/Diamond/Graze/Freefall flat, cascade clamp, `ScoreEvent` carries cascade/danger, legacy streak drill unchanged at defaults, `Reset` clears the new state and inputs |
 | `DailyDigTests` | 🆕R3.4 6 tests: same day = same seed (any hour), different days differ, consecutive days generate *unrelated boards*, seed stable across runs, never `int.MinValue`, invariant label |
 
 > **Note:** the M2 Collapse (21) and Score (23) suites referenced in the old plan were never

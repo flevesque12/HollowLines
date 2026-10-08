@@ -5283,6 +5283,187 @@ namespace HollowLines.Tests
             Assert.AreEqual(0, score.PerfectClears);
             Assert.AreEqual(0, score.MaxDepth);
         }
+
+        // ── v3.2 Drill Momentum scoring (drill-momentum.md §M5, R7.5) ────────
+
+        [TestCase(1f, 10)]
+        [TestCase(2f, 20)]
+        [TestCase(4f, 40)]
+        [TestCase(6f, 60)]
+        public void AwardDrill_Momentum_ScalesTenPoints(float mult, int expected)
+        {
+            var score = new ScoreSystem();
+            score.AwardDrill(mult);
+            Assert.AreEqual(expected, score.Score);
+        }
+
+        [Test]
+        public void AwardDrill_Momentum_BelowOneOrNaN_PaysTen()
+        {
+            var score = new ScoreSystem();
+            score.AwardDrill(0.2f);
+            score.AwardDrill(float.NaN);
+            Assert.AreEqual(20, score.Score, "a drill always pays at least DrillPoints (rule 1)");
+        }
+
+        [Test]
+        public void AwardDrill_Momentum_FiresDrillSource_DetailIsTheMultiplier()
+        {
+            var score = new ScoreSystem();
+            ScoreEvent? evt = null;
+            score.OnScore += e => evt = e;
+
+            score.AwardDrill(4f);
+
+            Assert.AreEqual(ScoreSource.Drill, evt.Value.Source);
+            Assert.AreEqual(4, evt.Value.Detail);
+            Assert.AreEqual(40, evt.Value.Points);
+        }
+
+        [Test]
+        public void PeakMomentum_TracksTheMaximum()
+        {
+            var score = new ScoreSystem();
+            score.AwardDrill(2f);
+            score.AwardDrill(6f);
+            score.AwardDrill(1f);
+            Assert.AreEqual(6f, score.PeakMomentum);
+        }
+
+        [Test]
+        public void AwardGraze_IsFlatFifty_AndCounted()
+        {
+            var score = new ScoreSystem();
+            ScoreEvent? evt = null;
+            score.OnScore += e => evt = e;
+
+            score.AwardGraze();
+            score.AwardGraze();
+
+            Assert.AreEqual(100, score.Score);
+            Assert.AreEqual(2, score.Grazes);
+            Assert.AreEqual(ScoreSource.Graze, evt.Value.Source);
+        }
+
+        [Test]
+        public void AwardFreefall_IsFifteenPerCell_AndCounted()
+        {
+            var score = new ScoreSystem();
+            ScoreEvent? evt = null;
+            score.OnScore += e => evt = e;
+
+            for (int i = 0; i < 3; i++)
+                score.AwardFreefall();
+
+            Assert.AreEqual(45, score.Score);
+            Assert.AreEqual(3, score.FreefallCells);
+            Assert.AreEqual(ScoreSource.Freefall, evt.Value.Source);
+        }
+
+        // ── Cascade × danger: which sources they scale ────────────────────────
+
+        /// <summary>Score of one call on a fresh system with the given multipliers.</summary>
+        private static int ScoreWith(int cascade, bool danger, System.Action<ScoreSystem> award)
+        {
+            var score = new ScoreSystem { CascadeMultiplier = cascade, DangerZone = danger };
+            award(score);
+            return score.Score;
+        }
+
+        private static readonly (string name, System.Action<ScoreSystem> award, int basePts)[] BaseActions =
+        {
+            ("drill",       s => s.AwardDrill(2f),                         20),
+            ("burst",       s => s.AwardBurst(4, 4),                       200),
+            ("bomb",        s => s.AwardBomb(2, 2),                        100),
+            ("enemy",       s => s.AwardEnemyKill(EnemyType.Crawler, 1),   100),
+            ("boomerBlast", s => s.AwardBoomerBlast(4, 1),                 100),
+        };
+
+        [Test]
+        public void Cascade_ScalesEveryBaseAction()
+        {
+            foreach (var (name, award, basePts) in BaseActions)
+                Assert.AreEqual(basePts * 3, ScoreWith(3, false, award), name);
+        }
+
+        [Test]
+        public void DangerZone_DoublesEveryBaseAction()
+        {
+            foreach (var (name, award, basePts) in BaseActions)
+                Assert.AreEqual(basePts * 2, ScoreWith(1, true, award), name);
+        }
+
+        [Test]
+        public void FullStack_Tier3_Cascade3_Danger_IsTimes36()
+        {
+            Assert.AreEqual(10 * 36, ScoreWith(3, true, s => s.AwardDrill(6f)),
+                "§M5 peak: ×6 momentum × 3 cascade × 2 danger = ×36");
+        }
+
+        [Test]
+        public void PerfectClear_DangerDoubles_CascadeNever()
+        {
+            Assert.AreEqual(500,  ScoreWith(4, false, s => s.AwardPerfectClear(1)), "rule 7: no cascade scaling");
+            Assert.AreEqual(1000, ScoreWith(4, true,  s => s.AwardPerfectClear(1)));
+        }
+
+        [Test]
+        public void FlatSources_IgnoreCascadeAndDanger()
+        {
+            Assert.AreEqual(ScoreSystem.DepthPoints,           ScoreWith(5, true, s => s.AwardDepth(3)));
+            Assert.AreEqual(ScoreSystem.DiamondPoints,         ScoreWith(5, true, s => s.AwardDiamond()));
+            Assert.AreEqual(ScoreSystem.GrazePoints,           ScoreWith(5, true, s => s.AwardGraze()), "⚡D3");
+            Assert.AreEqual(ScoreSystem.FreefallPointsPerCell, ScoreWith(5, true, s => s.AwardFreefall()), "⚡D3");
+        }
+
+        [Test]
+        public void CascadeMultiplier_BelowOne_ClampsToOne()
+        {
+            var score = new ScoreSystem { CascadeMultiplier = 0 };
+            Assert.AreEqual(1, score.CascadeMultiplier);
+            score.CascadeMultiplier = -4;
+            Assert.AreEqual(1, score.CascadeMultiplier);
+        }
+
+        [Test]
+        public void ScoreEvent_CarriesCascadeAndDanger()
+        {
+            var score = new ScoreSystem { CascadeMultiplier = 3, DangerZone = true };
+            var events = new List<ScoreEvent>();
+            score.OnScore += events.Add;
+
+            score.AwardBurst(4, 4);
+            score.AwardGraze();
+
+            Assert.AreEqual(3, events[0].CascadeMult);
+            Assert.IsTrue(events[0].DangerZone);
+            Assert.AreEqual(1, events[1].CascadeMult, "a flat source reports no multiplier");
+            Assert.IsFalse(events[1].DangerZone);
+        }
+
+        [Test]
+        public void LegacyStreakDrill_DefaultsUnchanged_ButHonoursMultipliers()
+        {
+            Assert.AreEqual(50,  ScoreWith(1, false, s => s.AwardDrill(5)), "v3.1 path untouched at ×1 / no danger");
+            Assert.AreEqual(300, ScoreWith(3, true,  s => s.AwardDrill(5)));
+        }
+
+        [Test]
+        public void Reset_ClearsV32StateAndInputs()
+        {
+            var score = new ScoreSystem { CascadeMultiplier = 4, DangerZone = true };
+            score.AwardDrill(6f);
+            score.AwardGraze();
+            score.AwardFreefall();
+
+            score.Reset();
+
+            Assert.AreEqual(0f, score.PeakMomentum);
+            Assert.AreEqual(0, score.Grazes);
+            Assert.AreEqual(0, score.FreefallCells);
+            Assert.AreEqual(1, score.CascadeMultiplier);
+            Assert.IsFalse(score.DangerZone);
+        }
     }
 
     [TestFixture]

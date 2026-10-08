@@ -749,3 +749,31 @@ applies the ×2 in R7.5, GameBootstrap passes the flag in R7.6.
   really does leave the zone. If the vignette flickers at the edge, smooth it in the View.
 
 8 new tests, 429/429 EditMode.
+
+---
+
+### R7.5 — ScoreSystem v3.2 — delivered 2026-10-07 (Sprint 1 Core complete)
+
+drill-momentum.md §M5 formula: `base × momentum × cascade × danger + graze + freefall`.
+
+- **Cascade and Danger Zone are INPUTS on ScoreSystem** (`CascadeMultiplier`, clamped ≥ 1, and
+  `DangerZone`), kept current by GameBootstrap in R7.6 — Core systems don't reference each other.
+  Every `Award*` signature stayed the same; one private `Amplified()` applies them, and ScoreSystem
+  alone decides who gets what (§8 table): × cascade × danger for Drill / Burst / Bomb / EnemyKill /
+  BoomerBlast; × danger only for Perfect Clear (rule 7); flat for Depth / Diamond / Graze / Freefall (⚡D3).
+- **`AwardDrill(float momentumMult)`** — 10 × mult, rounded; < 1 or NaN pays ×1 (rule 1).
+  `ScoreSource.Drill`, Detail = mult. **The v3.1 `AwardDrill(int, CellType)` overload stays** until
+  R7.12 so GameBootstrap and the harness still work; at the defaults (×1, no danger) every v3.1
+  formula is unchanged, so the shipped game scores exactly as before.
+- **`AwardGraze()` +50, `AwardFreefall()` +15**, new sources `Graze` / `Freefall` (appended to the
+  enum — existing values keep their numbers). New run stats: `PeakMomentum`, `Grazes`, `FreefallCells`.
+- **`ScoreEvent` gained `CascadeMult` and `DangerZone`** (optional ctor args) for the R7.9 popups.
+- `Reset()` also clears the two inputs (AirSystem.Reset fires DangerZoneChanged(false) anyway).
+
+**⚠️ Finding — logged as R7.5b:** `ChainTracker` is subscribed ONLY to `CollapseSystem.PerfectClear`.
+Bursts and bomb chains never add a link, so `ChainTracker.CurrentChain` is 0 in nearly every frame
+and `cascade_mult` would be ×1 almost always. §M3.1 says "aucun changement Core — ChainTracker existe
+déjà", which is wrong. Making bursts/bomb chains feed a cascade is a Core change with balance impact
+(§15.1 burst cascades used to reach 78 per run) — decide what counts as a link before R7.6 wires it.
+
+18 new tests, 447/447 EditMode.
