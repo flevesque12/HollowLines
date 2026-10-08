@@ -97,7 +97,9 @@ namespace HollowLines.View
         private HealthSystem    _healthSystem;
         private CampaignManager _campaign;
         private EndlessManager  _endless;
-        private StreakTracker   _streakTracker;
+        private StreakTracker   _streakTracker;   // v3.1 — no longer fed since R7.6; views still hold it until R7.9-R7.12
+        private MomentumTracker _momentumTracker; // v3.2 Drill Momentum (drill-momentum.md §M1)
+        private GrazeSystem     _grazeSystem;     // v3.2 near-miss bonus (§M3.2)
         private DepthTracker    _depthTracker;
         private DiamondSystem   _diamondSystem;
         private DeathTracker    _deathTracker;
@@ -121,6 +123,14 @@ namespace HollowLines.View
         // half-old, half-new systems.
         private bool _pendingSegmentAdvance;
 
+        // v3.2 Power Drill (⚡D1): MomentumTracker fires PowerDrillActivated from inside NotifyDrill, but
+        // the ×6 must still be read by AwardDrill right after — so completion is deferred to the END of
+        // the Drilled handler. R7.8 orchestrates the double-drill + mini shockwave at that same spot.
+        private bool _powerDrillPending;
+
+        // Reused every drill: the danger cells GrazeSystem checks against (active enemies, armed bombs).
+        private readonly List<GridPos> _dangerCells = new List<GridPos>();
+
         // R6.14 (F14): a won level does not cut to the score screen on the spot. The board keeps
         // ticking — input locked, avatar untouchable, air frozen — until the cascades, fuses and
         // chains it already started have played out and paid, then the screen shows the FINAL score.
@@ -139,6 +149,7 @@ namespace HollowLines.View
         private CollapseSystem _collapse;
         private BombSystem    _bombSystem;
         private ChainTracker  _chainTracker;
+        private FissureTracker _fissureTracker; // v3.2 Tier 2 fissures (§M2, ⚡D5) — per board, grid-dependent
         private EnemySystem   _enemySystem;
 
         // ── Persistent views ──────────────────────────────────────────────────
@@ -183,6 +194,21 @@ namespace HollowLines.View
 
             _streakTracker = new StreakTracker();
 
+            // ── v3.2 Drill Momentum (R7.6) ──────────────────────────────────
+            _momentumTracker = new MomentumTracker();
+            _momentumTracker.PowerDrillActivated += mult =>
+            {
+                _powerDrillPending = true; // completed at the end of the Drilled handler (⚡D1)
+                Debug.Log($"[Momentum] POWER DRILL ×{mult}");
+            };
+
+            _grazeSystem = new GrazeSystem();
+            _grazeSystem.GrazeTriggered += _ =>
+            {
+                _scoreSystem.AwardGraze();                                     // +50 flat (⚡D3)
+                _momentumTracker.ExtendTimer(GrazeSystem.MomentumExtension);   // +0.3 s window
+            };
+
             _depthTracker = new DepthTracker();
             _depthTracker.NewDepthReached += row => { if (!_endlessMode) _scoreSystem.AwardDepth(row); };
 
@@ -201,6 +227,8 @@ namespace HollowLines.View
             _airSystem = new AirSystem();
             _airSystem.AirDepleted += () =>
                 _deathTracker.NotifyDeath(DeathCause.Suffocation, _avatar.Position, 0f);
+            // v3.2 Danger Zone (§M3.4): ScoreSystem mirrors the flag and doubles base points.
+            _airSystem.DangerZoneChanged += inDanger => _scoreSystem.DangerZone = inDanger;
 
             // No HealthDepleted -> EndRun here: it fires INSIDE TryTakeDamage, before the hit's cause
             // is recorded. OnAvatarCrushed declares the death itself, right after logging the hit.
@@ -269,10 +297,15 @@ namespace HollowLines.View
             _collapse.Resolve(_avatar.Position);                                // 5. Perfect Clear detection
             _gravity.Tick(dt, _avatar.Position);                                // 6. chunk gravity + burst
             _chainTracker.Tick(dt);                                             // 7. chain close timer
+            bool freefall = _avatar.IsFalling;
+            if (!freefall)                                                      // 7b. momentum window — frozen in
+                _momentumTracker.Tick(dt);                                      //     freefall (§M3.3)
+            _grazeSystem.Tick(dt);                                              // 7c. graze cooldown
             _healthSystem.Tick(dt);                                             // 8. health i-frames
             _deathTracker.Tick(dt);                                             // 8b. run clock (death recap)
-            if (!disableAir && !_levelEnding)                                   // 9. air drain (debug: skippable;
-                _airSystem.Tick(dt);                                            //    frozen once the level is won)
+            if (!disableAir && !_levelEnding && !freefall)                      // 9. air drain (debug: skippable;
+                _airSystem.Tick(dt);                                            //    frozen once the level is won,
+                                                                                //    and in freefall — ⚡D4)
             _enemySystem.Tick(dt, _avatar.Position);                            // 10. enemy movement + contact
 
             // Endless has no drill/burst event to wake buried enemies ahead of the player, so they
@@ -333,6 +366,15 @@ namespace HollowLines.View
             _streakTracker.Reset();
             _depthTracker.Reset();
 
+            // Momentum and graze cooldown restart with a fresh board — but NOT at an endless seam,
+            // which is the same descent continuing (the player usually crosses it mid-fall).
+            if (freshBoard)
+            {
+                _momentumTracker.Reset();
+                _grazeSystem.Reset();
+            }
+            _powerDrillPending = false;
+
             // R4: diamonds are per-board too. Count 'D' straight off the generated rows rather than
             // a separate lookup (e.g. StrateGenerator.DiamondCountForLevel) — that way the gate
             // always matches what is actually on the board, whatever the source (campaign, endless,
@@ -373,7 +415,14 @@ namespace HollowLines.View
             _collapse     = new CollapseSystem(_grid);
             _bombSystem   = new BombSystem(_grid, _collapse);
             _chainTracker = new ChainTracker(_collapse, _gravity, _bombSystem); // before any ChunkBurst scorer subscribes (R7.5b)
+            // v3.2 cascade_mult (§M3.1): the chain IS the cascade. LinkAdded fires inside the tracker's own
+            // ChunkBurst handler — subscribed first — so burst N is scored at ×N by the handler below.
+            _scoreSystem.CascadeMultiplier = 1; // a new board never inherits the previous board's chain
+            _chainTracker.LinkAdded      += link => _scoreSystem.CascadeMultiplier = link;
+            _chainTracker.ChainCompleted += _    => _scoreSystem.CascadeMultiplier = 1;
+            _scoreSystem.DangerZone = _airSystem.IsDangerZone; // re-sync after any Reset on this path
             _enemySystem  = new EnemySystem(_grid); // grid-dependent: the Boomer blast writes cells (§6.5)
+            _fissureTracker = new FissureTracker(_grid); // fresh per board: fissures are keyed by cell
 
             // Settle the freshly generated board into a stable rest state BEFORE play. Generated
             // boards carry unsupported mass over gaps; without this the first ticks would wobble,
@@ -381,29 +430,50 @@ namespace HollowLines.View
             // moves (R2.8d). Settle() drops everything silently: no burst, no shockwave, no crush.
             _gravity.Settle();
 
-            // ── Streak tracking (CLAUDE.md §7) ───────────────────────────────
-            // Every drill pays, scaled by the same-color run. Capsules are streak-neutral,
-            // so grabbing air mid-streak is never a punishment.
+            // ── v3.2 Drill Momentum (CLAUDE.md §7, drill-momentum.md §M1) ────
+            // Every drill pays ×momentum — any direction, any block. Drilling fast IS surviving IS scoring.
             _avatar.Drilled += (drilledCell, oldType, direction) =>
             {
                 int scoreBefore = _scoreSystem.Score; // R6.6: the popup shows what THIS drill earned
-                _streakTracker.NotifyDrill(oldType, direction);
-                _scoreSystem.AwardDrill(_streakTracker.CurrentStreak, _streakTracker.CurrentColor);
+                _momentumTracker.NotifyDrill(oldType);
+                _scoreSystem.AwardDrill(_momentumTracker.Multiplier); // × cascade × danger inside ScoreSystem
                 _airSystem.RestoreDrill();
                 _deathTracker.NotifyDrill(); // R6.1: suffocation recap's "last drill N s ago"
+
+                // Graze AFTER momentum (its +0.3 s must extend the window this drill just refreshed, not be
+                // overwritten by it) and BEFORE bombs/enemies (the bomb this drill lights, or the enemy it
+                // wakes, must not count as a near miss).
+                bool grazed = _grazeSystem.NotifyDrill(drilledCell, CollectDangerCells());
+
                 if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
                 if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(drilledCell); // R4
                 _bombSystem.NotifyDrilled(drilledCell);
                 _enemySystem.NotifyAdjacentDrill(drilledCell); // R5.9: wakes a dormant neighbor
 
-                // R6.6 (F07): "+30 ×3" off the drilled cell. Score delta, not a formula: it includes the
-                // streak multiplier and a drilled diamond's +150, and can't drift from ScoreSystem.
-                // Only a downward drill on a fusable colour builds the streak (v3.1, StreakTracker); a
-                // lateral one still pays ×streak but its popup doesn't claim the "×N" (R6.6 option A).
-                bool buildsStreak = direction == DrillDirection.Down && oldType.CanFuse();
+                // v3.2 Tier 2+ fissures (§M2): cracks the color blocks around the drill; a second crack
+                // breaks one and GravitySystem takes it from there. Read before a Power Drill completes,
+                // so the Tier 3 drill cracks too.
+                _fissureTracker.NotifyDrill(drilledCell, _momentumTracker.CurrentTier);
+
+                // R6.6 (F07): "+40 ×4" off the drilled cell. Score delta, not a formula: it includes the
+                // momentum/cascade/danger multipliers and a drilled diamond's +150. The graze has its own
+                // popup in R7.9, so it is left out here. "×N" shows from Tier 1 (×2) up.
+                int momentum = Mathf.RoundToInt(_momentumTracker.Multiplier);
+                int earned   = _scoreSystem.Score - scoreBefore - (grazed ? ScoreSystem.GrazePoints : 0);
                 _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(drilledCell)),
-                                    _scoreSystem.Score - scoreBefore, _streakTracker.CurrentStreak, buildsStreak);
+                                    earned, momentum, buildsStreak: momentum > 1);
+
+                // ⚡D1: the ×6 covered this drill; the cycle restarts at Tier 1. R7.8 adds the double-drill
+                // and the mini shockwave HERE, before completing, so the whole burst is paid at ×6.
+                if (_powerDrillPending)
+                {
+                    _powerDrillPending = false;
+                    _momentumTracker.CompletePowerDrill();
+                }
             };
+
+            // v3.2 Freefall (§M3.3): +15 per void cell fallen through (never the drill's own follow-through).
+            _avatar.FreefallCell += _ => _scoreSystem.AwardFreefall();
 
             // ── Chunk gravity + burst ────────────────────────────────────────
             _gravity.ChunkLanded += chunk =>
@@ -764,6 +834,21 @@ namespace HollowLines.View
         }
 
         /// <summary>Every damage source lands here, tagged with what hit the avatar (R6.1).</summary>
+        /// <summary>
+        /// v3.2 graze sources (§M3.2, R7.6 option A): active enemies + armed bombs. The "shockwave in
+        /// progress" condition was dropped — GravitySystem resolves a shockwave in a single frame, so
+        /// there is never one to drill through. Wobbling chunks are the parked candidate (after playtests).
+        /// </summary>
+        private List<GridPos> CollectDangerCells()
+        {
+            _dangerCells.Clear();
+            foreach (EnemyEntity enemy in _enemySystem.GetAllAlive())
+                if (enemy.IsActive)
+                    _dangerCells.Add(enemy.Position);
+            _bombSystem.CopyArmedCells(_dangerCells);
+            return _dangerCells;
+        }
+
         private void OnAvatarCrushed(DeathCause cause)
         {
             if (invincible) return;                     // debug: ignore all damage

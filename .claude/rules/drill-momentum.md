@@ -30,6 +30,7 @@ paths:
 | D3 | **Graze et freefall ne sont jamais multipliés par Danger Zone.** Le ×2 s'applique aux actions base seulement (drill, burst, bomb, enemy). | `AwardGraze`/`AwardFreefall` restent flat |
 | D4 | **Air drain skippé pendant le freefall** (`_airSystem.Tick` aussi, pas juste le momentum timer). | Tick order §7 step 9 conditionné |
 | D5 | **FissureTracker = système Core séparé** (`Dictionary<GridPos, int>`). 2ᵉ fissure → bloc se brise → event `FissureBroke`. | Nouveau fichier `Core/FissureTracker.cs` |
+| D6 | **Graze « shockwave en cours » abandonné** (shockwave instantanée). Graze = ennemis actifs + bombes armées. Option « chunk qui wobble » parquée après playtests (§M3.2). | `CollectDangerCells()` dans GameBootstrap |
 
 ---
 
@@ -120,6 +121,10 @@ Events:
   - Quand une cellule atteint 2 fissures → `FissureBroke(GridPos)` event, la cellule
     est vidée dans le GridModel, la fissure est retirée du dictionnaire
   - `Clear()` : reset total (changement de board / segment)
+  - ✅R7.7 **Seuls les blocs de couleur se fissurent** (`CanFuse`) — capsules/diamants disparaîtraient
+    sans être collectés, Hard/Steel existent pour résister, une bombe ne s'arme que par drill/landing.
+    Un bloc brisé ne paie rien en soi : la chute et le burst qui suivent paient. Event `FissureAdded(pos, n)`
+    ajouté pour l'overlay R7.10.
 - Les fissures nourrissent les chunks : blocs brisés créent des trous →
   chunks au-dessus perdent leur support → chute → burst
 
@@ -159,6 +164,15 @@ Récompense:
 
 Cooldown: 0.5s entre deux grazes (éviter le spam)
 ```
+
+> **⚡D6 (2026-10-07) — condition « shockwave en cours » ABANDONNÉE (option A).** La shockwave du
+> `GravitySystem` se résout en un seul frame : il n'existe jamais de shockwave « en cours » à forer.
+> Sources de graze livrées en R7.6 : **ennemis actifs + bombes armées** seulement.
+> **🅿️ Parqué pour après les playtests (option B) :** ajouter « adjacent à un chunk qui wobble »
+> (vrai danger de 0.6 s, déjà télégraphié). Coût : une ligne dans `GameBootstrap.CollectDangerCells()`
+> (`GrazeSystem` accepte n'importe quelles cellules). Risque à mesurer : forer sous un chunk le fait
+> wobbler presque à chaque fois → le graze pourrait devenir automatique (le cooldown 0.5 s limite).
+> À faire seulement si les playtests montrent que le graze est trop rare.
 
 Le graze encourage la prise de risque : rester près du danger au lieu de fuir.
 

@@ -106,12 +106,15 @@ Legend: 🆕 = new file · 🔄 = needs modification · ✅ = R-step complete ·
 
 ```csharp
 // ── 🔄v3.2 Momentum tracking + drill air restore ─────────────────
+// ✅R7.6 SHIPPED order. Graze sits AFTER NotifyDrill (its +0.3 s would otherwise be overwritten by the
+// window refresh) and BEFORE bombs/enemies (the bomb this drill lights / enemy it wakes is not a near miss).
+// Power Drill completion is deferred to the END of the handler so AwardDrill reads the ×6 (⚡D1).
 _avatar.Drilled += (pos, oldType, direction) =>
 {
     _momentumTracker.NotifyDrill(oldType);                    // 🔄v3.2: time-based, no direction
-    _scoreSystem.AwardDrill(_momentumTracker.Multiplier);     // 🔄v3.2: momentum mult instead of streak
+    _scoreSystem.AwardDrill(_momentumTracker.Multiplier);     // 🔄v3.2: × cascade × danger inside ScoreSystem
     _airSystem.RestoreDrill();                                // v3.1: +0.5% air per drill
-    _grazeSystem.NotifyDrill(pos);                            // 🆕v3.2: check adjacent dangers → graze bonus
+    _grazeSystem.NotifyDrill(pos, CollectDangerCells());      // 🆕v3.2: active enemies + armed bombs (⚡D6)
     if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
     if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(pos);  // R4
     _bombSystem.NotifyDrilled(pos);
@@ -126,11 +129,14 @@ _grazeSystem.GrazeTriggered += () =>
 };
 
 // ── 🆕v3.2 Momentum events ───────────────────────────────────────
-_momentumTracker.PowerDrillActivated += () =>
-{
-    // GameBootstrap orchestrates: drill 2 blocks + mini shockwave (radius 1)
-    // on the 2nd block. Details in drill-momentum.md §M2.
-};
+// ✅R7.6: sets _powerDrillPending; the Drilled handler calls CompletePowerDrill() at its end.
+// R7.8 adds the double-drill + mini shockwave (radius 1) right before that call.
+_momentumTracker.PowerDrillActivated += mult => _powerDrillPending = true;
+
+// ── 🆕v3.2 Cascade + Danger Zone → ScoreSystem inputs (✅R7.6) ────
+_chainTracker.LinkAdded      += link => _scoreSystem.CascadeMultiplier = link;  // per board
+_chainTracker.ChainCompleted += _    => _scoreSystem.CascadeMultiplier = 1;
+_airSystem.DangerZoneChanged += d    => _scoreSystem.DangerZone = d;            // once, in Awake
 
 // ── 🆕v3.2 Freefall scoring ──────────────────────────────────────
 _avatar.FreefallCell += () =>

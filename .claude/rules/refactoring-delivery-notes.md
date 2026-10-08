@@ -806,3 +806,61 @@ Fixes the R7.5 finding: `ChainTracker` only listened to `CollapseSystem.PerfectC
   chain lengths with the harness in R7.14 and add a cap in ScoreSystem if bursts get the same way.
 
 6 new tests (ChainTracker had none), 453/453 EditMode.
+
+---
+
+### R7.6 — GameBootstrap momentum wiring — delivered 2026-10-07
+
+The integration pivot: **the shipped game now scores with Drill Momentum.** StreakTracker is still
+constructed and handed to HUD/Audio/VFX (deleted in R7.12) but no longer fed.
+
+- **Drilled handler** (order matters, §7 updated): `NotifyDrill` → `AwardDrill(Multiplier)` → air →
+  **graze** (after the window refresh so its +0.3 s survives; before bombs/enemies so the bomb this drill
+  lights isn't a near miss) → capsule/diamond/bombs/enemies → popup → **Power Drill completion last**
+  (`_powerDrillPending`, so the 10th drill is paid at ×6 — ⚡D1; R7.8 inserts the burst there).
+- **Graze sources** = active enemies + armed bombs (`CollectDangerCells`, reused list). ⚡D6: the
+  "shockwave in progress" condition is dropped; wobbling chunks parked for after playtests.
+- **Cascade** = `ChainTracker.LinkAdded/ChainCompleted` → `ScoreSystem.CascadeMultiplier` (per board,
+  reset to 1 on load). **Danger Zone** = `AirSystem.DangerZoneChanged` → `ScoreSystem.DangerZone`
+  (once in Awake, re-synced on every load). **Freefall** = `AvatarModel.FreefallCell` → `AwardFreefall`.
+- **Tick:** momentum skipped while `IsFalling` (§M3.3); graze cooldown ticks; **air drain skipped while
+  falling** (⚡D4).
+- **Momentum survives the endless seam** — `Reset()` only on `freshBoard`, like the air start buffer.
+- **Drill popup** shows the momentum "×N" from Tier 1 (×2) and excludes the graze's +50 (own popup in R7.9).
+
+**Verified in play mode (UnityMCP) on the tutorial board:** 12 drills straight down — the ColorB vein
+reached Tier 1 at drill 3 and Tier 2 at drill 5 (same-color ×1.5 bonus), drill 8 paid **+60 (×6, Power
+Drill)** then dropped to Tier 1, a diamond paid +150, falling through the burst chamber paid 3 × +15
+freefall. Air forced below 15 % → `ScoreSystem.DangerZone` true and drills paid ×2 (`+20 … danger ×2`).
+Zero console errors. 453/453 EditMode.
+
+**⚠️ Interim gap until the View sprint (R7.9-R7.11):** no streak counter, flat drill pitch, no avatar
+tint — the drill popup "×N" is the only momentum feedback. Cascade not exercised live (needs a burst
+chain); its ordering is pinned by `LinkIsCounted_BeforeALaterChunkBurstSubscriberRuns`.
+
+---
+
+### R7.7 — FissureTracker — delivered 2026-10-07
+
+`Core/FissureTracker.cs` (⚡D5), per drill-momentum.md §M2. Per board (`new FissureTracker(_grid)` in
+`LoadLevel`, like every grid-dependent system), wired in the Drilled handler after bombs/enemies and
+BEFORE the Power Drill completes (so the Tier 3 drill cracks too).
+
+- `NotifyDrill(pos, tier)`: Tier ≥ 2 → +1 fissure on each cardinal **color** neighbour; the 2nd breaks it
+  (`grid.Set(Empty)` → `FissureBroke(pos)`; GravitySystem picks up the hole). `FissureAdded(pos, count)`
+  for the R7.10 overlay. `GetFissures`, `Count`, `Clear`.
+- **Color blocks only** (`CanFuse`) — deviation from "non-vides": capsules/diamonds would vanish
+  uncollected, Hard/Steel are meant to resist, bombs only arm from a drill or a landing. Fits §M2:
+  fissures feed chunks, and chunks are color.
+- **Keyed by position:** a fissured block that is drilled/blasted/falls reads 0 immediately and is pruned
+  on the next drill, so a block sliding into the spot never inherits the crack.
+- Breaking pays nothing and restores no air — the fall/burst it causes does.
+
+**Verified in play mode** on the tutorial vein: Tier 2 drills cracked the block below (ColorB, then the
+ColorA divider, then the ColorC slab on the Tier 3 Power Drill), zero console errors. 462/462 EditMode.
+
+**⚠️ Design finding for R7.14 — straight-down descent never breaks anything.** A block beside the shaft
+at (x+1, y) is a neighbour of exactly ONE cell of column x, so a pure vertical dig cracks it once and
+moves on. The block below gets cracked, then drilled anyway. Breaks need lateral drilling or a zigzag.
+So the "passive destabilisation" only fires for players who already move sideways — measure it in the
+harness; levers if it's too rare: break side blocks at 1 fissure, crack diagonals too, or a 2-cell reach.

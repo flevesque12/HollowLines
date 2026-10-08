@@ -166,8 +166,8 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 
 | Step | Task | Tests |
 |---|---|---|
-| R7.6 | `GameBootstrap`: rewire Drilled handler, momentum tick, graze events, freefall, Power Drill orchestration | Integration |
-| R7.7 | ⚡D5 `FissureTracker`: `Dictionary<GridPos, int>`, Tier 2+ drill → +1 fissure adjacents, 2nd fissure → `FissureBroke` event + vide la cellule | TBD |
+| R7.6 ✅ | `GameBootstrap`: rewire Drilled handler, momentum tick, graze events, freefall, Power Drill orchestration | Integration, 453/453 + play mode |
+| R7.7 ✅ | ⚡D5 `FissureTracker`: `Dictionary<GridPos, int>`, Tier 2+ drill → +1 fissure adjacents, 2nd fissure → `FissureBroke` event + vide la cellule | 9 new, 462/462 + play mode |
 | R7.8 | Power Drill: double-drill + mini shockwave (radius 1), cycle reset to Tier 1 | TBD |
 
 #### Sprint 3 — View Layer
@@ -191,4 +191,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 > - R7.1–R7.5 are pure Core — no Unity dependency, fully testable with NUnit.
 > - R7.6 is the integration pivot: once wired, the old streak system is dead.
 > - R7.12 is the cleanup — only after R7.6 is verified.
+> - 🅿️ **After playtests:** graze option B — wobbling chunks as a graze source (drill-momentum.md ⚡D6).
+> - ⚠️ Between R7.6 and R7.9-R7.11 the streak counter, drill pitch and streak tint are silent (StreakTracker
+>   is no longer fed); the drill popup "×N" is the only momentum feedback until the View sprint.
 > - R7.14–R7.15 require the playtest harness (`tools/playtest/`) to be updated for momentum.
