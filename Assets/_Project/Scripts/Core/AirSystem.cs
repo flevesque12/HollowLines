@@ -32,6 +32,10 @@ namespace HollowLines.Core
         // survival loop is "drill to breathe", not a bonus for hitting a special cell type.
         public const float DrillRestoreAmount = 0.5f; // % per drill (any successful drill)
 
+        // v3.2 Danger Zone (drill-momentum.md §M3.4): below this, base points score ×2 — the comeback
+        // mechanic. In % like Air itself (the spec's "0.15" is the same threshold as a fraction).
+        public const float DangerZoneThreshold = 15f;
+
         // R6.2 (F02) start buffer: a new player spends the first seconds of a board reading it, not
         // drilling, and drilling is the main air source since v3.1 — so the clock was hitting hardest
         // exactly when the player was least able to answer it. A board now opens with a grace window
@@ -50,6 +54,9 @@ namespace HollowLines.Core
         // ── State ────────────────────────────────────────────────────
         public float Air { get; private set; } = MaxAir;
         public bool IsEmpty => Air <= 0f;
+
+        /// <summary>v3.2: air below <see cref="DangerZoneThreshold"/> — ScoreSystem doubles base points (§M3.4).</summary>
+        public bool IsDangerZone => Air < DangerZoneThreshold;
 
         /// <summary>True while the start buffer's zero-drain window is running.</summary>
         public bool InStartGrace => _bufferActive && _bufferTime < _startGrace;
@@ -83,7 +90,14 @@ namespace HollowLines.Core
         /// <summary>Fired whenever Air changes — view updates the HUD bar here.</summary>
         public event Action<float> AirChanged;
 
+        /// <summary>
+        /// Fired only when IsDangerZone flips (true = entered, false = left), after AirChanged —
+        /// the view starts/stops the vignette and heartbeat here instead of polling.
+        /// </summary>
+        public event Action<bool> DangerZoneChanged;
+
         private bool _depleted;
+        private bool _wasDangerZone;
 
         // Start buffer clock. Seconds since BeginStartBuffer; once it passes the end of the ramp the
         // buffer switches itself off, so a long run pays nothing for it.
@@ -128,7 +142,7 @@ namespace HollowLines.Core
                 return; // grace window: nothing drains, nothing to report
 
             Air = Math.Max(0f, Air - DrainRate * drainSeconds);
-            AirChanged?.Invoke(Air);
+            NotifyAirChanged();
 
             if (Air <= 0f && !_depleted)
             {
@@ -170,7 +184,7 @@ namespace HollowLines.Core
             _depleted = false;
             _bufferActive = false;
             _bufferTime   = 0f;
-            AirChanged?.Invoke(Air);
+            NotifyAirChanged();
         }
 
         // ── Private ──────────────────────────────────────────────────
@@ -200,7 +214,18 @@ namespace HollowLines.Core
             float before = Air;
             Air = Math.Min(MaxAir, Air + amount);
             if (Air != before)
-                AirChanged?.Invoke(Air);
+                NotifyAirChanged();
+        }
+
+        private void NotifyAirChanged()
+        {
+            AirChanged?.Invoke(Air);
+
+            bool danger = IsDangerZone;
+            if (danger == _wasDangerZone)
+                return;
+            _wasDangerZone = danger;
+            DangerZoneChanged?.Invoke(danger);
         }
     }
 }

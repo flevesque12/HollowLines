@@ -732,3 +732,20 @@ landing and on `Teleport` (respawn). Nothing wired yet (R7.6 → `ScoreSystem.Aw
   or playtests show farming, add a minimum drop (e.g. ≥ 2 cells) or pay only below the deepest row.
 
 8 new tests, 421/421 EditMode.
+
+---
+
+### R7.4 — AirSystem Danger Zone — delivered 2026-10-07
+
+`AirSystem.IsDangerZone` (`Air < DangerZoneThreshold`, **15f** — Air is in %, the spec's `0.15f` is
+the same threshold as a fraction), per drill-momentum.md §M3.4 / §M7.6. Nothing wired yet: ScoreSystem
+applies the ×2 in R7.5, GameBootstrap passes the flag in R7.6.
+
+- **Added `event Action<bool> DangerZoneChanged`** (not in M7), fired only on a flip, after
+  `AirChanged`. R7.10/R7.11 start/stop the vignette and heartbeat from it instead of polling.
+- Every `AirChanged` now goes through one `NotifyAirChanged()` helper (Tick, Restore, Reset), so the
+  flag can't miss a change path.
+- **No hysteresis in Core** — the ×2 follows the exact threshold, as specced. A +0.5 % drill at 14.8 %
+  really does leave the zone. If the vignette flickers at the edge, smooth it in the View.
+
+8 new tests, 429/429 EditMode.

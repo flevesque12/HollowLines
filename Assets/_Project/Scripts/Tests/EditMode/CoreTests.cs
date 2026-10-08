@@ -1287,6 +1287,107 @@ namespace HollowLines.Tests
                 air.Tick(1f);
             Assert.AreEqual(1, count, "AirDepleted fires again after Reset()");
         }
+
+        // ── v3.2 Danger Zone (drill-momentum.md §M3.4) ───────────────────────
+
+        /// <summary>An AirSystem drained to exactly `air` % in one tick (no start buffer).</summary>
+        private static AirSystem AirAt(float air)
+        {
+            var sys = new AirSystem { DrainRate = AirSystem.MaxAir - air };
+            sys.Tick(1f);
+            return sys;
+        }
+
+        [Test]
+        public void DangerZone_OffAtFullAir()
+        {
+            Assert.IsFalse(new AirSystem().IsDangerZone);
+        }
+
+        [Test]
+        public void DangerZone_StrictlyBelowThreshold()
+        {
+            Assert.IsFalse(AirAt(AirSystem.DangerZoneThreshold).IsDangerZone, "exactly 15 % is not danger");
+            Assert.IsTrue(AirAt(AirSystem.DangerZoneThreshold - 0.1f).IsDangerZone);
+            Assert.AreEqual(15f, AirSystem.DangerZoneThreshold);
+        }
+
+        [Test]
+        public void DangerZoneChanged_FiresOnceOnEntering()
+        {
+            var air = new AirSystem { DrainRate = 10f };
+            var flips = new List<bool>();
+            air.DangerZoneChanged += flips.Add;
+
+            air.Tick(8f);  // 20 %
+            CollectionAssert.IsEmpty(flips, "no flip above the threshold");
+            air.Tick(0.6f); // 14 %
+            air.Tick(0.5f); //  9 % — still inside
+            air.Tick(0.5f); //  4 %
+
+            CollectionAssert.AreEqual(new[] { true }, flips);
+        }
+
+        [Test]
+        public void DangerZoneChanged_FiresFalse_WhenARestoreLiftsAirOut()
+        {
+            var air = AirAt(12f);
+            var flips = new List<bool>();
+            air.DangerZoneChanged += flips.Add;
+
+            air.RestoreCapsule(); // +6 → 18 %
+
+            Assert.IsFalse(air.IsDangerZone);
+            CollectionAssert.AreEqual(new[] { false }, flips);
+        }
+
+        [Test]
+        public void DangerZone_SmallRestoreThatStaysInside_DoesNotFlip()
+        {
+            var air = AirAt(10f);
+            int flips = 0;
+            air.DangerZoneChanged += _ => flips++;
+
+            air.RestoreDrill(); // 10.5 %
+
+            Assert.IsTrue(air.IsDangerZone);
+            Assert.AreEqual(0, flips);
+        }
+
+        [Test]
+        public void DangerZone_Reset_LeavesTheZone()
+        {
+            var air = AirAt(5f);
+            var flips = new List<bool>();
+            air.DangerZoneChanged += flips.Add;
+
+            air.Reset();
+
+            Assert.IsFalse(air.IsDangerZone);
+            CollectionAssert.AreEqual(new[] { false }, flips);
+        }
+
+        [Test]
+        public void DangerZoneChanged_FiresAfterAirChanged()
+        {
+            var air = new AirSystem { DrainRate = 90f };
+            var log = new List<string>();
+            air.AirChanged        += a => log.Add("air");
+            air.DangerZoneChanged += d => log.Add("danger");
+
+            air.Tick(1f);
+
+            CollectionAssert.AreEqual(new[] { "air", "danger" }, log);
+        }
+
+        [Test]
+        public void DangerZone_StillOnWhenDepleted()
+        {
+            var air = AirAt(0f);
+
+            Assert.IsTrue(air.IsEmpty);
+            Assert.IsTrue(air.IsDangerZone);
+        }
     }
 
     [TestFixture]
