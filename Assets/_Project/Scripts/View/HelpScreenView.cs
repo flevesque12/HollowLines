@@ -262,7 +262,7 @@ namespace HollowLines.View
 
                 new Page("FORER ET MOMENTUM",
                     new Line($"Chaque bloc foré donne {ScoreSystem.DrillPoints} pts × ton momentum, et {Fr(AirSystem.DrillRestoreAmount)} % d'air.", neutral, TintAmber),
-                    new Line($"Fore sans t'arrêter : chaque coup en moins de {Fr(MomentumTracker.MomentumWindow)} s fait monter le momentum (×2, ×4, ×6). Toutes les directions comptent."),
+                    new Line($"Fore au moins un bloc toutes les {Fr(MomentumTracker.MomentumWindow)} s, dans n'importe quelle direction : le momentum monte (×2, ×4, ×6). Arrête-toi et il retombe."),
                     new Line("Plusieurs blocs de la même couleur de suite : le momentum monte encore plus vite.", neutral, TintTeal),
                     new Line("Bloc dur : il faut deux coups pour le percer.", hard),
                     new Line("Acier : impossible à forer. Seule une explosion le fissure.", steel)),
@@ -285,7 +285,7 @@ namespace HollowLines.View
                     new Line("Retire ce qui le tient : il tremble un instant, puis tombe. Ne reste pas dessous !"),
                     new Line($"S'il tombe de {GravitySystem.BurstFallThreshold} rangées ou plus, il ÉCLATE : {ScoreSystem.BurstPointsPerCell} pts par bloc, multipliés par la hauteur de chute.", neutral, TintAmber),
                     new Line("L'onde de choc casse les blocs autour, libère les capsules d'air et allume les bombes."),
-                    new Line("Un éclatement qui en provoque un autre : CASCADE ×2, ×3… sur les points qui suivent.")),
+                    new Line($"Un éclatement qui en provoque un autre : CASCADE ×2, jusqu'à ×{ScoreSystem.MaxCascadeMultiplier} sur les points qui suivent.")),
 
                 new Page("BOMBES",
                     new Line($"Fore à côté d'une bombe : sa mèche s'allume ({Fr(BombSystem.FuseDuration)} s).", bomb),

@@ -1038,3 +1038,18 @@ column, `DUMP_STUCK=1` trap dump (now dumps the current segment via `Persist.Cur
 against four drilling speeds — it already scales survival with drilling speed (slow ≈ depth 160, realistic
 500+, fast out-earns the 10 %/s cap). **Decision: no constant changed.** Full table in `balance.md` §15.10.
 No Unity code touched; 460/460 EditMode unchanged.
+
+---
+
+### Help text touch-up after R7.14 — 2026-10-08
+
+`HelpScreenView`: the cascade line read "CASCADE ×2, ×3…" (open-ended) → "jusqu'à ×{MaxCascadeMultiplier}"
+(the R7.14 cap, read from the constant); the momentum line now says what happens when you stop
+("Arrête-toi et il retombe"), shortened so page 3 keeps its two-line layout.
+
+**⚠️ Found while checking it — pre-existing, NOT fixed:** at a **16:9** Game view (1280×720) the help card is
+taller than the screen and the "Retour" button is cut off at the bottom. Cause: `HUD Panel Settings.asset` is
+ScaleWithScreenSize, reference **1200×800 (3:2)**, `m_Match: 0` (match width) — on 16:9 the effective
+reference height drops to ~675 units, so anything laid out for 800 overflows. The R6.12 screenshots were taken
+at a taller Game view. Candidate fix: `m_Match` 0.5 or 1 (height) — it rescales every UI screen, so it needs
+a pass over HUD / menus / game over / options / help at 16:9 and 16:10.
