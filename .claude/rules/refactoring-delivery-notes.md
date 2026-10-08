@@ -1016,3 +1016,15 @@ the Power Drill (pierced the ColorC support); **6 wall blocks broke**; the wall 
 (score 845 → 1 195 while gravity settled); the shaft is visibly 3 wide above the driller. No exceptions.
 
 The showcase tutorial board (§5.14) is unchanged — its ColorB vein now reads as "Tier 2" (comments updated).
+
+---
+
+### R7.14 — Harness parity + campaign rebalance — delivered 2026-10-08
+
+Full write-up in `balance.md` §15.9. Harness: full v3.2 parity + a score-gate report. Measured a cascade
+runaway (chains of 37-49, scores up to 223k); dev chose **cascade ×3 cap + gates ×4** (⚡D8) from a measured
+comparison (uncapped / ×5 / ×3 / ×1). `ScoreSystem.MaxCascadeMultiplier = 3` (setter clamps; HUD reads
+"CASCADE ×3 MAX" when the chain runs past it); `CampaignManager.ScoreMinimumForLevel` 500/1500/3000/5000 →
+2000/6000/10000/15000. Gate tests now read the table instead of literals. 460/460 EditMode.
+
+**Not verified in play mode:** the change is two constants and a HUD string; the harness is the evidence.

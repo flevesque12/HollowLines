@@ -3881,8 +3881,8 @@ namespace HollowLines.Tests
             bool fired = false;
             c.LevelCompleted += _ => fired = true;
 
-            // Level 4's minimum is exactly 500 (§9).
-            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: 500);
+            // Exactly level 4's minimum (§9) — read from the table, so a retune can't break this test.
+            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: CampaignManager.ScoreMinimumForLevel(4));
 
             Assert.IsTrue(fired, "meeting the score minimum at the bottom must complete the level");
         }
@@ -3903,7 +3903,7 @@ namespace HollowLines.Tests
             Assert.IsFalse(fired);
 
             // Score caught up (a late burst/bomb/diamond) — same frame loop re-checks and the gate opens.
-            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: 500);
+            c.NotifyAvatarPosition(new GridPos(0, threshold), boardHeight, currentScore: CampaignManager.ScoreMinimumForLevel(4));
             Assert.IsTrue(fired, "the score gate opening while at the bottom must complete the level");
         }
 
@@ -3935,7 +3935,7 @@ namespace HollowLines.Tests
             bool fired = false;
             c.LevelCompleted += _ => fired = true;
 
-            c.NotifyAvatarPosition(new GridPos(0, threshold - 1), boardHeight, currentScore: 10000);
+            c.NotifyAvatarPosition(new GridPos(0, threshold - 1), boardHeight, currentScore: 1000000);
 
             Assert.IsFalse(fired, "score cannot substitute for depth");
         }
@@ -3961,17 +3961,17 @@ namespace HollowLines.Tests
         [Test]
         public void ScoreMinimumForLevel_MatchesTheCampaignTable()
         {
-            // §9: 1-3 → 0, 4-5 → 500, 6-7 → 1500, 8-9 → 3000, 10 → 5000.
-            Assert.AreEqual(0,    CampaignManager.ScoreMinimumForLevel(1));
-            Assert.AreEqual(0,    CampaignManager.ScoreMinimumForLevel(2));
-            Assert.AreEqual(0,    CampaignManager.ScoreMinimumForLevel(3));
-            Assert.AreEqual(500,  CampaignManager.ScoreMinimumForLevel(4));
-            Assert.AreEqual(500,  CampaignManager.ScoreMinimumForLevel(5));
-            Assert.AreEqual(1500, CampaignManager.ScoreMinimumForLevel(6));
-            Assert.AreEqual(1500, CampaignManager.ScoreMinimumForLevel(7));
-            Assert.AreEqual(3000, CampaignManager.ScoreMinimumForLevel(8));
-            Assert.AreEqual(3000, CampaignManager.ScoreMinimumForLevel(9));
-            Assert.AreEqual(5000, CampaignManager.ScoreMinimumForLevel(10));
+            // §9 (R7.14, ×4 for v3.2): 1-3 → 0, 4-5 → 2000, 6-7 → 6000, 8-9 → 10000, 10 → 15000.
+            Assert.AreEqual(0,     CampaignManager.ScoreMinimumForLevel(1));
+            Assert.AreEqual(0,     CampaignManager.ScoreMinimumForLevel(2));
+            Assert.AreEqual(0,     CampaignManager.ScoreMinimumForLevel(3));
+            Assert.AreEqual(2000,  CampaignManager.ScoreMinimumForLevel(4));
+            Assert.AreEqual(2000,  CampaignManager.ScoreMinimumForLevel(5));
+            Assert.AreEqual(6000,  CampaignManager.ScoreMinimumForLevel(6));
+            Assert.AreEqual(6000,  CampaignManager.ScoreMinimumForLevel(7));
+            Assert.AreEqual(10000, CampaignManager.ScoreMinimumForLevel(8));
+            Assert.AreEqual(10000, CampaignManager.ScoreMinimumForLevel(9));
+            Assert.AreEqual(15000, CampaignManager.ScoreMinimumForLevel(10));
         }
 
         // ── Depth-only win (v3: the line gate is gone) ───────────────────────
@@ -5721,6 +5721,17 @@ namespace HollowLines.Tests
             Assert.AreEqual(ScoreSystem.DiamondPoints,         ScoreWith(5, true, s => s.AwardDiamond()));
             Assert.AreEqual(ScoreSystem.GrazePoints,           ScoreWith(5, true, s => s.AwardGraze()), "⚡D3");
             Assert.AreEqual(ScoreSystem.FreefallPointsPerCell, ScoreWith(5, true, s => s.AwardFreefall()), "⚡D3");
+        }
+
+        [Test]
+        public void CascadeMultiplier_AboveTheCap_ClampsToThree()
+        {
+            var score = new ScoreSystem { CascadeMultiplier = 37 };
+            Assert.AreEqual(ScoreSystem.MaxCascadeMultiplier, score.CascadeMultiplier);
+            Assert.AreEqual(3, ScoreSystem.MaxCascadeMultiplier, "R7.14: §M5's ×36 peak = 6 × 3 × 2");
+
+            score.AwardDrill(1f);
+            Assert.AreEqual(30, score.Score, "a 37-link chain pays ×3, not ×37");
         }
 
         [Test]

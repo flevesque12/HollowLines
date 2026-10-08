@@ -59,6 +59,14 @@ namespace HollowLines.Core
         public const int FreefallPointsPerCell = 15;  // 🆕v3.2 §M3.3
         public const int DangerZoneMultiplier  = 2;   // 🆕v3.2 §M3.4
 
+        /// <summary>
+        /// R7.14: ceiling on the cascade multiplier. Uncapped, the harness measured chains of 37-49 links
+        /// (fissures keep gravity busy, so chains rarely close) and level scores of 64k-223k against gates
+        /// of 500-5,000 — the §15.2 runaway again. ×3 is also the peak §M5 was designed around
+        /// (×6 momentum × 3 cascade × 2 danger = ×36). The chain COUNT is not capped — only what it pays.
+        /// </summary>
+        public const int MaxCascadeMultiplier = 3;
+
         /// <summary>Rows per +1 burst multiplier: fallBonus = floor(fallDistance / BurstFallDivisor).</summary>
         public const int BurstFallDivisor = 2;
 
@@ -66,11 +74,11 @@ namespace HollowLines.Core
 
         private int _cascadeMultiplier = 1;
 
-        /// <summary>Running cascade multiplier (×1 when idle). Values &lt; 1 clamp to 1.</summary>
+        /// <summary>Running cascade multiplier (×1 when idle), clamped to [1, MaxCascadeMultiplier].</summary>
         public int CascadeMultiplier
         {
             get => _cascadeMultiplier;
-            set => _cascadeMultiplier = value < 1 ? 1 : value;
+            set => _cascadeMultiplier = value < 1 ? 1 : value > MaxCascadeMultiplier ? MaxCascadeMultiplier : value;
         }
 
         /// <summary>Mirror of AirSystem.IsDangerZone — doubles base points while true (§M3.4).</summary>

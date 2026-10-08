@@ -94,17 +94,21 @@ namespace HollowLines.Core
         /// <summary>
         /// Minimum ScoreSystem.Score required to win a level, on top of reaching the bottom
         /// (v3.1 arcade pivot, §5.7/§9 — replaces the R4 diamond gate). Levels 1-3 are the tutorial
-        /// ramp and have no gate. A tunnel-bot earns ~50 pts/row from Depth alone, so the level 4
-        /// minimum is trivially cleared by descending; the level 8+ minimums require engaging with
-        /// bursts, bombs or enemy kills along the way.
+        /// ramp and have no gate. Level 4-5 minimums are cleared by simply descending; the level 8+
+        /// minimums ask for some bursts, bombs or kills along the way.
+        ///
+        /// R7.14 (v3.2): ×4 the v3.1 values. Momentum, fissure breaks and Power Drills made the old gates
+        /// symbolic (the harness's realistic tunnel bot cleared them 7-28× over even with the cascade
+        /// capped at ×3). At ×4 they keep the v3.1 role: the realistic bot clears every gate with a
+        /// 1.1-4× margin, the newcomer profile (4 s idle, 0.6 s/action) clears levels 4-8.
         /// </summary>
         public static int ScoreMinimumForLevel(int level)
         {
             if (level <= 3) return 0;
-            if (level <= 5) return 500;
-            if (level <= 7) return 1500;
-            if (level <= 9) return 3000;
-            return 5000; // level 10
+            if (level <= 5) return 2000;
+            if (level <= 7) return 6000;
+            if (level <= 9) return 10000;
+            return 15000; // level 10
         }
 
         /// <summary>

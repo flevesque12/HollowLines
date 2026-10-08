@@ -119,7 +119,7 @@ for (int level = 1; level <= 10; level++)
 
 static string ActionHeader() =>
     $"{"lvl",3} {"outcome",-10} {"time",6} {"airMin",6} {"hearts-",7} {"score",6} " +
-    $"{"peakM",6} {"bursts",6} {"bigst",5} {"chain",5} {"bestC",5} {"PC",3} {"% Dr/B/Bo/D/PC",-19}";
+    $"{"peakM",6} {"bursts",6} {"bigst",5} {"chain",5} {"bestC",5} {"PC",3} {"% Mo/B/Bo/D/PC/Bx",-23}";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 2c) Bomb-hunter bot (R2.8e): deliberately seeks buried bombs and digs at them to
@@ -250,6 +250,41 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 7) R7.14 — SCORE GATES vs the v3.2 momentum economy. The gate (CampaignManager.ScoreMinimumForLevel)
+//    was sized for v3.1 (§9: "a tunnel-bot at 50 pts/row earns ~2,000 on a 40-row level"). Momentum,
+//    fissure breaks, Power Drills, cascade and the Danger Zone all pay more now — does the gate still
+//    ask for anything? Score is read when the bot reaches the exit row (the game would hold it there).
+// ─────────────────────────────────────────────────────────────────────────────
+Console.WriteLine();
+Console.WriteLine("=== R7.14 — SEUILS DE SCORE vs ÉCONOMIE MOMENTUM ===");
+foreach (var (name, make, cadence, idle) in new (string, Func<IBot>, float, float)[]
+{
+    ("tunnel rapide 0.15 s", () => new TunnelBot(),   0.15f, 0f),
+    ("tunnel réaliste 0.30 s", () => new TunnelBot(), 0.30f, 0f),
+    ("débutant 0.60 s",      () => new TunnelBot(),   0.60f, 4f),
+    ("row-clear 0.25 s",     () => new RowClearBot(), 0.25f, 0f),
+})
+{
+    Console.WriteLine($"--- {name} ---");
+    Console.WriteLine($"{"lvl",3} {"outcome",-10} {"time",6} {"hearts-",7} {"score",6} {"gate",5} {"×gate",6} " +
+                      $"{"peakM",5} {"PD",3} {"graze",5} {"fiss",5} {"casc",4} {"% Mo/B/Bo/D/PC/Bx",-23}");
+    for (int level = 1; level <= 10; level++)
+    {
+        var sim = new Sim(StrateGenerator.CampaignBoard(level));
+        sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
+        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level));
+        sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
+        IBot bot = idle > 0f ? new HesitantBot(make(), idle) : make();
+        var r = sim.Run(bot, cadence, maxTime: 400f, Dt);
+        int gate = CampaignManager.ScoreMinimumForLevel(level);
+        string ratio = gate > 0 ? $"{(float)r.Score / gate,5:0.0}×" : "    —";
+        Console.WriteLine($"{level,3} {r.Outcome,-10} {r.Time,5:0.0}s {r.HeartsLost,7} {r.Score,6} {gate,5} {ratio,6} " +
+                          $"{r.PeakMomentum,5} {r.PowerDrills,3} {r.Grazes,5} {r.FissureBreaks,5} {r.MaxCascade,4} {r.PointsMix(),-23}");
+    }
+    Console.WriteLine();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 6) ENDLESS (R3.1): the campaign is 10 authored boards, endless is an open-ended
 //    chain of generated segments — so it needs its own measurement. Two questions:
 //    a) does the generated terrain stay PLAYABLE as the difficulty ramps (hard/steel
@@ -260,14 +295,14 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
 Console.WriteLine();
 Console.WriteLine("=== ENDLESS — DESCENTES (drain rampé par profondeur) ===");
 Console.WriteLine($"{"bot",-10} {"seed",6} {"outcome",-10} {"time",6} {"seg",3} {"depth",5} {"airMin",6} {"hearts-",7} " +
-                  $"{"score",7} {"peakM",6} {"bursts",6} {"bigst",5} {"drain",6} {"% Dr/B/Bo/D/PC",-19}");
+                  $"{"score",7} {"peakM",6} {"bursts",6} {"bigst",5} {"drain",6} {"% Mo/B/Bo/D/PC/Bx",-23}");
 foreach (int seed in new[] { 101, 202, 303 })
 {
     foreach (var (name, make) in new (string, Func<IBot>)[] { ("tunnel", () => new TunnelBot()), ("row-clear", () => new RowClearBot()) })
     {
         var (r, segments, drain) = RunEndless(make, seed, 0.15f, maxTime: 400f, dt: Dt);
         Console.WriteLine($"{name,-10} {seed,6} {r.Outcome,-10} {r.Time,5:0.0}s {segments,3} {r.Depth,5} {r.AirMin,5:0.0}% {r.HeartsLost,7} " +
-                          $"{r.Score,7} {r.PeakMomentum,6} {r.Bursts,6} {r.BiggestBurst,5} {drain,5:0.0}% {r.PointsMix(),-19}");
+                          $"{r.Score,7} {r.PeakMomentum,6} {r.Bursts,6} {r.BiggestBurst,5} {drain,5:0.0}% {r.PointsMix(),-23}");
     }
 }
 
@@ -364,13 +399,22 @@ sealed class RunResult
     public int PerfectClears, Bursts, BurstCells, BombChains;
     public int PeakMomentum, BiggestBurst, BestBombChain; // PeakMomentum = ×1/×2/×4/×6 (R7.12)
 
+    // v3.2 (R7.14) momentum instrumentation.
+    public int PowerDrills, Grazes, FissureBreaks, MaxCascade;
+
     /// <summary>Where the points actually came from — the balance question v3 cares about.</summary>
     public int PtsDrill, PtsBurst, PtsBomb, PtsDepth, PtsPerfect;
+    public int PtsFissure, PtsPower, PtsGraze, PtsFreefall;
 
+    /// <summary>Momentum-driven points: drill pay + fissure breaks + Power Drill waves.</summary>
+    public int PtsMomentum => PtsDrill + PtsFissure + PtsPower;
+
+    /// <summary>% momentum / burst / bomb / depth / perfect clear / flat bonuses (graze + freefall).</summary>
     public string PointsMix()
     {
         int total = Math.Max(1, Score);
-        return $"{100 * PtsDrill / total,3}/{100 * PtsBurst / total,3}/{100 * PtsBomb / total,3}/{100 * PtsDepth / total,3}/{100 * PtsPerfect / total,3}";
+        return $"{100 * PtsMomentum / total,3}/{100 * PtsBurst / total,3}/{100 * PtsBomb / total,3}/" +
+               $"{100 * PtsDepth / total,3}/{100 * PtsPerfect / total,3}/{100 * (PtsGraze + PtsFreefall) / total,3}";
     }
 
     /// <summary>Air economy: what the run spent vs what it earned back, by source.</summary>
@@ -387,7 +431,7 @@ sealed class RunResult
 
     public string RowWithActions(int level) =>
         $"{level,3} {Outcome,-10} {Time,5:0.0}s {AirMin,5:0.0}% {HeartsLost,7} {Score,6} " +
-        $"{PeakMomentum,6} {Bursts,6} {BiggestBurst,5} {BombChains,5} {BestBombChain,5} {PerfectClears,3} {PointsMix(),-19}";
+        $"{PeakMomentum,6} {Bursts,6} {BiggestBurst,5} {BombChains,5} {BestBombChain,5} {PerfectClears,3} {PointsMix(),-23}";
 
     /// <summary>Bomb-economy view (§15.4 / R2.8e): what the bomb-hunter actually detonated and earned.
     /// <paramref name="bombsOnBoard"/> is the authored count, so 'det' vs 'bombs' shows arming reach.</summary>
@@ -426,6 +470,9 @@ sealed class Persist
     public readonly AirSystem    Air    = new();
     public readonly HealthSystem Health = new();
     public readonly RunResult    Result = new();
+    public readonly MomentumTracker Momentum = new(); // v3.2: survives an endless seam (R7.6)
+    public readonly GrazeSystem     Graze    = new();
+    public bool PowerDrillPending;                     // ⚡D1: completed at the end of the drill handler
 
     public EndlessManager Endless;  // null for a single-board run
     public float          Elapsed;  // sim clock, carried across segments
@@ -443,7 +490,9 @@ sealed class Sim
     public readonly BombSystem Bombs;
     public readonly ChainTracker Chain;
     public readonly ScoreSystem Score;
-    public readonly MomentumTracker Momentum = new(); // R7.12 minimal port — full v3.2 parity is R7.14
+    public readonly FissureTracker Fissures;            // v3.2 per board, like the game
+    public MomentumTracker Momentum => _p.Momentum;
+    readonly List<GridPos> _dangerCells = new();
     public readonly DepthTracker Depth = new();
     public readonly AirSystem Air;
     public readonly HealthSystem Health;
@@ -471,6 +520,17 @@ sealed class Sim
         Collapse = new CollapseSystem(Grid);
         Bombs = new BombSystem(Grid, Collapse);
         Chain = new ChainTracker(Collapse, Gravity, Bombs); // subscribes to PerfectClear/ChunkBurst FIRST, like GameBootstrap
+        Fissures = new FissureTracker(Grid);
+
+        // v3.2 cascade (R7.5b/R7.6): the chain IS the cascade; a new board never inherits it.
+        Score.CascadeMultiplier = 1;
+        Chain.LinkAdded += link =>
+        {
+            Score.CascadeMultiplier = link; // ScoreSystem caps the pay at ×3 (R7.14)
+            _r.MaxCascade = Math.Max(_r.MaxCascade, link);
+        };
+        Chain.ChainCompleted += _ => Score.CascadeMultiplier = 1;
+        Score.DangerZone = Air.IsDangerZone;
 
         _r.ContentRows += Grid.Height - StrateGenerator.SpawnRows - StrateGenerator.FloorRows;
 
@@ -488,6 +548,10 @@ sealed class Sim
                 switch (evt.Source)
                 {
                     case ScoreSource.Drill:        _r.PtsDrill   += evt.Points; break;
+                    case ScoreSource.FissureBreak: _r.PtsFissure += evt.Points; break;
+                    case ScoreSource.PowerDrill:   _r.PtsPower   += evt.Points; break;
+                    case ScoreSource.Graze:        _r.PtsGraze   += evt.Points; break;
+                    case ScoreSource.Freefall:     _r.PtsFreefall+= evt.Points; break;
                     case ScoreSource.Burst:        _r.PtsBurst   += evt.Points; break;
                     case ScoreSource.Bomb:         _r.PtsBomb    += evt.Points; break;
                     case ScoreSource.Depth:        _r.PtsDepth   += evt.Points; break;
@@ -496,19 +560,40 @@ sealed class Sim
             };
 
             Air.AirDepleted       += () => { _p.Dead = true; _r.Outcome = "air-death"; };
+
+            // v3.2 persistent wiring — mirrors GameBootstrap.Awake (R7.6).
+            Air.DangerZoneChanged += d => Score.DangerZone = d;
+            _p.Momentum.PowerDrillActivated += _ => _p.PowerDrillPending = true;
+            _p.Graze.GrazeTriggered += _ =>
+            {
+                Score.AwardGraze();
+                _p.Momentum.ExtendTimer(GrazeSystem.MomentumExtension);
+            };
             Health.HealthDepleted += () => { _p.Dead = true; _r.Outcome = "crushed"; };
         }
 
+        // Exact GameBootstrap Drilled order (R7.6 / R7.7b / R7.8) — momentum, graze, then side effects,
+        // fissures, and the Power Drill follow-through last.
         Avatar.Drilled += (cell, oldType, direction) =>
         {
             Momentum.NotifyDrill(oldType);
             Score.AwardDrill(Momentum.Multiplier);
-            if (Momentum.IsInPowerDrill) Momentum.CompletePowerDrill(); // R7.14: double-drill + wave
             Air.RestoreDrill(); // R5.2 — was missing here, so every ledger before R6.2 under-counted air
+            _p.Graze.NotifyDrill(cell, DangerCells());
             if (oldType == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
             Bombs.NotifyDrilled(cell);
             _r.Drills++;
+            Fissures.NotifyDrill(cell, Momentum.CurrentTier);
+            if (_p.PowerDrillPending)
+            {
+                _p.PowerDrillPending = false;
+                PowerDrillFollowThrough(cell, direction);
+                Momentum.CompletePowerDrill();
+            }
         };
+
+        Fissures.FissureBroke += _ => Score.AwardFissureBreak(Momentum.Multiplier);
+        Avatar.FreefallCell   += _ => Score.AwardFreefall();
 
         // ── Chunk gravity + burst ────────────────────────────────────────
         Gravity.ChunkLanded += chunk => Bombs.NotifyChunkLanded(chunk);
@@ -555,6 +640,40 @@ sealed class Sim
         Gravity.Settle();
     }
 
+    /// <summary>Harness has no EnemySystem — graze dangers are the armed bombs only.</summary>
+    List<GridPos> DangerCells()
+    {
+        _dangerCells.Clear();
+        Bombs.CopyArmedCells(_dangerCells);
+        return _dangerCells;
+    }
+
+    /// <summary>Mirror of GameBootstrap.PowerDrillFollowThrough (R7.8).</summary>
+    void PowerDrillFollowThrough(GridPos first, DrillDirection direction)
+    {
+        var step = direction switch
+        {
+            DrillDirection.Down => new GridPos(0, 1), DrillDirection.Up => new GridPos(0, -1),
+            DrillDirection.Left => new GridPos(-1, 0), _ => new GridPos(1, 0),
+        };
+        var second = first.Offset(step.X, step.Y);
+        if (!Grid.InBounds(second)) return;
+
+        float mult = Momentum.Multiplier;
+        CellType t = Grid.Get(second);
+        if (t.IsDrillable() && Grid.Drill(second))
+        {
+            Score.AwardDrill(mult);
+            Air.RestoreDrill();
+            if (t == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
+            Bombs.NotifyDrilled(second);
+        }
+        int destroyed = Gravity.ApplyShockwave(second, 1);
+        Score.AwardPowerShockwave(destroyed, mult);
+        if (t.IsDrillable())
+            Fissures.NotifyDrill(second, Momentum.CurrentTier);
+    }
+
     void OnCrushed()
     {
         if (Health.TryTakeDamage())
@@ -591,10 +710,15 @@ sealed class Sim
             Collapse.Resolve(Avatar.Position);
             Gravity.Tick(dt, Avatar.Position);
             Chain.Tick(dt);
-            if (!Avatar.IsFalling) Momentum.Tick(dt); // §M3.3: the window is frozen in freefall
+            bool freefall = Avatar.IsFalling;
+            if (!freefall) Momentum.Tick(dt); // §M3.3: the window is frozen in freefall
+            _p.Graze.Tick(dt);
             Health.Tick(dt);
-            _r.AirDrained += Air.EffectiveDrainRate * dt; // sampled before the tick (R6.2 buffer)
-            Air.Tick(dt);
+            if (!freefall) // ⚡D4: no drain in freefall
+            {
+                _r.AirDrained += Air.EffectiveDrainRate * dt; // sampled before the tick (R6.2 buffer)
+                Air.Tick(dt);
+            }
 
             _r.AirMin = Math.Min(_r.AirMin, Air.Air);
 
@@ -612,6 +736,9 @@ sealed class Sim
         _r.Score         = Score.Score;
         _r.PerfectClears = Score.PerfectClears;
         _r.PeakMomentum  = (int)Score.PeakMomentum;
+        _r.PowerDrills   = Score.PowerDrills;
+        _r.Grazes        = Score.Grazes;
+        _r.FissureBreaks = Score.FissureBreaks;
         _r.BiggestBurst  = Score.BiggestBurst;
         _r.BestBombChain = Score.BestBombChain;
         return _r;

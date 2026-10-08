@@ -185,7 +185,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 |---|---|
 | R7.12 ✅ | Delete `StreakTracker.cs`, update all streak tests → momentum tests | 457/457 + play mode |
 | R7.13 ✅ | `StrateGenerator`: level 2 tutorial zone for momentum (replace color streak tutorial vein) |
-| R7.14 | Campaign rebalance: score gates vs. momentum economy (playtest harness) |
+| R7.14 ✅ | Campaign rebalance: score gates vs. momentum economy (playtest harness) — harness at full v3.2 parity, cascade capped ×3, gates ×4 (⚡D8, §15.9) |
 | R7.15 | Endless rebalance: momentum progression vs. drain ramp |
 
 > **Notes:**

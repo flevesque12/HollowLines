@@ -887,7 +887,9 @@ namespace HollowLines.View
         private void ShowChain(int step)
         {
             if (step < 2) return; // R7.5b: bursts are links now — a single one is not a cascade
-            _chainLabel.text                  = $"CASCADE ×{step}"; // R7.9 (§5.9)
+            // R7.14: the chain can run past the ×3 pay cap — show what it pays, flag the cap.
+            int pays = Mathf.Min(step, ScoreSystem.MaxCascadeMultiplier);
+            _chainLabel.text                  = step > pays ? $"CASCADE ×{pays} MAX" : $"CASCADE ×{pays}"; // R7.9 (§5.9)
             _chainLabel.style.display         = DisplayStyle.Flex;
             _chainHideTimer                   = 0f; // cancel any pending hide
         }

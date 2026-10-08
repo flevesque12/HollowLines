@@ -34,7 +34,7 @@ score = base_pts × momentum_mult × cascade_mult × danger_zone_mult
 | Multiplicateur | Source | Valeurs |
 |---|---|---|
 | `momentum_mult` | MomentumTracker tier | ×1 (T0) / ×2 (T1) / ×4 (T2) / ×6 (T3) |
-| `cascade_mult` | ChainTracker.CurrentChain | ×1 si pas de cascade, ×N sinon |
+| `cascade_mult` | ChainTracker.CurrentChain | ×1 si pas de cascade, ×N sinon — **plafonné à ×3** (`ScoreSystem.MaxCascadeMultiplier`, R7.14) |
 | `danger_zone_mult` | AirSystem.IsDangerZone | ×2 si air < 15%, sinon ×1 |
 
 **Air restore** (revised in §15.1 — the draft values were ~20× oversupplied):
@@ -63,14 +63,16 @@ to function once the line gate was removed.
 | 1 | 24 | Movement + drilling | 4%/s | 0.8 s | 0 | 0 | — |
 | 2 | 30 | 🔄v3.2 Drill Momentum (tutorial zone) | 4%/s | 0.8 s | 0 | 0 | — |
 | 3 | 32 | Chunks + Chunk Burst (tutorial setup) | 4%/s | 0.8 s | 0 | 0 | — |
-| 4 | 40 | Air capsules + drain + **Diamonds** | 7%/s | 0.6 s | 2 | 500 | — |
-| 5 | 44 | Hard blocks | 7%/s | 0.6 s | 3 | 500 | — |
-| 6 | 50 | Bombs (single) + **Crawler** (🔄R5) | 7%/s | 0.6 s | 3 | 1,500 | 3 Crawlers |
-| 7 | 54 | Bomb chains + **Boomer** (🆕v3.1) | 7%/s | 0.6 s | 4 | 1,500 | 3 Crawlers + 2 Boomers |
-| 8 | 60 | Steel blocks | 7%/s | 0.6 s | 4 | 3,000 | 4 Crawlers + 3 Boomers |
-| 9 | 68 | Full mix | 7%/s | 0.6 s | 5 | 3,000 | 5 Crawlers + 4 Boomers |
-| 10 | 76 | Dense final board | 7%/s | 0.6 s | 5 | 5,000 | 6 Crawlers + 5 Boomers |
+| 4 | 40 | Air capsules + drain + **Diamonds** | 7%/s | 0.6 s | 2 | 2,000 | — |
+| 5 | 44 | Hard blocks | 7%/s | 0.6 s | 3 | 2,000 | — |
+| 6 | 50 | Bombs (single) + **Crawler** (🔄R5) | 7%/s | 0.6 s | 3 | 6,000 | 3 Crawlers |
+| 7 | 54 | Bomb chains + **Boomer** (🆕v3.1) | 7%/s | 0.6 s | 4 | 6,000 | 3 Crawlers + 2 Boomers |
+| 8 | 60 | Steel blocks | 7%/s | 0.6 s | 4 | 10,000 | 4 Crawlers + 3 Boomers |
+| 9 | 68 | Full mix | 7%/s | 0.6 s | 5 | 10,000 | 5 Crawlers + 4 Boomers |
+| 10 | 76 | Dense final board | 7%/s | 0.6 s | 5 | 15,000 | 6 Crawlers + 5 Boomers |
 
+> **🔄R7.14 (v3.2): score gates ×4 and cascade capped at ×3** — see `balance.md` §15.9.
+>
 > **🔄v3.1 Score gate (replaces diamond gate).** The diamond gate was removed because it
 > conflicted with design rule 6 (depth is always forward) — players could miss a diamond and
 > have no way to backtrack, making the level impossible. The score gate forces engagement with

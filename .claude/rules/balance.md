@@ -356,3 +356,44 @@ the buffer buys reading time, not immunity. Endless outcomes identical (buffer o
 
 > Speed players now end levels 1-3 at 100 % air. That is the §15.1 "air is decorative for the optimal
 > line" residual, already accepted — the clock taxes farming and hesitation, not descent.
+
+
+### 15.9 v3.2 momentum economy — cascade cap + score gates (R7.14, 2026-10-08)
+
+**Harness first:** `tools/playtest` reached full v3.2 parity — persistent momentum + graze (survive the endless
+seam, like the game), fissures + paid breaks, freefall, cascade → `CascadeMultiplier`, Danger Zone, the real
+Power Drill follow-through, no air drain in freefall. New report §7 "SEUILS DE SCORE" (4 profiles × 10
+levels: score vs gate, peak momentum, Power Drills, grazes, fissure breaks, longest chain, points mix
+`Mo/B/Bo/D/PC/Bx`). **Limit: the harness still has no EnemySystem** — no kills, Boomer blasts or enemy grazes.
+
+**Finding — the cascade ran away (the §15.2 pattern again).** Chains reached **37-49 links**: fissures keep
+gravity busy, so a chain almost never closes, and every burst/bomb multiplied by an ever-growing count.
+Level scores hit 64k-223k against gates of 500-5,000 (×10-×150). Measured caps, realistic tunnel bot (0.30 s):
+
+| lvl | gate (old) | uncapped | cap ×5 | **cap ×3** | no cascade |
+|---|---|---|---|---|---|
+| 4 | 500 | 5 720 | 5 720 | **5 570** | 3 875 |
+| 5 | 500 | 73 295 | 36 490 | **25 785** | 14 395 |
+| 7 | 1 500 | 86 045 | 36 625 | **25 845** | 14 355 |
+| 9 | 3 000 | 133 670 | 36 130 | **26 630** | 17 130 |
+| 10 | 5 000 | 40 785 | 17 140 | **13 805** | 9 810 |
+
+**Decisions (dev, ⚡D8):** cascade pay capped at **×3** (`ScoreSystem.MaxCascadeMultiplier` — the chain count
+itself is not capped; the HUD shows "CASCADE ×3 MAX" past it), and gates **×4**: 2,000 (4-5) / 6,000 (6-7) /
+10,000 (8-9) / 15,000 (10). Even with no cascade at all the old gates were 2-28× too low — momentum and
+fissure breaks pay more by design.
+
+**Result:** realistic bot clears every gate it reaches with a **1.1-4× margin** (level 10: 0.9× at a mid-level
+crush — partial score); newcomer (4 s idle, 0.6 s/action) clears 4-8; the fast bot 1.6-6.5×. Points mix on
+levels 1-4: ~45 % momentum, ~40 % depth — drilling is the reward again (rule 1).
+
+**Open / watch:**
+- **Level 5 is an outlier (×11-13 of its gate):** its board yields a 24-29-link burst cascade (68 % burst points).
+  Harmless for the gate, but the level's score ceiling is far above its neighbours — revisit its strates if
+  per-level leaderboards ever matter.
+- **Perfect Clear share rose** to 15-28 % (up to 59 % for the row-clear farmer) — not because PC grew, but
+  because everything else shrank back. Same judgment call as §15.2; not acted on.
+- **Air is decorative for anything faster than the newcomer**: no drain in freefall (⚡D4) + capsules freed by
+  collapsing walls → fast bots end most levels at ~100 % air. Consistent with the §15.1 "air taxes hesitation,
+  not descent" residual; R7.15 (endless drain ramp) is where descent pressure belongs.
+- Crush deaths on 7-10 for the non-dodging bots predate v3.2 (§15.5) — no conclusion about fissures possible.

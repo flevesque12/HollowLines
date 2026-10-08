@@ -31,6 +31,7 @@ paths:
 | D4 | **Air drain skippé pendant le freefall** (`_airSystem.Tick` aussi, pas juste le momentum timer). | Tick order §7 step 9 conditionné |
 | D5 | **FissureTracker = système Core séparé** (`Dictionary<GridPos, int>`). 2ᵉ fissure → bloc se brise → event `FissureBroke`. | Nouveau fichier `Core/FissureTracker.cs` |
 | D7 | **Fissures sur les 8 voisins (diagonales incluses) + un bloc brisé paie** (10 × momentum × cascade × danger, `ScoreSource.FissureBreak`). Avec 4 voisins, une descente droite ne brisait jamais rien. | `FissureTracker.Neighbours`, `ScoreSystem.AwardFissureBreak` — R7.7b |
+| D8 | **Cascade plafonnée à ×3** (`ScoreSystem.MaxCascadeMultiplier`) + **seuils de score ×4** (2k / 6k / 10k / 15k). Sans plafond : chaînes de 37-49, scores 64k-223k (§15.9). | R7.14 |
 | D6 | **Graze « shockwave en cours » abandonné** (shockwave instantanée). Graze = ennemis actifs + bombes armées. Option « chunk qui wobble » parquée après playtests (§M3.2). | `CollectDangerCells()` dans GameBootstrap |
 
 ---
