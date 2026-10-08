@@ -3229,36 +3229,90 @@ namespace HollowLines.Tests
         // ── v3 tutorials ──────────────────────────────────────────────────────
 
         [Test]
-        public void CampaignBoard_Level2_ContainsStreakVein()
+        public void CampaignBoard_Level2_ContainsMomentumZone()
         {
             string[] board = StrateGenerator.CampaignBoard(2);
             int col = board[0].Length / 2;
 
             for (int y = StrateGenerator.SpawnRows;
-                 y < StrateGenerator.SpawnRows + StrateGenerator.StreakTutorialRows;
+                 y < StrateGenerator.SpawnRows + StrateGenerator.MomentumTutorialRows;
                  y++)
             {
-                Assert.AreEqual('A', board[y][col],
-                    $"Row {y} of the spawn column must be part of the unbroken ColorA vein");
+                Assert.AreEqual('A', board[y][col],     $"row {y}: the spawn column must be the unbroken ColorA vein");
+                Assert.AreEqual('B', board[y][col - 1], $"row {y}: left wall must be ColorB (never fuses with the vein)");
+                Assert.AreEqual('B', board[y][col + 1], $"row {y}: right wall must be ColorB");
             }
         }
 
         [Test]
-        public void CampaignBoard_Level2_StreakVein_IsSupportedAtLoad()
+        public void CampaignBoard_Level2_MomentumZone_IsSupportedAtLoad()
         {
             string[] board = StrateGenerator.CampaignBoard(2);
             int col        = board[0].Length / 2;
-            int belowVein  = StrateGenerator.SpawnRows + StrateGenerator.StreakTutorialRows;
+            int below      = StrateGenerator.SpawnRows + StrateGenerator.MomentumTutorialRows;
 
-            Assert.AreNotEqual('.', board[belowVein][col],
-                "an unsupported vein falls before the player reaches it");
+            for (int x = col - 1; x <= col + 1; x++)
+                Assert.AreNotEqual('.', board[below][x], $"column {x}: an unsupported zone falls before the player reaches it");
         }
 
         [Test]
-        public void CampaignBoard_Level2_StreakVein_IsLongEnoughForFourStreak()
+        public void CampaignBoard_Level2_MomentumZone_SurvivesSettle_AsOneVein()
         {
-            Assert.GreaterOrEqual(StrateGenerator.StreakTutorialRows, 4,
-                "§5.8 asks for 4+ blocks so drilling straight down reaches ×4");
+            // Settle may lower the whole zone if the generated terrain under it settles too — that's
+            // fine — but the vein must stay one unbroken, full-length run in the spawn column.
+            var grid = GridModel.FromStringMap(StrateGenerator.CampaignBoard(2));
+            new GravitySystem(grid).Settle();
+            int col = grid.Width / 2;
+
+            int best = 0, run = 0;
+            for (int y = StrateGenerator.SpawnRows; y < grid.Height; y++)
+            {
+                run  = grid.Get(new GridPos(col, y)) == CellType.ColorA ? run + 1 : 0;
+                best = System.Math.Max(best, run);
+            }
+            Assert.GreaterOrEqual(best, StrateGenerator.MomentumTutorialRows);
+        }
+
+        [Test]
+        public void CampaignBoard_Level2_MomentumZone_StraightDown_FiresPowerDrillOnTheLastBlock()
+        {
+            string[] board = StrateGenerator.CampaignBoard(2);
+            int col        = board[0].Length / 2;
+            var momentum   = new MomentumTracker();
+            int firedAt    = -1, drill = 0;
+            momentum.PowerDrillActivated += _ => firedAt = drill;
+
+            for (int y = StrateGenerator.SpawnRows; y < StrateGenerator.SpawnRows + StrateGenerator.MomentumTutorialRows; y++)
+            {
+                drill++;
+                momentum.NotifyDrill(GridModel.FromStringMap(board).Get(new GridPos(col, y)));
+            }
+
+            Assert.AreEqual(StrateGenerator.MomentumTutorialRows, firedAt,
+                "the zone is sized so the 7th same-colour drill is exactly Tier 3 (1 + 6 × 1.5 = 10)");
+        }
+
+        [Test]
+        public void CampaignBoard_Level2_MomentumZone_WallsBreakAtTier2()
+        {
+            var grid     = GridModel.FromStringMap(StrateGenerator.CampaignBoard(2));
+            var momentum = new MomentumTracker();
+            var cracks   = new FissureTracker(grid);
+            int col      = grid.Width / 2;
+            var broken   = new List<GridPos>();
+            cracks.FissureBroke += broken.Add;
+
+            for (int y = StrateGenerator.SpawnRows; y < StrateGenerator.SpawnRows + StrateGenerator.MomentumTutorialRows; y++)
+            {
+                var cell = new GridPos(col, y);
+                momentum.NotifyDrill(grid.Get(cell));
+                grid.Set(cell, CellType.Empty);               // the drill clears it
+                cracks.NotifyDrill(cell, momentum.CurrentTier);
+            }
+
+            Assert.GreaterOrEqual(broken.Count, 4, "×4 is reached at drill 5 — the walls must visibly give way");
+            foreach (GridPos p in broken)
+                Assert.AreNotEqual(col, p.X, "fissures break the walls, never the vein ahead of the driller");
         }
 
         [Test]

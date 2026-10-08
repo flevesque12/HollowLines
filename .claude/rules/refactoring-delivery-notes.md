@@ -996,3 +996,23 @@ one Power Drill reads "×6 · 1 Power Drill" and fits the card.
 
 **Left for R7.13:** `StrateGenerator`'s level-2 "streak tutorial" vein and its test name
 (`CampaignBoard_Level2_StreakVein_*`) still speak streak — R7.13 replaces the vein with a momentum zone.
+
+---
+
+### R7.13 — Level 2 momentum zone — delivered 2026-10-08
+
+`StrateGenerator.InjectMomentumTutorial` replaces the v3.1 `InjectStreakTutorial` (`StreakTutorialRows` 5 →
+`MomentumTutorialRows` 7). Layout and rationale in §5.8. The zone is sized so a straight-down driller —
+the natural first instinct — lives the whole system: ×2, ×4 with the walls giving way, then a Power Drill
+on the last block of the vein. Walls are ColorB (never fuse with the ColorA vein); the support row is ColorC
+(fuses with neither). Injected in place, so level 2 keeps its 30 rows.
+
+Tests: 3 streak-vein tests → 5 momentum-zone tests, incl. `SurvivesSettle_AsOneVein` (Settle may lower the
+zone with the terrain under it, but the vein stays one full-length run) and an integration test that drives
+`MomentumTracker` + `FissureTracker` down the vein and asserts ≥ 4 wall breaks, none in the vein. 459/459.
+
+**Verified in play mode on campaign level 2:** drills 1-7 on ColorA → T0 T0 T1 T1 T2 T2 then the 7th fired
+the Power Drill (pierced the ColorC support); **6 wall blocks broke**; the wall stubs then fell and burst
+(score 845 → 1 195 while gravity settled); the shaft is visibly 3 wide above the driller. No exceptions.
+
+The showcase tutorial board (§5.14) is unchanged — its ColorB vein now reads as "Tier 2" (comments updated).

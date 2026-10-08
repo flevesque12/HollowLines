@@ -165,8 +165,8 @@ namespace HollowLines.Core
             var rng = new Random(unchecked(level * (int)0x9E3779B9));
             string[] board = Build(CampaignStrates(level), DefaultWidth, rng);
 
-            // v3 teaching moments: streak on level 2, burst on level 3.
-            if (level == 2) InjectStreakTutorial(board);
+            // Teaching moments: Drill Momentum on level 2 (v3.2, R7.13), burst on level 3.
+            if (level == 2) InjectMomentumTutorial(board);
             if (level == 3) InjectBurstTutorial(board);
 
             // R4: diamonds place last, after the tutorials, so they never land on an authored
@@ -493,7 +493,7 @@ namespace HollowLines.Core
         /// to any solid cell, not just fused chunks).
         ///
         ///   rows 0-2   spawn zone (avatar @ col 3)
-        ///   rows 3-8   CHAMBER 1 — Streak + Depth: a 6-block ColorB vein straight down → ×6
+        ///   rows 3-8   CHAMBER 1 — Momentum + Depth: a 6-block ColorB vein straight down → Tier 2 (×4)
         ///   rows 9-10  🆕R4 CHAMBER — Diamonds: one free pickup on the straight-down path (col 3),
         ///              one just off to the side (col 1) rewarding a one-step detour (§6.4)
         ///   row  11    ★ Perfect Clear SECRET: a full-width ColorC slab; clear all 7 → +500 (optional)
@@ -517,7 +517,7 @@ namespace HollowLines.Core
                 ".......", //  1  spawn
                 ".......", //  2  spawn — avatar starts here (col 3)
 
-                "A..B..A", //  3  ┐ CHAMBER 1: ColorB streak vein, drill straight down for ×6
+                "A..B..A", //  3  ┐ CHAMBER 1: ColorB vein, drill straight down → momentum ×4
                 "A..B..A", //  4  │
                 "A..B..A", //  5  │
                 "A..B..A", //  6  │
@@ -549,8 +549,11 @@ namespace HollowLines.Core
             };
         }
 
-        /// <summary>Rows of the authored streak vein. 5 same-color blocks = a guaranteed ×5 streak.</summary>
-        public const int StreakTutorialRows = 5;
+        /// <summary>
+        /// R7.13: rows of the authored momentum vein. 7 same-colour drills = 1 + 6 × ColorBonusRate (1.5)
+        /// = 10 = MomentumTracker.Tier3Threshold — the 7th block fires the Power Drill.
+        /// </summary>
+        public const int MomentumTutorialRows = 7;
 
         /// <summary>Rows of the authored burst band (chunk + support + drop zone + hard floor).</summary>
         public const int BurstTutorialRows = 7;
@@ -566,42 +569,47 @@ namespace HollowLines.Core
             boardHeight - FloorRows - BurstTutorialRows;
 
         /// <summary>
-        /// Level 2 — Color Streak. Overwrite the spawn column for the first rows below the spawn
-        /// zone with one unbroken vein of ColorA:
+        /// Level 2 — Drill Momentum (v3.2, R7.13; replaces the v3.1 colour-streak vein). Overwrite the
+        /// spawn column and its two neighbours for MomentumTutorialRows rows below the spawn zone:
         ///
-        ///   ...A...
-        ///   ...A...   ← 5 blocks, same color, straight down
-        ///   ...A...
-        ///   ...A...
-        ///   ...A...
+        ///   ..BAB..   ← ColorA vein in the spawn column, ColorB walls either side (a different colour,
+        ///   ..BAB..     so they never fuse with the vein)
+        ///   ..BAB..   drill 3 → ×2 (same colour: momentum climbs ×1.5 faster)
+        ///   ..BAB..
+        ///   ..BAB..   drill 5 → ×4: the walls crack and break beside the driller (fissures, ⚡D7)
+        ///   ..BAB..
+        ///   ..BAB..   drill 7 → ×6 POWER DRILL: pierces the support below + mini shockwave
+        ///   ..CCC..   ← support, so nothing falls at load
         ///
-        /// Digging straight down (the natural first instinct) never breaks the color, so the streak
-        /// climbs to ×5 with no explanation needed. Mutates <paramref name="board"/> in place, so the
-        /// row count from CampaignStrates is preserved exactly.
+        /// Drilling straight down — the natural first instinct — walks the player through every tier,
+        /// the fissures and a Power Drill with no explanation needed. The broken walls' upper halves lose
+        /// their footing and burst in the WALL columns, never in the shaft, so the demo can't crush the
+        /// driller. Mutates <paramref name="board"/> in place, so CampaignStrates' row count is exact.
         /// </summary>
-        private static void InjectStreakTutorial(string[] board)
+        private static void InjectMomentumTutorial(string[] board)
         {
             int width = board[0].Length;
             int col   = width / 2; // the avatar's spawn column
-            int last  = SpawnRows + StreakTutorialRows - 1;
+            int last  = SpawnRows + MomentumTutorialRows - 1;
 
-            if (last + 1 >= board.Length)
-                return; // board too short to host the vein (defensive — campaign boards are not)
+            if (width < 3 || last + 1 >= board.Length)
+                return; // too small to host the zone (defensive — campaign boards are not)
 
             for (int y = SpawnRows; y <= last; y++)
             {
                 var row = board[y].ToCharArray();
-                row[col] = 'A';
+                row[col - 1] = 'B';
+                row[col]     = 'A';
+                row[col + 1] = 'B';
                 board[y] = new string(row);
             }
 
-            // The vein must rest on something at load, or it falls before the player reaches it.
-            var below = board[last + 1].ToCharArray();
-            if (below[col] == '.')
-            {
-                below[col] = 'B'; // different color so it does not extend the streak
-                board[last + 1] = new string(below);
-            }
+            // The zone must rest on something at load, or it drops before the player reaches it.
+            var support = board[last + 1].ToCharArray();
+            for (int x = col - 1; x <= col + 1; x++)
+                if (support[x] == '.')
+                    support[x] = 'C'; // third colour: fuses with neither the vein nor the walls
+            board[last + 1] = new string(support);
         }
 
         /// <summary>
@@ -702,7 +710,7 @@ namespace HollowLines.Core
                         new StrateDescriptor(rows: 10, maxColors: 2, emptyRate: EarlyEmptyRate),
                     };
 
-                case 2: // 30 rows — Color Streak. Third color arrives; authored vein teaches it.
+                case 2: // 30 rows — Drill Momentum (v3.2). Third color arrives; authored zone teaches it.
                     return new[]
                     {
                         new StrateDescriptor(rows: 13, maxColors: 3, emptyRate: EarlyEmptyRate),

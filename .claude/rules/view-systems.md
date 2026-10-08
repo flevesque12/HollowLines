@@ -202,8 +202,10 @@ public enum ScoreSource { Drill, Burst, Bomb, Depth, PerfectClear, Diamond, Enem
 **Changes:**
 - Default width: 7 (all `Build`, `CampaignBoard`, `EndlessBoard`).
 - Remove `InjectUndermineTutorial` (void-line tutorial no longer relevant).
-- Add `InjectStreakTutorial(level 2)`: long vertical vein of Color A (4+ blocks) in the
-  spawn column for the first 5 rows — drilling straight down triggers a ×4+ streak.
+- ~~Add `InjectStreakTutorial(level 2)`~~ → ✅R7.13 **`InjectMomentumTutorial(level 2)`**: a 7-row ColorA
+  vein in the spawn column between two ColorB walls, on a ColorC support row. Drilling straight down:
+  ×2 at drill 3, ×4 at drill 5 (the walls crack and break — ⚡D7), **Power Drill on the 7th** (1 + 6 × 1.5
+  = 10). Broken walls drop their upper halves into the WALL columns, never the shaft.
 - Add `InjectBurstTutorial(level 3)`: large chunk (6+ cells same color) resting on a single
   drillable block with 3+ rows of empty space below — drilling the support triggers a
   guaranteed burst.
