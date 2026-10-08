@@ -4867,6 +4867,137 @@ namespace HollowLines.Tests
     }
 
     [TestFixture]
+    public class ChainTrackerTests
+    {
+        // R7.5b: bursts are cascade links, armed bombs hold an open chain open (drill-momentum.md §M3.1).
+
+        private static readonly GridPos Avatar = new GridPos(1, 0); // out of every footprint and blast cross
+
+        private static GravitySystem FastGravity(GridModel grid) =>
+            new GravitySystem(grid) { WobbleDuration = 0.1f, FallStepInterval = 0.02f };
+
+        /// <summary>Ticks in the §7 order: bombs, gravity, then the chain close timer.</summary>
+        private static void Run(GravitySystem gravity, ChainTracker chain, BombSystem bombs, float seconds)
+        {
+            const float step = 1f / 60f;
+            for (float t = 0f; t < seconds; t += step)
+            {
+                bombs?.Tick(step, Avatar);
+                gravity.Tick(step, Avatar);
+                chain.Tick(step);
+            }
+        }
+
+        [Test]
+        public void SingleBurst_IsLinkOne_ThenCloses()
+        {
+            var grid    = GridModel.FromStringMap(new[] { "B..", "...", "...", "AAA" });
+            var gravity = FastGravity(grid);
+            var chain   = new ChainTracker(new CollapseSystem(grid), gravity);
+            var links   = new List<int>();
+            var closed  = new List<int>();
+            chain.LinkAdded      += links.Add;
+            chain.ChainCompleted += closed.Add;
+
+            Run(gravity, chain, null, 2f);
+
+            CollectionAssert.AreEqual(new[] { 1 }, links, "a burst is a link now — it used to be ignored");
+            CollectionAssert.AreEqual(new[] { 1 }, closed);
+            Assert.AreEqual(0, chain.CurrentChain);
+        }
+
+        [Test]
+        public void TwoBurstsInOneCascade_CountTwoLinks()
+        {
+            // Two separate chunks (different colors, 2 columns apart — outside each other's shockwave)
+            // fall 2 rows together: both burst while the board is still moving → one ×2 cascade.
+            var grid    = GridModel.FromStringMap(new[] { "B.C", "...", "...", "AAA" });
+            var gravity = FastGravity(grid);
+            var chain   = new ChainTracker(new CollapseSystem(grid), gravity);
+            var links   = new List<int>();
+            var closed  = new List<int>();
+            chain.LinkAdded      += links.Add;
+            chain.ChainCompleted += closed.Add;
+
+            Run(gravity, chain, null, 2f);
+
+            CollectionAssert.AreEqual(new[] { 1, 2 }, links);
+            CollectionAssert.AreEqual(new[] { 2 }, closed);
+        }
+
+        [Test]
+        public void LinkIsCounted_BeforeALaterChunkBurstSubscriberRuns()
+        {
+            // GameBootstrap constructs the tracker before it subscribes its scorer, so the scorer
+            // reads the fresh link count. Pins that the tracker subscribes in its constructor.
+            var grid    = GridModel.FromStringMap(new[] { "B..", "...", "...", "AAA" });
+            var gravity = FastGravity(grid);
+            var chain   = new ChainTracker(new CollapseSystem(grid), gravity);
+            int seen    = -1;
+            gravity.ChunkBurst += (_, __, ___) => seen = chain.CurrentChain;
+
+            Run(gravity, chain, null, 2f);
+
+            Assert.AreEqual(1, seen, "the first burst scores at cascade ×1, not ×0");
+        }
+
+        [Test]
+        public void ArmedBomb_HoldsTheChainOpen_UntilItBlowsAndSettles()
+        {
+            var grid    = GridModel.FromStringMap(new[] { "B..", "...", "...", "AAX" });
+            var gravity = FastGravity(grid);
+            var collapse = new CollapseSystem(grid);
+            var bombs   = new BombSystem(grid, collapse);
+            var chain   = new ChainTracker(collapse, gravity, bombs);
+            var closed  = new List<int>();
+            chain.ChainCompleted += closed.Add;
+            chain.LinkAdded += _ => bombs.ArmBombAt(new GridPos(2, 3)); // the burst lights a fuse
+
+            Run(gravity, chain, bombs, 1f);
+            Assert.AreEqual(1, chain.CurrentChain, "fuse still burning (1.5 s) — the cascade stays open");
+            CollectionAssert.IsEmpty(closed);
+
+            Run(gravity, chain, bombs, 2f);
+            Assert.IsFalse(bombs.HasArmedBombs);
+            Assert.AreEqual(0, chain.CurrentChain, "blown and settled — the chain closes");
+            CollectionAssert.AreEqual(new[] { 1 }, closed);
+        }
+
+        [Test]
+        public void WithoutBombSystem_ArmedBombsDoNotHoldTheChain()
+        {
+            var grid    = GridModel.FromStringMap(new[] { "B..", "...", "...", "AAX" });
+            var gravity = FastGravity(grid);
+            var collapse = new CollapseSystem(grid);
+            var bombs   = new BombSystem(grid, collapse);
+            var chain   = new ChainTracker(collapse, gravity); // no bombs passed
+            chain.LinkAdded += _ => bombs.ArmBombAt(new GridPos(2, 3));
+
+            Run(gravity, chain, bombs, 1f);
+
+            Assert.AreEqual(0, chain.CurrentChain, "pre-R7.5b behavior: only gravity keeps a chain open");
+        }
+
+        [Test]
+        public void ArmedBombAlone_NeverStartsAChain()
+        {
+            var grid    = GridModel.FromStringMap(new[] { "...", "...", "...", "AAX" });
+            var gravity = FastGravity(grid);
+            var collapse = new CollapseSystem(grid);
+            var bombs   = new BombSystem(grid, collapse);
+            var chain   = new ChainTracker(collapse, gravity, bombs);
+            int links   = 0;
+            chain.LinkAdded += _ => links++;
+
+            bombs.ArmBombAt(new GridPos(2, 3));
+            Run(gravity, chain, bombs, 0.5f);
+
+            Assert.AreEqual(0, chain.CurrentChain);
+            Assert.AreEqual(0, links, "a bomb holds a chain open — it never opens one, and is never a link");
+        }
+    }
+
+    [TestFixture]
     public class ScoreSystemTests
     {
         // ── AwardDrill: 10 × streak ──────────────────────────────────────────

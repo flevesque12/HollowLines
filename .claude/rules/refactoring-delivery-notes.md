@@ -777,3 +777,32 @@ déjà", which is wrong. Making bursts/bomb chains feed a cascade is a Core chan
 (§15.1 burst cascades used to reach 78 per run) — decide what counts as a link before R7.6 wires it.
 
 18 new tests, 447/447 EditMode.
+
+---
+
+### R7.5b — ChainTracker cascade — delivered 2026-10-07
+
+Fixes the R7.5 finding: `ChainTracker` only listened to `CollapseSystem.PerfectClear`, so
+`cascade_mult` would have been ×1 almost always. Rules chosen:
+
+| Event | Link? | Why |
+|---|---|---|
+| Chunk Burst | ✅ | The core of §M3.1 — a burst causing a burst. |
+| Perfect Clear | ✅ | Unchanged. Its score stays flat anyway (rule 7). |
+| Bomb detonation | ❌ | A bomb chain already scales by `chainMult`; counting it again double-dips. |
+| Armed bomb | holds open | The 1.5 s fuse outlasts the 0.15 s settle — without this, "burst → lights a bomb → blast drops a chunk → burst" would split into two chains. A bomb never STARTS a chain. |
+
+- `ChainTracker(collapse, gravity, BombSystem bombs = null)` — optional, so the pre-R7.5b behavior is
+  still reachable. GameBootstrap and the harness pass it.
+- **Ordering contract:** the tracker subscribes to `ChunkBurst` in its constructor, and GameBootstrap
+  builds it before its own `ChunkBurst` scorer subscribes — so burst N scores at ×N, not ×N-1. Pinned
+  by `LinkIsCounted_BeforeALaterChunkBurstSubscriberRuns`. R7.6 must keep that order.
+- **View guards (1 line each):** `HUDView.ShowChain` and `VfxManager.OnLinkAdded` now ignore step 1 —
+  every lone burst is a link now, and showing "×1" / lighting the chain glow on each was noise
+  (§5.9: "CASCADE ×N when > 1"). The real cascade popup is R7.9.
+- Side effects in the shipped game (expected): the Perfect Clear chime pitch and its `Detail` now
+  count bursts in the same cascade. Score is unchanged — nothing feeds `CascadeMultiplier` until R7.6.
+- **No cascade cap.** §15.2 already saw a cascade multiplier run away (Perfect Clear ×4-×7). Measure
+  chain lengths with the harness in R7.14 and add a cap in ScoreSystem if bursts get the same way.
+
+6 new tests (ChainTracker had none), 453/453 EditMode.

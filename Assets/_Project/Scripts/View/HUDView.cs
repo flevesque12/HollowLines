@@ -768,6 +768,7 @@ namespace HollowLines.View
 
         private void ShowChain(int step)
         {
+            if (step < 2) return; // R7.5b: bursts are links now — a single one is not a cascade
             _chainLabel.text                  = $"×{step}";
             _chainLabel.style.display         = DisplayStyle.Flex;
             _chainHideTimer                   = 0f; // cancel any pending hide

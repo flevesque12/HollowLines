@@ -380,6 +380,7 @@ namespace HollowLines.View
 
         private void OnLinkAdded(int chainStep)
         {
+            if (chainStep < 2) return; // R7.5b: bursts are links now — a single one is not a cascade
             if (_glowFadeRoutine != null)
             {
                 StopCoroutine(_glowFadeRoutine);

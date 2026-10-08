@@ -160,7 +160,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R7.3 ✅ | `AvatarModel`: freefall cell counter + `FreefallCell` event | 8 new, 421/421 |
 | R7.4 ✅ | `AirSystem`: `IsDangerZone` flag (air < 15%) | 8 new, 429/429 |
 | R7.5 ✅ | `ScoreSystem`: new `AwardDrill(float)`, `AwardGraze()`, `AwardFreefall()`, momentum×cascade×danger formula | 18 new, 447/447 |
-| R7.5b | ⚠️ **`ChainTracker` only counts Perfect Clears** — make bursts / bomb chains feed the cascade (§M3.1 assumed they already did). Needed before `cascade_mult` means anything. | TBD |
+| R7.5b ✅ | `ChainTracker` cascade: bursts are links (was Perfect Clears only), armed bombs hold an open chain open, bombs are never links | 6 new, 453/453 |
 
 #### Sprint 2 — Wiring + Fissures
 

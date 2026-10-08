@@ -55,6 +55,7 @@ Temporal chain counting — observes gravity settle to detect cascades.
 | `Tick(dt)` | After collapse + gravity each frame |
 | `SettleDelay` | 0.15 s |
 | `LinkAdded` / `ChainCompleted` events | Chain progression and close |
+| 🔄R7.5b links | **Perfect Clear AND chunk burst** (was PC only). Bombs are never links (they have `chainMult`). Optional ctor `BombSystem` → an armed bomb keeps an open chain open. This is the v3.2 `cascade_mult` (§M3.1). |
 
 ### CameraShake
 Additive shake on Camera.main. `Shake(amplitude, duration)`. Persists across level loads.

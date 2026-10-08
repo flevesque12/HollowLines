@@ -14,6 +14,13 @@ namespace HollowLines.Core
     ///
     /// This class only counts and reports. Multipliers (x2/x3/x5) are ScoreSystem's job (step 4) —
     /// same separation of concerns as everywhere else in the core.
+    ///
+    /// v3.2 (R7.5b, drill-momentum.md §M3.1): the chain is the CASCADE that ScoreSystem multiplies by.
+    /// Links are Perfect Clears AND chunk bursts — before this it only counted Perfect Clears, so a
+    /// cascade almost never got past ×1. Bomb detonations are NOT links (a bomb chain already scales
+    /// by its own chainMult — counting it again would double-dip), but an armed bomb holds an open
+    /// chain open, so "burst → arms a bomb → the blast drops a chunk → burst" is one cascade despite
+    /// the 1.5 s fuse. Nothing here ever STARTS a chain except a link.
     /// </summary>
     public sealed class ChainTracker
     {
@@ -30,14 +37,22 @@ namespace HollowLines.Core
         public event Action<int> ChainCompleted;
 
         private readonly GravitySystem _gravity;
+        private readonly BombSystem    _bombs;   // optional: armed bombs hold an open chain open
         private float _settleTimer;
 
-        public ChainTracker(CollapseSystem collapse, GravitySystem gravity)
+        /// <param name="bombs">
+        ///   Optional. When given, a chain stays open while any bomb is armed. Construct this BEFORE
+        ///   anything that scores off GravitySystem.ChunkBurst subscribes, so the link is counted
+        ///   before the burst is scored (multicast delegates fire in subscription order).
+        /// </param>
+        public ChainTracker(CollapseSystem collapse, GravitySystem gravity, BombSystem bombs = null)
         {
             if (collapse == null) throw new ArgumentNullException(nameof(collapse));
             _gravity = gravity ?? throw new ArgumentNullException(nameof(gravity));
+            _bombs   = bombs;
 
             collapse.PerfectClear += OnPerfectClear;
+            gravity.ChunkBurst    += OnChunkBurst;
         }
 
         /// <summary>Call once per frame, AFTER CollapseSystem.Resolve and GravitySystem.Tick.</summary>
@@ -46,8 +61,9 @@ namespace HollowLines.Core
             if (CurrentChain == 0)
                 return;
 
-            // As long as something is still wobbling or falling, the chain might grow — keep it open.
-            if (_gravity.IsBusy)
+            // As long as something is still wobbling or falling — or a lit fuse could still drop
+            // something — the chain might grow: keep it open.
+            if (_gravity.IsBusy || (_bombs != null && _bombs.HasArmedBombs))
             {
                 _settleTimer = 0f;
                 return;
@@ -63,7 +79,11 @@ namespace HollowLines.Core
             }
         }
 
-        private void OnPerfectClear(int row)
+        private void OnPerfectClear(int row) => AddLink();
+
+        private void OnChunkBurst(System.Collections.Generic.List<GridPos> cells, int fallDistance, CellType color) => AddLink();
+
+        private void AddLink()
         {
             CurrentChain++;
             _settleTimer = 0f;

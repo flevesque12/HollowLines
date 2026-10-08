@@ -470,7 +470,7 @@ sealed class Sim
         Gravity = new GravitySystem(Grid);
         Collapse = new CollapseSystem(Grid);
         Bombs = new BombSystem(Grid, Collapse);
-        Chain = new ChainTracker(Collapse, Gravity); // subscribes to PerfectClear FIRST, like GameBootstrap
+        Chain = new ChainTracker(Collapse, Gravity, Bombs); // subscribes to PerfectClear/ChunkBurst FIRST, like GameBootstrap
 
         _r.ContentRows += Grid.Height - StrateGenerator.SpawnRows - StrateGenerator.FloorRows;
 

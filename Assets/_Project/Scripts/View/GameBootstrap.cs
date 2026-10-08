@@ -372,7 +372,7 @@ namespace HollowLines.View
                             };
             _collapse     = new CollapseSystem(_grid);
             _bombSystem   = new BombSystem(_grid, _collapse);
-            _chainTracker = new ChainTracker(_collapse, _gravity);
+            _chainTracker = new ChainTracker(_collapse, _gravity, _bombSystem); // before any ChunkBurst scorer subscribes (R7.5b)
             _enemySystem  = new EnemySystem(_grid); // grid-dependent: the Boomer blast writes cells (§6.5)
 
             // Settle the freshly generated board into a stable rest state BEFORE play. Generated
