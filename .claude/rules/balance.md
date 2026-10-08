@@ -397,3 +397,35 @@ levels 1-4: ~45 % momentum, ~40 % depth — drilling is the reward again (rule 1
   collapsing walls → fast bots end most levels at ~100 % air. Consistent with the §15.1 "air taxes hesitation,
   not descent" residual; R7.15 (endless drain ramp) is where descent pressure belongs.
 - Crush deaths on 7-10 for the non-dodging bots predate v3.2 (§15.5) — no conclusion about fissures possible.
+
+
+### 15.10 Endless — momentum vs the drain ramp (R7.15, 2026-10-08) — ✅ measured, no change
+
+**Why a new harness mode.** The endless runs in §6 end in **crushes within 11-15 s at 95-98 % air** — the bots
+don't dodge (§15.5), so the drain ramp (5 %/s + 0.5 every 20 rows, cap 10 %/s at depth 200) never gets to
+act. Report **6b** makes the bots **crush-immune** ("perfect dodger": only air can end the run) and wraps
+them in `UnstuckBot` (after 1.5 s without a drill: drill any drillable neighbour, else walk) because the
+tunnel/row-clear logic loops forever in some steel/bomb pockets a human walks out of. Columns: drain/s and
+air gain/s over the run, and **`idle`** = seconds since the last drill at death (≈ 0-1 s → out-paced by the
+ramp; 10 s+ → trapped). `DUMP_STUCK=1` prints the cells around the avatar at air-death.
+
+**First pass was misleading:** every profile died at the same depth per seed with 11-21 s idle — the bots were
+trapped, not out-paced. (Also fixed: the dump read the FIRST segment's Sim — persistent handlers are wired
+once — it now reads `Persist.Current`.)
+
+**Result (perfect dodger + unstuck, seeds 101/202/303, 600 s cap):**
+
+| profile | air gain/s | depth at an honest (idle ≤ ~1 s) air-death | other runs |
+|---|---|---|---|
+| fast 0.15 s | 11-14 %/s | 166 | 341-393, ended trapped — out-earns the 10 %/s cap |
+| realistic 0.30 s | 8-9 %/s | — | 173-**527** (drain capped 10 %/s), one early trap at 46 |
+| slow 0.60 s | 4-5 %/s | ~160 | 96-173 |
+| row-clear 0.25 s | 4-6 %/s | 216 | 93 |
+
+**Verdict: keep the ramp as is.** It does exactly what rule 10 asks — **drilling speed sets how deep you get**:
+a slow driller is caught around depth 160, a realistic one holds to 500+, and a very fast one out-earns the
+cap, so their runs end on crushes / enemies / traps, i.e. on skill. That spread (≈100-500+) is what a depth
+leaderboard (R3.5) needs. Nothing to retune.
+
+**Known harness limits:** no EnemySystem; `UnstuckBot` still loops in a few edge pockets (e.g. pinned at the
+wall between steel and a bomb, where a human walks along the row above) — those rows are the `idle 10 s+` ones.

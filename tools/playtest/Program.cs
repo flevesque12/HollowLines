@@ -306,6 +306,34 @@ foreach (int seed in new[] { 101, 202, 303 })
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 6b) R7.15 — does the depth drain ramp ever catch a momentum driller? The bots above die to crushes
+//     long before the ramp bites (they don't dodge, §15.5), so this run makes them crush-immune: a
+//     "perfect dodger" whose only way to die is air. Depth at air-death = where the ramp wins.
+// ─────────────────────────────────────────────────────────────────────────────
+Console.WriteLine();
+Console.WriteLine("=== R7.15 — ENDLESS, ESQUIVE PARFAITE (seul l'air tue) ===");
+Console.WriteLine($"{"bot",-22} {"seed",5} {"outcome",-10} {"time",6} {"depth",5} {"drain",6} {"airMin",6} " +
+                  $"{"drain/s",7} {"gain/s",6} {"idle",5} {"score",7} {"PD",3} {"% Mo/B/Bo/D/PC/Bx",-23}");
+foreach (var (name, make, cadence) in new (string, Func<IBot>, float)[]
+{
+    ("tunnel rapide 0.15 s",   () => new TunnelBot(),   0.15f),
+    ("tunnel réaliste 0.30 s", () => new TunnelBot(),   0.30f),
+    ("tunnel lent 0.60 s",     () => new TunnelBot(),   0.60f),
+    ("row-clear 0.25 s",       () => new RowClearBot(), 0.25f),
+})
+{
+    foreach (int seed in new[] { 101, 202, 303 })
+    {
+        var (r, segments, drain) = RunEndless(() => new UnstuckBot(make()), seed, cadence, maxTime: 600f, dt: Dt, crushImmune: true);
+        float time   = Math.Max(0.1f, r.Time);
+        float gained = r.Drills * AirSystem.DrillRestoreAmount + r.Capsules * AirSystem.CapsuleRestoreAmount
+                     + r.Bursts * AirSystem.BurstRestoreAmount;
+        Console.WriteLine($"{name,-22} {seed,5} {r.Outcome,-10} {r.Time,5:0.0}s {r.Depth,5} {drain,5:0.0}% {r.AirMin,5:0.0}% " +
+                          $"{r.AirDrained / time,7:0.00} {gained / time,6:0.00} {r.Time - r.LastDrillAt,4:0.0}s {r.Score,7} {r.PowerDrills,3} {r.PointsMix(),-23}");
+    }
+}
+
 Console.WriteLine();
 Console.WriteLine("=== ENDLESS — TERRAIN PAR PROFONDEUR (moyenne sur 6 seeds, 40 rangées) ===");
 Console.WriteLine($"{"depth",6} {"% solide",9} {"% dur+acier",12} {"% bombe",8} {"burst-ready",12}   (campagne: 11-15 % burst-ready)");
@@ -326,9 +354,10 @@ foreach (int startDepth in new[] { 0, 40, 80, 160, 320 })
 /// set of hearts — the harness mirror of GameBootstrap's seam (§5.15). Returns the run result, the
 /// number of seams crossed, and the drain rate the descent ended on.
 /// </summary>
-static (RunResult r, int segments, float drain) RunEndless(Func<IBot> makeBot, int seed, float cadence, float maxTime, float dt)
+static (RunResult r, int segments, float drain) RunEndless(Func<IBot> makeBot, int seed, float cadence, float maxTime, float dt,
+                                                           bool crushImmune = false)
 {
-    var p = new Persist { Endless = new EndlessManager(seed) };
+    var p = new Persist { Endless = new EndlessManager(seed), CrushImmune = crushImmune };
     p.Endless.DepthChanged     += d    => p.Score.AwardDepth(d);
     p.Endless.DrainRateChanged += rate => p.Air.DrainRate = rate;
     p.Air.DrainRate = p.Endless.DrainRate;
@@ -401,6 +430,7 @@ sealed class RunResult
 
     // v3.2 (R7.14) momentum instrumentation.
     public int PowerDrills, Grazes, FissureBreaks, MaxCascade;
+    public float LastDrillAt; // R7.15: sim time of the last drill — "idle" at death = stuck vs out-paced
 
     /// <summary>Where the points actually came from — the balance question v3 cares about.</summary>
     public int PtsDrill, PtsBurst, PtsBomb, PtsDepth, PtsPerfect;
@@ -446,6 +476,32 @@ sealed class RunResult
 interface IBot { void Act(Sim sim); }
 
 /// <summary>
+/// R7.15: the tunnel / row-clear bots loop forever in some pockets (steel underfoot, a bomb below the
+/// sidestep — they step off and climb back on). A human escapes by drilling anything, often lighting the
+/// bomb. After `patience` s without a drill this wrapper drills the first drillable neighbour (down,
+/// left, right, up), then tries to walk. Used with crush immunity, so a lit bomb is harmless.
+/// </summary>
+sealed class UnstuckBot : IBot
+{
+    readonly IBot _inner;
+    readonly float _patience;
+    public UnstuckBot(IBot inner, float patience = 1.5f) { _inner = inner; _patience = patience; }
+
+    public void Act(Sim s)
+    {
+        if (s.Avatar.IsFalling || s.SimTime - s.LastDrillAt < _patience) { _inner.Act(s); return; }
+
+        var pos = s.Avatar.Position;
+        foreach (var (dx, dy) in new[] { (0, 1), (-1, 0), (1, 0), (0, -1) })
+        {
+            var c = pos.Offset(dx, dy);
+            if (s.Grid.InBounds(c) && s.Grid.Get(c).IsDrillable() && s.Avatar.TryDrill(dx, dy)) return;
+        }
+        if (!s.Avatar.TryMove(-1)) s.Avatar.TryMove(1);
+    }
+}
+
+/// <summary>
 /// R6.2 (F02): a first-time player. Stands at spawn reading the board for `idle` seconds, then plays
 /// the inner bot at whatever (slow) cadence the caller runs it. The other bots act from frame 0 at
 /// 4-7 inputs/s, which is exactly the player the air clock was never hurting.
@@ -479,6 +535,8 @@ sealed class Persist
     public bool           Wired;    // persistent-system handlers are subscribed once, not per segment
     public bool           Dead;
     public int            Segments;
+    public bool           CrushImmune; // R7.15: "perfect dodger" — only air can end the run
+    public Sim            Current;     // the segment being played (persistent handlers run on the first Sim)
 }
 
 sealed class Sim
@@ -498,6 +556,7 @@ sealed class Sim
     public readonly HealthSystem Health;
 
     public float SimTime;
+    public float LastDrillAt => _r.LastDrillAt;
 
     // v3: the campaign win is depth-only — no line gate (CLAUDE.md §5.7).
 
@@ -521,6 +580,7 @@ sealed class Sim
         Bombs = new BombSystem(Grid, Collapse);
         Chain = new ChainTracker(Collapse, Gravity, Bombs); // subscribes to PerfectClear/ChunkBurst FIRST, like GameBootstrap
         Fissures = new FissureTracker(Grid);
+        _p.Current = this;
 
         // v3.2 cascade (R7.5b/R7.6): the chain IS the cascade; a new board never inherits it.
         Score.CascadeMultiplier = 1;
@@ -559,7 +619,7 @@ sealed class Sim
                 }
             };
 
-            Air.AirDepleted       += () => { _p.Dead = true; _r.Outcome = "air-death"; };
+            Air.AirDepleted       += () => { _p.Dead = true; _r.Outcome = "air-death"; _p.Current?.DumpSurroundings(); };
 
             // v3.2 persistent wiring — mirrors GameBootstrap.Awake (R7.6).
             Air.DangerZoneChanged += d => Score.DangerZone = d;
@@ -583,6 +643,7 @@ sealed class Sim
             if (oldType == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
             Bombs.NotifyDrilled(cell);
             _r.Drills++;
+            _r.LastDrillAt = SimTime;
             Fissures.NotifyDrill(cell, Momentum.CurrentTier);
             if (_p.PowerDrillPending)
             {
@@ -640,6 +701,30 @@ sealed class Sim
         Gravity.Settle();
     }
 
+    /// <summary>R7.15 diagnostic: the 7-wide band around the avatar when air runs out (stuck vs out-paced).</summary>
+    public void DumpSurroundings()
+    {
+        if (Environment.GetEnvironmentVariable("DUMP_STUCK") != "1") return;
+        var a = Avatar.Position;
+        Console.WriteLine($"   [stuck @ {a}, falling={Avatar.IsFalling}]");
+        for (int y = a.Y - 2; y <= a.Y + 3; y++)
+        {
+            if (y < 0 || y >= Grid.Height) continue;
+            var row = new System.Text.StringBuilder("   ");
+            for (int x = 0; x < Grid.Width; x++)
+            {
+                var p = new GridPos(x, y);
+                row.Append(p == a ? '@' : Grid.Get(p) switch
+                {
+                    CellType.Empty => '.', CellType.ColorA => 'A', CellType.ColorB => 'B', CellType.ColorC => 'C',
+                    CellType.Hard => 'H', CellType.HardCracked => 'h', CellType.Steel => 'S',
+                    CellType.AirCapsule => 'P', CellType.Bomb => 'X', CellType.Diamond => 'D', _ => '?',
+                });
+            }
+            Console.WriteLine(row);
+        }
+    }
+
     /// <summary>Harness has no EnemySystem — graze dangers are the armed bombs only.</summary>
     List<GridPos> DangerCells()
     {
@@ -676,6 +761,7 @@ sealed class Sim
 
     void OnCrushed()
     {
+        if (_p.CrushImmune) return;
         if (Health.TryTakeDamage())
             _r.HeartsLost++;
     }

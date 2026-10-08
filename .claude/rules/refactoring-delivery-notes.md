@@ -1028,3 +1028,13 @@ comparison (uncapped / ×5 / ×3 / ×1). `ScoreSystem.MaxCascadeMultiplier = 3` 
 2000/6000/10000/15000. Gate tests now read the table instead of literals. 460/460 EditMode.
 
 **Not verified in play mode:** the change is two constants and a HUD string; the harness is the evidence.
+
+---
+
+### R7.15 — Endless momentum vs drain ramp — delivered 2026-10-08 (v3.2 COMPLETE)
+
+Harness only (`tools/playtest`): report 6b "ESQUIVE PARFAITE" (crush-immune), `UnstuckBot`, `idle`-at-death
+column, `DUMP_STUCK=1` trap dump (now dumps the current segment via `Persist.Current`). Measured the ramp
+against four drilling speeds — it already scales survival with drilling speed (slow ≈ depth 160, realistic
+500+, fast out-earns the 10 %/s cap). **Decision: no constant changed.** Full table in `balance.md` §15.10.
+No Unity code touched; 460/460 EditMode unchanged.
