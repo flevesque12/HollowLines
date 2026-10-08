@@ -16,6 +16,7 @@ namespace HollowLines.Core
     ///   Graze        — 🆕R7.5: flat near-miss bonus (drill-momentum.md §M3.2).
     ///   Freefall     — 🆕R7.5: flat bonus per void cell fallen through (§M3.3).
     ///   PowerDrill   — 🆕R7.8: blocks destroyed by the Power Drill's mini shockwave, × the ×6 (⚡D1).
+    ///   FissureBreak — 🆕R7.7b: a Tier 2+ fissure broke a block — worth one drill at the momentum.
     /// </summary>
     public enum ScoreSource
     {
@@ -30,6 +31,7 @@ namespace HollowLines.Core
         Drill,
         Graze,
         Freefall,
-        PowerDrill
+        PowerDrill,
+        FissureBreak
     }
 }

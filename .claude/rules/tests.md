@@ -6,7 +6,7 @@ paths:
 
 ## 13. Test status
 
-**471 / 471 passing** (EditMode; +9 for R7.8 `PowerDrillTests`; +9 for R7.7 `FissureTrackerTests`; +6 for R7.5b `ChainTrackerTests`; +18 for R7.5 ScoreSystem v3.2; +8 for R7.4 Danger Zone; +8 for R7.3 AvatarModel freefall; +13 for R7.2 `GrazeSystemTests`; +24 for R7.1 `MomentumTrackerTests`; +13 for R6.2 — 12 `AirSystemTests` start-buffer cases incl. the HUD countdown's `StartGraceRemaining` + `AirStartGraceForLevel`; +10 for R6.1 `DeathTrackerTests`; was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
+**476 / 476 passing** (EditMode; +5 for R7.7b — fissure diagonals (straight dig breaks the walls at Tier 2, never at Tier 1) + `AwardFissureBreak`; +9 for R7.8 `PowerDrillTests`; +9 for R7.7 `FissureTrackerTests`; +6 for R7.5b `ChainTrackerTests`; +18 for R7.5 ScoreSystem v3.2; +8 for R7.4 Danger Zone; +8 for R7.3 AvatarModel freefall; +13 for R7.2 `GrazeSystemTests`; +24 for R7.1 `MomentumTrackerTests`; +13 for R6.2 — 12 `AirSystemTests` start-buffer cases incl. the HUD countdown's `StartGraceRemaining` + `AirStartGraceForLevel`; +10 for R6.1 `DeathTrackerTests`; was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
 dev-5 flip, +1 for `EndlessBoard_ContentRows_HavePorosity` — see §15.6; +6 for the tutorial
 showcase board — see §5.14; +5 for AvatarModel coyote time — see §4; +16 for R3.2 endless,
 +2 for the R3.1 steady-state guards (§15.7), +6 for R3.4 Daily Dig (§6.6); +28 for R4 Diamonds

@@ -859,7 +859,7 @@ BEFORE the Power Drill completes (so the Tier 3 drill cracks too).
 **Verified in play mode** on the tutorial vein: Tier 2 drills cracked the block below (ColorB, then the
 ColorA divider, then the ColorC slab on the Tier 3 Power Drill), zero console errors. 462/462 EditMode.
 
-**⚠️ Design finding for R7.14 — straight-down descent never breaks anything.** A block beside the shaft
+**✅ Resolved by R7.7b (⚡D7) — see below.** ~~Design finding for R7.14 — straight-down descent never breaks anything.~~ A block beside the shaft
 at (x+1, y) is a neighbour of exactly ONE cell of column x, so a pure vertical dig cracks it once and
 moves on. The block below gets cracked, then drilled anyway. Breaks need lateral drilling or a zigzag.
 So the "passive destabilisation" only fires for players who already move sideways — measure it in the
@@ -944,3 +944,25 @@ speakers reproduce — rumble raised to 80 Hz with more noise, heartbeat given a
 
 **⚠️ Listen in play mode** (headphones AND laptop speakers): rumble under Tier 2 drills, the Power Drill
 hit + "yes!", the graze ting, and the heartbeat. Levels were set by reasoning, not by ear.
+
+---
+
+### R7.7b — Fissures with impact (⚡D7) — delivered 2026-10-08
+
+Dev request: fissures should matter for a player who just descends. Option B + D of the proposal.
+
+- **B — 8 neighbours.** `FissureTracker.Neighbours` gained the 4 diagonals. A wall block beside a vertical
+  shaft is the diagonal neighbour of the drill above it and the cardinal neighbour of the drill at its own
+  row, so **at Tier 2 it breaks right beside the driller** (not "one row behind", as first pitched —
+  corrected after working it through in the test): the shaft widens to 3 as you descend.
+- **D — breaks pay.** `ScoreSystem.AwardFissureBreak(momentumMult)` = 10 × mult × cascade × danger,
+  `ScoreSource.FissureBreak`, `FissureBreaks` run stat; GameBootstrap shows a tier-coloured popup on the
+  broken cell. The fissure call moved AFTER the drill popup (in the Drilled handler and in the Power Drill
+  follow-through) so the popup's score delta never counts a break twice.
+
+**Verified in play mode (Endless, dense terrain, straight down):** 15 drills → **9 paid breaks** (up to 3
+in one drill), vs 0 before. 476/476 EditMode.
+
+**⚠️ Balance watch (R7.14):** at Tier 2 a straight dig now earns roughly +80 in breaks per drill on top of
+the drill's +40, plus the bursts the collapsing walls cause. Measure total income and crush deaths in the
+harness — more falling mass means more crush risk whenever the driller stops (Hard / Steel).

@@ -424,6 +424,15 @@ namespace HollowLines.View
             _scoreSystem.DangerZone = _airSystem.IsDangerZone; // re-sync after any Reset on this path
             _enemySystem  = new EnemySystem(_grid); // grid-dependent: the Boomer blast writes cells (§6.5)
             _fissureTracker = new FissureTracker(_grid); // fresh per board: fissures are keyed by cell
+            // R7.7b: a broken block is worth one drill at the momentum it broke at, with its own popup.
+            _fissureTracker.FissureBroke += cell =>
+            {
+                int before = _scoreSystem.Score;
+                _scoreSystem.AwardFissureBreak(_momentumTracker.Multiplier);
+                _hud.ShowDrillPopup(CellToWorld(cell), _scoreSystem.Score - before,
+                                    Mathf.RoundToInt(_momentumTracker.Multiplier), showMultiplier: true,
+                                    cascade: _scoreSystem.CascadeMultiplier, danger: _scoreSystem.DangerZone);
+            };
 
             // Settle the freshly generated board into a stable rest state BEFORE play. Generated
             // boards carry unsupported mass over gaps; without this the first ticks would wobble,
@@ -451,11 +460,6 @@ namespace HollowLines.View
                 _bombSystem.NotifyDrilled(drilledCell);
                 _enemySystem.NotifyAdjacentDrill(drilledCell); // R5.9: wakes a dormant neighbor
 
-                // v3.2 Tier 2+ fissures (§M2): cracks the color blocks around the drill; a second crack
-                // breaks one and GravitySystem takes it from there. Read before a Power Drill completes,
-                // so the Tier 3 drill cracks too.
-                _fissureTracker.NotifyDrill(drilledCell, _momentumTracker.CurrentTier);
-
                 // R6.6 (F07): "+40 ×4" off the drilled cell. Score delta, not a formula: it includes the
                 // momentum/cascade/danger multipliers and a drilled diamond's +150. The graze has its own
                 // popup in R7.9, so it is left out here. "×N" shows from Tier 1 (×2) up.
@@ -464,6 +468,12 @@ namespace HollowLines.View
                 _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(drilledCell)),
                                     earned, momentum, showMultiplier: momentum > 1,
                                     cascade: _scoreSystem.CascadeMultiplier, danger: _scoreSystem.DangerZone);
+
+                // v3.2 Tier 2+ fissures (§M2, R7.7b): crack the 8 color blocks around the drill; a second
+                // crack breaks one (paid + its own popup, below). AFTER the drill popup, so the popup's
+                // score delta never counts the breaks twice; BEFORE the Power Drill completes, so the
+                // Tier 3 drill cracks too.
+                _fissureTracker.NotifyDrill(drilledCell, _momentumTracker.CurrentTier);
 
                 // ⚡D1: the whole Power Drill burst — this drill, the pierced 2nd block and the mini
                 // shockwave — is paid at ×6. Only then does the cycle restart at Tier 1.
@@ -876,7 +886,6 @@ namespace HollowLines.View
                 if (secondType == CellType.Diamond) _diamondSystem.NotifyCollected(second);
                 _bombSystem.NotifyDrilled(second);
                 _enemySystem.NotifyAdjacentDrill(second);
-                _fissureTracker.NotifyDrill(second, _momentumTracker.CurrentTier);
             }
 
             // 2. The mini shockwave. Capsules / diamonds / bombs go through GravitySystem's existing
@@ -891,6 +900,10 @@ namespace HollowLines.View
                                 _scoreSystem.Score - scoreBefore, Mathf.RoundToInt(mult), showMultiplier: true,
                                 cascade: _scoreSystem.CascadeMultiplier, danger: _scoreSystem.DangerZone);
             Debug.Log($"[Momentum] Power Drill: pierced {second} ({secondType}), wave destroyed {destroyed} → +{_scoreSystem.Score - scoreBefore}");
+
+            // The pierced cell cracks its surroundings too — after the popup, so breaks show on their own.
+            if (secondType.IsDrillable())
+                _fissureTracker.NotifyDrill(second, _momentumTracker.CurrentTier);
         }
 
         /// <summary>

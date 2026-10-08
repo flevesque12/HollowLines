@@ -30,6 +30,7 @@ paths:
 | D3 | **Graze et freefall ne sont jamais multipliés par Danger Zone.** Le ×2 s'applique aux actions base seulement (drill, burst, bomb, enemy). | `AwardGraze`/`AwardFreefall` restent flat |
 | D4 | **Air drain skippé pendant le freefall** (`_airSystem.Tick` aussi, pas juste le momentum timer). | Tick order §7 step 9 conditionné |
 | D5 | **FissureTracker = système Core séparé** (`Dictionary<GridPos, int>`). 2ᵉ fissure → bloc se brise → event `FissureBroke`. | Nouveau fichier `Core/FissureTracker.cs` |
+| D7 | **Fissures sur les 8 voisins (diagonales incluses) + un bloc brisé paie** (10 × momentum × cascade × danger, `ScoreSource.FissureBreak`). Avec 4 voisins, une descente droite ne brisait jamais rien. | `FissureTracker.Neighbours`, `ScoreSystem.AwardFissureBreak` — R7.7b |
 | D6 | **Graze « shockwave en cours » abandonné** (shockwave instantanée). Graze = ennemis actifs + bombes armées. Option « chunk qui wobble » parquée après playtests (§M3.2). | `CollectDangerCells()` dans GameBootstrap |
 
 ---
@@ -116,8 +117,8 @@ Events:
 **Tier 2 — Fissures (déstabilisation passive):**
 - ⚡D5: `FissureTracker` — **système Core séparé** (`Core/FissureTracker.cs`)
   - État: `Dictionary<GridPos, int>` (position → nombre de fissures, 0-2)
-  - `NotifyDrill(GridPos drillPos, int currentTier)` : si tier ≥ 2, les 4 blocs cardinalement
-    adjacents non-vides reçoivent +1 fissure
+  - `NotifyDrill(GridPos drillPos, int currentTier)` : si tier ≥ 2, les ~~4 blocs cardinalement
+    adjacents~~ **8 blocs voisins (⚡D7, diagonales incluses)** non-vides reçoivent +1 fissure
   - Quand une cellule atteint 2 fissures → `FissureBroke(GridPos)` event, la cellule
     est vidée dans le GridModel, la fissure est retirée du dictionnaire
   - `Clear()` : reset total (changement de board / segment)

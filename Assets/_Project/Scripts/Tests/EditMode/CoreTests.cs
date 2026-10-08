@@ -5032,7 +5032,7 @@ namespace HollowLines.Tests
         }
 
         [Test]
-        public void Tier2_CracksTheFourCardinalColorNeighbours()
+        public void Tier2_CracksAllEightColorNeighbours_DiagonalsIncluded()
         {
             var (grid, f) = Board("ABA", "BAB", "ABA");
             var added = new List<GridPos>();
@@ -5040,11 +5040,12 @@ namespace HollowLines.Tests
 
             Drill(grid, f, Centre, 2);
 
-            Assert.AreEqual(4, f.Count);
-            foreach (GridPos n in new[] { new GridPos(1, 0), new GridPos(1, 2), new GridPos(0, 1), new GridPos(2, 1) })
-                Assert.AreEqual(1, f.GetFissures(n), n.ToString());
-            Assert.AreEqual(0, f.GetFissures(new GridPos(0, 0)), "diagonals never crack");
-            Assert.AreEqual(4, added.Count);
+            Assert.AreEqual(8, f.Count, "R7.7b: diagonals crack too");
+            for (int x = 0; x < 3; x++)
+                for (int y = 0; y < 3; y++)
+                    if (x != 1 || y != 1)
+                        Assert.AreEqual(1, f.GetFissures(new GridPos(x, y)), $"({x},{y})");
+            Assert.AreEqual(8, added.Count);
         }
 
         [Test]
@@ -5054,7 +5055,42 @@ namespace HollowLines.Tests
 
             Drill(grid, f, Centre, 3);
 
-            Assert.AreEqual(4, f.Count);
+            Assert.AreEqual(8, f.Count);
+        }
+
+        [Test]
+        public void StraightDownDig_AtTier2_BreaksTheWallsBesideTheDriller()
+        {
+            // The point of R7.7b: a pure vertical dig (column 1) between two color walls. Each wall block is
+            // a diagonal neighbour of the drill above it and a cardinal neighbour of the drill at its row,
+            // so it breaks as the driller passes it — with only cardinal cracks, nothing ever broke.
+            var (grid, f) = Board("BAB", "BAB", "BAB", "BAB", "BAB");
+            var broke = new List<GridPos>();
+            f.FissureBroke += broke.Add;
+
+            Drill(grid, f, new GridPos(1, 0), 2);
+            CollectionAssert.IsEmpty(broke, "the first drill only cracks");
+
+            Drill(grid, f, new GridPos(1, 1), 2);
+            CollectionAssert.AreEquivalent(new[] { new GridPos(0, 0), new GridPos(2, 0), new GridPos(0, 1), new GridPos(2, 1) }, broke);
+
+            broke.Clear();
+            Drill(grid, f, new GridPos(1, 2), 2);
+            CollectionAssert.AreEquivalent(new[] { new GridPos(0, 2), new GridPos(2, 2) }, broke,
+                "from then on, each drill breaks the two wall blocks at its own row");
+        }
+
+        [Test]
+        public void StraightDownDig_AtTier1_BreaksNothing()
+        {
+            var (grid, f) = Board("BAB", "BAB", "BAB");
+            int breaks = 0;
+            f.FissureBroke += _ => breaks++;
+
+            for (int y = 0; y < 3; y++)
+                Drill(grid, f, new GridPos(1, y), 1);
+
+            Assert.AreEqual(0, breaks, "fissures are a Tier 2+ effect");
         }
 
         [Test]
@@ -5103,7 +5139,7 @@ namespace HollowLines.Tests
             var (grid, f) = Board("AB", "BA");
 
             Assert.DoesNotThrow(() => Drill(grid, f, new GridPos(0, 0), 2));
-            Assert.AreEqual(2, f.Count, "only the in-bounds neighbours");
+            Assert.AreEqual(3, f.Count, "only the in-bounds neighbours (right, below, diagonal)");
         }
 
         [Test]
@@ -5135,9 +5171,10 @@ namespace HollowLines.Tests
         [Test]
         public void BrokenBlock_UnsupportsTheChunkAbove()
         {
-            // B rests on A, A rests on the Hard floor. Two Tier 2 drills beside the A break it: the B
-            // loses its support and GravitySystem starts the wobble — fissures feed the chunks.
-            var (grid, f) = Board("...", ".B.", ".A.", "HHH");
+            // A two-high B column rests on A, A on the Hard floor. Two Tier 2 drills beside the A break it
+            // (and, diagonally, the lower B): the top B loses its support and GravitySystem starts the
+            // wobble — fissures feed the chunks.
+            var (grid, f) = Board(".B.", ".B.", ".A.", "HHH");
             var gravity = new GravitySystem(grid);
             gravity.Tick(0.01f, new GridPos(0, 0));
             Assert.IsFalse(gravity.IsBusy, "the board starts at rest");
@@ -5285,6 +5322,44 @@ namespace HollowLines.Tests
             Assert.AreEqual(0, score.Score, "negative blocks pay nothing");
             score.AwardPowerShockwave(2, 0f);
             Assert.AreEqual(20, score.Score, "multiplier below 1 → ×1");
+        }
+
+        // ── ScoreSystem.AwardFissureBreak (R7.7b) ────────────────────────────
+
+        [Test]
+        public void AwardFissureBreak_IsOneDrill_AtTheMomentum()
+        {
+            var score = new ScoreSystem();
+            ScoreEvent? evt = null;
+            score.OnScore += e => evt = e;
+
+            score.AwardFissureBreak(4f);
+
+            Assert.AreEqual(40, score.Score);
+            Assert.AreEqual(1, score.FissureBreaks);
+            Assert.AreEqual(ScoreSource.FissureBreak, evt.Value.Source);
+            Assert.AreEqual(4, evt.Value.Detail);
+        }
+
+        [Test]
+        public void AwardFissureBreak_CascadeAndDanger_Apply_AndClamps()
+        {
+            var score = new ScoreSystem { CascadeMultiplier = 2, DangerZone = true };
+            score.AwardFissureBreak(6f);
+            Assert.AreEqual(240, score.Score, "10 × 6 × 2 × 2");
+
+            var plain = new ScoreSystem();
+            plain.AwardFissureBreak(float.NaN);
+            Assert.AreEqual(10, plain.Score, "NaN → ×1");
+        }
+
+        [Test]
+        public void Reset_ClearsFissureBreaks()
+        {
+            var score = new ScoreSystem();
+            score.AwardFissureBreak(4f);
+            score.Reset();
+            Assert.AreEqual(0, score.FissureBreaks);
         }
     }
 

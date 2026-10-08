@@ -22,6 +22,7 @@ namespace HollowLines.Core
     ///   Graze           GrazePoints (flat)                       +50 near-miss            (🆕v3.2)
     ///   Freefall        FreefallPointsPerCell (flat)             +15 per void cell fallen (🆕v3.2)
     ///   Power Drill     blocks × DrillPoints × momentumMult      4 blocks at ×6 → 240     (🆕v3.2)
+    ///   Fissure Break   DrillPoints × momentumMult               Tier 2 (×4) → 40          (🆕v3.2)
     ///
     /// === v3.2 global multipliers (drill-momentum.md §M5) ===
     ///
@@ -29,7 +30,7 @@ namespace HollowLines.Core
     ///
     ///   CascadeMultiplier and DangerZone are INPUTS the caller keeps current (Core systems don't
     ///   reference each other). ScoreSystem alone decides which source each one scales:
-    ///     × cascade × danger — Drill, Burst, Bomb, EnemyKill, BoomerBlast, PowerDrill
+    ///     × cascade × danger — Drill, Burst, Bomb, EnemyKill, BoomerBlast, PowerDrill, FissureBreak
     ///     × danger only      — PerfectClear (rule 7: a cascade never scales the jackpot)
     ///     flat               — Depth, Diamond, Graze, Freefall (⚡D3)
     ///   With the defaults (×1, no danger) every v3.1 formula is unchanged.
@@ -110,6 +111,9 @@ namespace HollowLines.Core
         /// <summary>🆕v3.2 Void cells fallen through this run.</summary>
         public int FreefallCells { get; private set; }
 
+        /// <summary>🆕v3.2 (R7.7b) Blocks broken by Tier 2+ fissures this run.</summary>
+        public int FissureBreaks { get; private set; }
+
         // ── Events ──────────────────────────────────────────────────
 
         /// <summary>
@@ -183,6 +187,23 @@ namespace HollowLines.Core
             Score += pts;
 
             OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.PowerDrill, blocksDestroyed, CascadeMultiplier, DangerZone));
+        }
+
+        /// <summary>
+        /// 🆕v3.2 (R7.7b) A Tier 2+ fissure broke a block: worth one drill at the momentum it broke at
+        /// (×4 at Tier 2, ×6 during a Power Drill), × cascade × danger. A multiplier below 1 (or NaN)
+        /// clamps to ×1. Event Detail = the momentum multiplier, rounded.
+        /// </summary>
+        public void AwardFissureBreak(float momentumMult)
+        {
+            if (!(momentumMult >= 1f)) momentumMult = 1f;
+
+            int pts = Amplified((int)Math.Round(DrillPoints * momentumMult));
+            Score += pts;
+            FissureBreaks++;
+
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.FissureBreak, (int)Math.Round(momentumMult),
+                                           CascadeMultiplier, DangerZone));
         }
 
         /// <summary>🆕v3.2 Flat near-miss bonus (§M3.2). Never multiplied (⚡D3).</summary>
@@ -358,6 +379,7 @@ namespace HollowLines.Core
             PeakMomentum          = 0f;
             Grazes                = 0;
             FreefallCells         = 0;
+            FissureBreaks         = 0;
             CascadeMultiplier     = 1;
             DangerZone            = false;
         }

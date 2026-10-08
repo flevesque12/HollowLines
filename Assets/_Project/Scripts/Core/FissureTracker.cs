@@ -8,6 +8,12 @@ namespace HollowLines.Core
     /// the drill. A block that takes its second fissure breaks — the cell is emptied and GravitySystem
     /// does the rest (unsupported chunks fall → burst). Passive destabilisation that feeds the chunks.
     ///
+    /// R7.7b: ALL EIGHT neighbours crack, diagonals included. With only the 4 cardinal ones a straight-down
+    /// dig touched each wall block once and never broke anything. Now a wall block beside the shaft is a
+    /// diagonal neighbour of the drill above it AND a cardinal neighbour of the drill at its own row — it
+    /// breaks right beside the driller, so the shaft widens to 3 as you descend and the walls give way
+    /// without the player ever leaving the straight line (rules 6 / 10).
+    ///
     /// Only COLOR blocks fissure (CanFuse): fissures feed chunks, and chunks are color. Capsules and
     /// diamonds would vanish without being collected, Hard/Steel exist to resist, and a bomb is only
     /// ever armed by a drill or a landing. Breaking pays nothing by itself — the fall and burst pay.
@@ -25,7 +31,8 @@ namespace HollowLines.Core
 
         private static readonly GridPos[] Neighbours =
         {
-            new GridPos(0, 1), new GridPos(0, -1), new GridPos(1, 0), new GridPos(-1, 0)
+            new GridPos(0, 1), new GridPos(0, -1), new GridPos(1, 0), new GridPos(-1, 0),
+            new GridPos(1, 1), new GridPos(-1, 1), new GridPos(1, -1), new GridPos(-1, -1)
         };
 
         private readonly GridModel _grid;
@@ -66,7 +73,7 @@ namespace HollowLines.Core
 
         /// <summary>
         /// Call after every successful drill with the momentum tier it was paid at. Below
-        /// <see cref="MinTier"/> nothing happens; at Tier 2+ each cardinal color neighbour takes +1.
+        /// <see cref="MinTier"/> nothing happens; at Tier 2+ each of the 8 surrounding color blocks takes +1.
         /// </summary>
         public void NotifyDrill(GridPos drilled, int currentTier)
         {
