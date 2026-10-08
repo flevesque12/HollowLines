@@ -114,7 +114,7 @@ paths:
 - This event fires much less frequently in v3 (it's a rare bonus, not the core loop).
 - GameBootstrap wires `PerfectClear` to `ScoreSystem.AwardPerfectClear(cascadeStep)`.
 
-### 5.5 AirSystem — New restore sources  ✅ IMPLEMENTED
+### 5.5 AirSystem — New restore sources  ✅ IMPLEMENTED + 🔄v3.2 Danger Zone
 **Changes:**
 - Add `RestoreBurst()` (per burst event).
 - Add `RestoreBombChain(int bombCount)` (per bomb in a sympathetic chain).
@@ -123,6 +123,9 @@ paths:
 - Add `DrainRate` ramp for endless: property already settable (v2.1 change); GameBootstrap
   or EndlessManager sets it based on current depth.
 - `RestoreCapsule()` now also fires on bomb/burst liberation, not just on drilling.
+- 🆕v3.2 **`IsDangerZone`** (bool, read-only) — `true` when `CurrentAir < 0.15f`.
+  All points are ×2 when active (see `drill-momentum.md` §M3.4). View: red pulsing vignette
+  + heartbeat audio.
 
 > **⚠️ The draft amounts were wrong by ~20× — see §15.1.** They assumed rare events; measured on a
 > real board a single level-10 descent produced 78 bursts and 34 capsules. Current values:
@@ -139,56 +142,53 @@ paths:
 > itself, and the in-play shockwave cascade was kept deliberately (§15.1). Re-measured on settled
 > boards the pacing holds, so these values are final — **do not re-tune them** without new harness
 > evidence.
->
-> **🆕R6.2 start buffer (F02).** `BeginStartBuffer(grace)` opens a board with `grace` s of zero drain,
-> then a `StartRampDuration` (12 s) linear ramp from `StartDrainFactor` (0.5) to the full rate —
-> integrated, not sampled, so it's frame-rate independent. Opt-in (no call = old behavior), cancelled
-> by `Reset()`. GameBootstrap calls it in `LoadLevel()` on every fresh board, **not** on an endless
-> seam (`LoadLevel(freshBoard: false)`). Grace = `CampaignManager.AirStartGraceForLevel` (5 s on
-> levels 1-3, 3 s after), `DefaultStartGrace` (3 s) for endless/debug. Measured in §15.8.
 
-### 5.6 ScoreSystem — FULL REWRITE
-**New API:**
+### 5.6 ScoreSystem — FULL REWRITE + 🔄v3.2 Momentum
 
-| Method | Formula | Source enum |
+> **🔄v3.2 — Drill Momentum.** All base points are now multiplied by `momentum_mult × cascade_mult
+> × danger_zone_mult`. See `drill-momentum.md` §M5 for the full formula.
+
+**New API (v3.2):**
+
+| Method | Base Formula | Source enum |
 |---|---|---|
-| `AwardDrill(int streakStep, CellType streakColor = Empty)` | `10 × streakStep` | `ScoreSource.Streak` |
-| `AwardBurst(int cellCount, int fallDistance)` | `cellCount × 25 × floor(fallDistance / 2)` | `ScoreSource.Burst` |
-| `AwardBomb(int blocksDestroyed, int chainMult)` | `blocksDestroyed × 25 × chainMult` | `ScoreSource.Bomb` |
-| `AwardDepth(int row)` | `50` | `ScoreSource.Depth` |
-| `AwardPerfectClear(int cascadeStep)` | `500` **flat** — cascade does not scale it (§15.2) | `ScoreSource.PerfectClear` |
+| `AwardDrill(float momentumMult)` | 🔄v3.2: `10 × momentumMult × cascade × danger` | `ScoreSource.Drill` |
+| `AwardBurst(int cellCount, int fallDistance)` | `cellCount × 25 × floor(fallDistance / 2) × cascade × danger` | `ScoreSource.Burst` |
+| `AwardBomb(int blocksDestroyed, int chainMult)` | `blocksDestroyed × 25 × chainMult × cascade × danger` | `ScoreSource.Bomb` |
+| `AwardDepth(int row)` | `50` (flat — pas multiplié) | `ScoreSource.Depth` |
+| `AwardPerfectClear(int cascadeStep)` | `500 × danger` (flat — §15.2) | `ScoreSource.PerfectClear` |
 | `AwardDiamond()` | `150` **flat** (R4, §6.4) | `ScoreSource.Diamond` |
-| `AwardEnemyKill(EnemyType type, int bonus = 1)` | ✅R5.11: Crawler=100, Boomer=150, ×bonus (fall_bonus/chain_mult/1 — Digger/Tank removed, v3.1 pivot) | `ScoreSource.EnemyKill` |
-| `AwardBoomerBlast(int blocksDestroyed, int parentBonus)` | ✅R5.11: `blocksDestroyed × BombPointsPerBlock × parentBonus` — scores like a bomb blast (§6.5) | `ScoreSource.BoomerBlast` |
+| `AwardEnemyKill(EnemyType type, int bonus = 1)` | ✅R5.11: Crawler=100, Boomer=150, ×bonus × cascade × danger | `ScoreSource.EnemyKill` |
+| `AwardBoomerBlast(int blocksDestroyed, int parentBonus)` | ✅R5.11: `blocksDestroyed × BombPointsPerBlock × parentBonus × cascade × danger` | `ScoreSource.BoomerBlast` |
+| 🆕 `AwardGraze()` | `50` **flat** (pas multiplié) | `ScoreSource.Graze` |
+| 🆕 `AwardFreefall()` | `15` **flat** per void cell (pas multiplié) | `ScoreSource.Freefall` |
 
-**Read-only state:** `Score`, `BestStreak`, `BestStreakColor`, `BiggestBurst`,
-`BiggestBurstFallBonus`, `BestBombChain`, `PerfectClears`, `MaxDepth`.
+> `cascade` = `_chainTracker.CurrentChain` (×1 si idle). `danger` = `_airSystem.IsDangerZone ? 2 : 1`.
+> ScoreSystem prend `ChainTracker` et `AirSystem` en dépendances constructeur (ou refs set par GameBootstrap).
+
+**Read-only state:** `Score`, `BestMomentumTier`, `BiggestBurst`,
+`BiggestBurstFallBonus`, `BestBombChain`, `PerfectClears`, `MaxDepth`, `GrazeCount`, `FreefallCells`.
 
 **Event:** `OnScore(ScoreEvent)` — View hooks for popups, SFX, shake.
 
-**ScoreEvent struct (updated):**
+**ScoreEvent struct (v3.2):**
 ```csharp
 public readonly struct ScoreEvent
 {
     public int Points { get; }
     public ScoreSource Source { get; }
-    public int Detail { get; }  // streak step, cell count, chain mult, cascade step, depth row, or enemy-kill/Boomer-blast bonus
+    public int Detail { get; }  // momentum tier, cell count, chain mult, cascade step, depth row, bonus, or graze/freefall count
 }
 ```
 
-> **Deviations from the first draft of this section:**
-> - **`AwardDepth` takes the row.** The original no-arg signature made `MaxDepth` a *count of
->   awards*, which cannot back the "DEPTH: 248" display (§5.12). It now takes the row index from
->   `DepthTracker.NewDepthReached` and keeps the max — ScoreSystem spans a whole run while
->   DepthTracker resets per board, so a shallower new level must not erase the record.
-> - **`AwardDrill` takes an optional color**, and `BiggestBurstFallBonus` was added, because
->   §5.12 asks for "×12 amber" and "9-cell ×3" — neither was derivable from the original state.
-> - Both additions are backward-compatible (optional param / extra field).
-
-**ScoreSource enum (replaces LineSource):**
+**ScoreSource enum (v3.2):**
 ```csharp
-public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, EnemyKill, BoomerBlast }
+public enum ScoreSource { Drill, Burst, Bomb, Depth, PerfectClear, Diamond, EnemyKill, BoomerBlast, Graze, Freefall }
 ```
+
+> **v3.2 migration note:** `ScoreSource.Streak` → `ScoreSource.Drill`. `BestStreak` / `BestStreakColor`
+> → `BestMomentumTier`. `AwardDrill` signature changed: `(int, CellType)` → `(float)`.
+> Tests referencing streak values must be updated.
 
 ### 5.7 CampaignManager — Remove line gate
 **Changes:**
@@ -258,62 +258,33 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
     after Air, `EndlessDiamondRate = 0.02f`): a flat per-cell roll, because Endless diamonds are an
     ungated bonus (§6.4) — there is nothing to guarantee.
 
-### 5.9 HUDView — New displays
+### 5.9 HUDView — New displays + 🔄v3.2 Momentum
 **Changes:**
 - **Remove:** line gate panel ("N / M"), void-line tutorial hint.
-- **Add:** Streak counter (top-left or below score) — shows "×N" with current streak color;
-  hidden when streak = 0.
-- **Add:** Depth display — "DEPTH: 42" (top area, prominent in Endless).
-- **Add:** Burst popup — "BURST! +300" centered, fades after 1 s.
-- **Add:** Bomb chain popup — "CHAIN ×3! +750" (chainMult > 1 only).
-- **Add:** Perfect Clear popup — "PERFECT CLEAR! +500" (rare, celebratory).
-- 🆕R5.14 **Add:** Enemy kill popup — "+100 CRAWLER!" / "+450 BOOMER! ×3" (lime; the `×N` suffix
-  only when bonus > 1, same convention as the bomb chain). The enemy type isn't on `ScoreEvent` —
-  it's recovered as `Points / Detail` == `ScoreSystem.CrawlerKillPoints` or `BoomerKillPoints`.
-- 🆕R5.14 **Add:** Boomer blast popup — "+200 BOOM!" (violet, distinct from the red bomb chain).
-  Suppressed at 0 points, since a Boomer detonating in open air destroys nothing.
-- 🆕R4 **Add:** Diamond counter, under the depth panel — "💎 2/5" in campaign, "💎 7" in Endless.
-  Hidden entirely when the board has none (levels 1-3).
+- 🔄v3.2 **Replace streak counter with Momentum counter** — shows the current tier (T0–T3) and
+  drill count as a filling bar or "×N" multiplier. Tier color ramps: white (T0) → yellow (T1) →
+  orange (T2) → red flash (T3 Power Drill). Hidden at T0.
+- 🆕v3.2 **Add:** Cascade popup — "CASCADE ×3" when `ChainTracker.CurrentChain` > 1.
+  Stacks visually with momentum display.
+- 🆕v3.2 **Add:** Graze popup — "+50 GRAZE" (cyan, quick 0.5s fade). Driven by `ScoreSource.Graze`.
+- 🆕v3.2 **Add:** Freefall popup — "+15" per cell (small, subtle, stacks vertically during fall).
+- 🆕v3.2 **Add:** Danger Zone indicator — "×2 DANGER" persistent badge when `AirSystem.IsDangerZone`.
+  Red pulsing, matches the vignette.
+- **Keep:** Depth display — "DEPTH: 42" (top area, prominent in Endless).
+- **Keep:** Burst popup — "BURST! +300" centered, fades after 1 s.
+- **Keep:** Bomb chain popup — "CHAIN ×3! +750" (chainMult > 1 only).
+- **Keep:** Perfect Clear popup — "PERFECT CLEAR! +500" (rare, celebratory).
+- 🆕R5.14 **Keep:** Enemy kill popup — "+100 CRAWLER!" / "+450 BOOMER! ×3".
+- 🆕R5.14 **Keep:** Boomer blast popup — "+200 BOOM!" (violet).
+- 🆕R4 **Keep:** Diamond counter — "💎 2/5" in campaign, "💎 7" in Endless.
 - Score, air bar, hearts: unchanged layout (update score source).
-- 🆕R6.2 **Air start-buffer cue** on the air bar (§5.5): during the grace window the fill turns pale
-  (`ColAirIdle`) with a slow shimmer, the caption counts down (`AIR · 3`), and a 4 px gold fuse strip
-  burns down across the top of the bar; at grace end a 0.35 s white flash; through the ramp the fill
-  slides pale → cyan with `StartBufferFactor`. Polled in `Update` (`TickAirBufferCue`), because
-  `AirChanged` stays silent while nothing drains. Danger red (< 25 %) always wins. The fuse was white
-  first — invisible on the pale fill in a screenshot, so it's gold.
-- 🆕R6.6 **Drill score popups** (F07): `HUDView.ShowDrillPopup(worldCellCentre, points, streak)` —
-  "+30 ×3" rising 0.7 cell over 0.7 s, fading over the second half, **right of the drilled cell**
-  (centred on it, it sat on the driller, who falls into that cell). Colour = streak colour lifted 30 %
-  toward white (raw teal was too dark on the well); size 18 → 30 px with the streak; "×N" from ×2 up.
-  Pool of 16 labels (oldest recycled), each keeps its WORLD position and is re-projected every frame
-  (`RuntimePanelUtils.CameraTransformWorldToPanel`), so it rides with the board as the camera follows.
-  **Points = score delta measured around GameBootstrap's whole `Drilled` handler** — includes the
-  streak multiplier and a drilled diamond's +150, duplicates no formula, and is independent of
-  subscription order. Separate from the centre celebration popup (bursts/chains/Perfect Clear).
-- 🆕R6.7 **Streak counter** (F07): shown from **×2** (a ×1 is just the colour you're on), 30 → 60 px
-  with the run (capped ×10), outlined, streak colour lifted 15 % toward white, scale punch (1.35 → 1,
-  0.18 s) on every step. **Crack** when a ×2+ streak breaks (`StreakBroken(lost)`): two overflow-
-  clipped halves holding a copy of the old "×N" sit over the label (`_streakBox`, relative) — 0.12 s
-  shudder while it drains to red-grey, then the halves drift apart, fall, tilt ±22° and fade (0.6 s
-  total). A ×1 ending is silent. Paired with `AudioManager` `_streakBreakClip` (short bright mostly-
-  noise `Shatter`, 1400 Hz) on the same ×2+ condition.
-- 🆕R6.3 **"FORE POUR RESPIRER !" hint** (F02) — centred just above the air bar (not the centre
-  popup slot: that's for celebrations and sits over the avatar). Shows below 30 % air, hides at 35 %
-  (hysteresis, so drilling at the edge doesn't flicker) or at 0. Eased fade; pulse speeds up as the
-  tank empties, amber → red under 15 %; a scale **pop on every air gain** while shown (detected in
-  `RefreshAir` as air > last value — a drill, capsule or burst all count), so the player sees the
-  advice working. Dark pill + text outline: bare amber text was unreadable over amber/pink blocks.
 
-> **Deviation:** the three popups are driven by **`ScoreSystem.OnScore`**, not by subscribing to
-> GravitySystem / BombSystem / CollapseSystem directly. Those events don't carry the point value
-> the popup has to print, and re-deriving it in the view would duplicate the scoring formulas.
-> `ScoreEvent` already carries `Points` + `Source` + `Detail` (= cell count / chain mult / cascade
-> step) — exactly what the popups need — and it avoids three more `Rewire*` hooks for systems that
-> are rebuilt every level, plus the subscription-order fragility that comes with them.
+> **Deviation:** popups are driven by **`ScoreSystem.OnScore`**, not by subscribing to Core
+> systems directly. `ScoreEvent` carries `Points` + `Source` + `Detail`.
 >
-> `HUDView.OnLevelLoaded()` is called from `LoadLevel()`: `StreakTracker.Reset()` and
+> `HUDView.OnLevelLoaded()` is called from `LoadLevel()`: `MomentumTracker.Reset()` and
 > `DepthTracker.Reset()` are silent by design, so without it the HUD keeps the previous board's
-> streak and depth.
+> momentum and depth.
 
 > **🆕R4 Deviation: the Endless diamond counter is per-segment, not a whole-run tally.** Both
 > numbers come straight from the live `DiamondSystem`, which `GameBootstrap.LoadLevel()` re-`Init()`s
@@ -328,7 +299,12 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
 **Add:**
 - Burst explosion: colored particles matching chunk color, radiating from burst zone.
   Scale with chunk size (more cells = more particles).
-- Streak glow: avatar tints toward streak color at ×3+; particle trail at ×8+.
+- 🔄v3.2 **Momentum effects** (replace streak glow — see `drill-momentum.md` §M8):
+  - **Tier 1 trail:** 3-4 particle trail behind avatar (color of last drilled block).
+  - **Tier 2 fissures:** hairline crack overlay on cardinally adjacent blocks when drilling.
+    Shader overlay or sprite; second fissure on same block → block breaks.
+  - **Tier 3 Power Drill flash:** white screen flash + light shake on the double-drill.
+  - **Danger Zone vignette:** red pulsing fullscreen overlay at ~1 Hz when air < 15%.
 - Bomb chain flash: screen flash on sympathetic detonation, intensity scales with chain mult.
 - Shockwave ripple: visual wave expanding from burst/bomb center (1 cell radius, 0.2 s).
 - **Bomb fuse telegraph** (added 2026-07-23): one pulsing halo per armed bomb, driven by
@@ -340,14 +316,6 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
   a plain tinted halo. Halos are keyed by cell and culled by a `LastSeen` timeout, so a bomb that
   detonates, is disarmed, or is shifted by a Perfect Clear cleans up correctly.
   > **No Core change:** `FuseProgress` already existed on `BombSystem` — the telegraph is pure View.
-- 🆕R6.13 **Blast zone preview** (F03): while a fuse burns, every cell the blast will hit gets a
-  danger frame (1 px black edge, 2 px tinted rim, sparse diagonal hatching — `GetZoneFrameSprite`,
-  sortingOrder 5). **Red** = the lit bomb's own cross, **pale yellow** = cells reached only through the
-  bombs it sets off. Zone = `BombSystem.PredictBlastZone` for every `CopyArmedCells` entry, merged and
-  rebuilt each frame in `AnimateBlastZones` (follows Perfect Clear shifts and newly chained bombs),
-  frames pooled per cell. Pulse ramps with the fuse fraction (same as the halo); the whole zone pulses
-  faster and whiter while the avatar stands in it — the "step out" cue. First pass (plain tinted rim)
-  vanished on pink/amber blocks in a screenshot → black edge + hatching, chain colour orange → pale yellow.
 - 🆕R4 **Diamond shine + collect sparkle.** Two separate pieces, not one:
   - **Persistent shine (BoardView, not VfxManager):** undrilled Diamond cells render with the
     **`DiamondShine` shader** (`Resources/Shaders/DiamondShine.shader`) instead of a plain tint — a
@@ -358,9 +326,6 @@ public enum ScoreSource { Streak, Burst, Bomb, Depth, PerfectClear, Diamond, Ene
     tile's content, not an overlay. `BoardView.ApplyMaterial()` assigns it only to `CellType.Diamond`
     cells and reverts to the plain default material the instant one is drilled. Same missing-shader
     fallback contract as `FuseGlow`.
-  - **🆕R6.5 Air capsule shimmer (BoardView):** AirCapsule cells get a second `DiamondShine`
-    instance (`EnsureCapsuleMaterial`) — cyan, softer and slower than the diamond's, so the two
-    never twinkle alike. The tile itself is the procedural "AIR" pill from `Editor/CapsuleTileGenerator.cs`.
   - **Collect sparkle (VfxManager):** a bright icy white-blue particle burst + ripple, fired from
     `SpawnDiamondSparkle()`, wired to all three collection sources — `_avatar.Drilled` (diamond
     branch), `_gravity.DiamondLiberated`, `_bombs.DiamondLiberated` — via one shared handler,
@@ -392,8 +357,9 @@ row-clear farming as a *problem*. The markers worked against the design, so `Cre
 
 ### 5.11 AudioManager — New sounds
 **Add/modify:**
-- Drill SFX: pitch rises with streak step (same principle as old chain pitch-rising, but
-  on drill instead of line clear). `pitch = 1.0 + (streakStep - 1) × 0.05`, capped at streak 10.
+- 🔄v3.2 Drill SFX: pitch rises with **momentum tier** (not streak step):
+  T0 = `pitch 1.0`, T1 = `1.05`, T2 = `1.12` + bass rumble overlay, T3 = percussive impact.
+  Graze: quick high "ting". Danger Zone: looping heartbeat at 60 bpm (see `drill-momentum.md` §M8).
 - Burst SFX: new "shatter" clip via SfxSynth (Noise + Tone layered, 0.3 s). Pitch scales
   down with chunk size (bigger = deeper = more satisfying).
 - Bomb SFX: unchanged clip, but play a rising arpeggio overlay on chain mult > 1.
@@ -424,8 +390,8 @@ row-clear farming as a *problem*. The markers worked against the design, so `Cre
 ### 5.12 UIScreenManager — Updated score screen
 **Changes:**
 - Game over / run end screen shows: Depth (primary, large), Score (secondary),
-  Best Streak ("×12 Blue"), Biggest Burst ("9-cell ×3"), Best Bomb Chain ("5-chain"),
-  Perfect Clears count.
+  🔄v3.2 Best Momentum Tier ("Tier 3 ×6"), Biggest Burst ("9-cell ×3"), Best Bomb Chain ("5-chain"),
+  Perfect Clears count, 🆕 Grazes, 🆕 Freefall cells.
 - **Main menu** (`ShowMainMenu`) — the title screen shown at boot over the frozen first board;
   "Jouer" lifts the overlay to start, "Quitter" exits. Same overlay mechanic as pause/game-over.
   Auto-shown from `Start()` when `Init` was given an `onPlay` callback.
@@ -434,24 +400,6 @@ row-clear farming as a *problem*. The markers worked against the design, so `Cre
   (D-pad/stick = Navigate, A = Submit, B = Cancel). Every screen focuses its primary button on open,
   and buttons draw a 2px focus border (reserved always, transparent → white on focus, so focus never
   shifts layout). Pause toggles on **Esc or the Start button**. See §16.
-- 🆕R6.9 **Options screen** (`ScreenState.Options`, F10) — "Options" on the main menu and the pause
-  screen; "Retour" / Esc / Start / B go back to whichever opened it (`_optionsReturn`). The rows are
-  built by `OptionsMenu` (plain class, like `DeathRecapView`): Général / Musique / Effets, 10 steps
-  each. **A row is one focusable element**: Up/Down uses the default navigation between rows,
-  Left/Right is caught in a `NavigationMoveEvent` callback and changes the value
-  (`focusController.IgnoreEvent` so it doesn't also move focus). The −/+ buttons and the segments
-  are mouse-only (`focusable = false`). Every change applies + saves at once; Effets plays a blip.
-  Volumes **scale** the designed mix (`AudioManager.sfxVolume` 0.6 / `musicVolume` 0.18) — 100 % =
-  the mix as tuned. Général → `AudioListener.volume`. Hidden by `ClearButtons()`, which every screen calls.
-- 🆕R6.12 **Help screen** (`ScreenState.Help`, F16) — "Aide" next to "Options" on the main menu and
-  pause, same back rule (`_subScreenReturn` / `CloseSubScreen`, shared with Options). `HelpScreenView`
-  (plain class): 8 pages — Le but, Contrôles, Forer et streak, L'air et les cœurs, Les blocs qui
-  tombent, Bombes, Ennemis, Bonus — each a list of icon + sentence. Icons are the real tiles
-  (`Resources/Tiles`, neutral tile tinted with BoardView's default palette) and `EnemySprites`, so the
-  player learns what they will actually see. **Numbers come from Core constants** (`ScoreSystem`,
-  `AirSystem`, `BombSystem`, `HealthSystem`, `GravitySystem`), French-formatted — the help can't drift
-  from the rules. The page body is one focusable element: ←/→ flips pages (swallowed), ↓ reaches
-  "Retour"; ◀ ▶ and the page dots are mouse-only.
 
 ### 5.13 CameraShake + camera follow
 **Changes:**
@@ -620,23 +568,6 @@ somewhere, not just triggering a menu).
 > screenshot showing the gradient building from nothing at the top of the band to a strong gold
 > wash at the final row.
 
-> **🔄 Reworked 2026-10-05 (dev playtest: "les cubes de fin de niveau manquent de feedback, les
-> couleurs sont bizarres").** Screenshot confirmed it: the full-width additive wash bleached every
-> block in the band (pink → peach, amber → yellow, bombs pale, holes khaki) — it read as a bug, not a
-> destination, and nothing marked the actual win row. Now (`BoardView.BuildExitZone`):
-> - **Blocks are never tinted.** Light only in the **empty** cells of the band — one additive sprite
->   per cell, toggled in `OnCellChanged`, with a bottom-bright gradient sprite (the `ExitGlow` shader
->   now samples `_MainTex`) so it reads as light rising out of the exit.
-> - **Checkered gold finish line** on the top edge of row `Height - WinDepthFromFloor` (sortingOrder 6).
-> - **Gold ▼ arrows** in both side margins (3 per side) with a light running down toward the line;
->   faster and brighter as the avatar closes in (`exitApproachRows`, 12). `Init` takes the
->   `AvatarModel` (optional) for that.
-> - **On reach** (`PlayExitReached`, from `GameBootstrap.BeginLevelEnd`): the line flashes white and
->   swells, the holes flare, 28 gold sparks arc up; HUD "SORTIE !" (`ShowExitReached`). The tutorial
->   win now also plays the level-complete jingle (`AudioManager.PlayLevelComplete`, made public) —
->   before, only campaign levels had it.
-> Screenshot-verified (approach + reach). View only.
-
 ### 5.17 EnemyView  🆕 IMPLEMENTED (R5.17)
 One `SpriteRenderer` per living enemy, layered OVER the cell grid. Enemies are ACTORS, not
 CellTypes (§6.5), so they never enter BoardView's tile array and need their own renderers.
@@ -658,24 +589,3 @@ CellTypes (§6.5), so they never enter BoardView's tile array and need their own
 - Parented under the BoardView GameObject, so it is torn down with the board on the next
   `LoadLevel()`. GameBootstrap creates it **before** `SpawnEnemiesForBoard()` so it receives
   every `EnemySpawned`.
-
-> **🔄R6.4 (F04 — "je voyais pas les ennemis") — visibility pass.** Diagnosis from the code: enemies
-> were plain unit squares (same silhouette as every block), tinted dark green (≈ teal ColorB) and
-> orange (≈ amber ColorA and the red-orange bomb), and dormant ones sat at 40 % alpha ON TOP of a solid
-> block — effectively invisible. Changes:
-> - **`EnemySprites`** (new, procedural, point-filtered 16×16): Crawler = wide bug with legs and
->   antennae, Boomer = round body with a lit fuse; black 1 px outline so they separate from any block;
->   **eyes shut while dormant, open once active**. Colours: **lime Crawler, violet Boomer** — no block
->   uses either, and they match the R5.14 kill / BOOM popups. Colour is baked into the texture (the
->   eyes must stay white), so `SpriteRenderer.color` only carries grey/alpha.
-> - **Dormant** = `dormantTint` grey at 0.95 alpha + a slow 5 % breath (alive, not a tile).
->   **Active** = full colour + a brightness pulse (0.82 ↔ 1) on top of the R5.17 shuffle / swell.
-> - **"!" alert** (sortingOrder 9, a sibling so it doesn't inherit the body's pulse): bounces in with
->   overshoot for 1.1 s when an enemy wakes; **blinks over an active Crawler on the avatar's row within
->   3 columns** (Boomers never threaten — their blast never hurts the avatar). The rising edge fires
->   `EnemyView.DangerStarted` → `AudioManager.PlayEnemyAlert()`. `Init` now takes the `AvatarModel`
->   (optional; no avatar = no danger "!").
-> - **VfxManager**: Crawler death particles → lime, Boomer death → pale violet, Boomer halo → violet
->   (a lit bomb and a Boomer must not glow the same orange).
-> - Verified by screenshot (UnityMCP) on open air AND on amber/pink blocks, dormant and active. First
->   pass had a 2 px "!" that read as a hairline → widened to 3 px, scale 0.9.

@@ -2,20 +2,40 @@
 paths:
   - "**/ScoreSystem*"
   - "**/CampaignManager*"
+  - "**/MomentumTracker*"
+  - "**/GrazeSystem*"
 ---
 
 ## 8. Scoring summary
 
-| Action | Points | Formula |
+> **🔄v3.2 — Drill Momentum.** Le scoring par streak couleur est remplacé par le momentum
+> temporel. Voir `drill-momentum.md` pour les directives complètes (§M1–M10).
+
+**Formule générale (v3.2):**
+```
+score = base_pts × momentum_mult × cascade_mult × danger_zone_mult
+      + graze_bonus + freefall_bonus
+```
+
+| Action | Base Points | Multiplicateurs applicables |
 |---|---|---|
-| Drill | 10 × streak | 🔄v3.1: streak tracks **downward drills only**; lateral/up are neutral |
-| Chunk Burst | cells × 25 × fall_bonus | fall_bonus = floor(fall_distance / 2) |
-| Bomb | blocks × 25 × chain_mult | chain_mult = # bombs in sympathetic chain |
-| Depth | 50 | Per new deepest row |
-| Perfect Clear | 500 **flat** | Rare bonus. The cascade multiplier was removed — see §15.2 |
-| Diamond | 150 | 🔄v3.1: bonus in ALL modes (campaign gate removed) |
-| Enemy Kill | 100 (Crawler) / 150 (Boomer) | ✅R5.11: 2 types only. Kill-by-burst × fall_bonus, kill-by-bomb × chain_mult |
-| Boomer explosion | blocks × 25 × parent_bonus | ✅R5.11: Boomer death blast scores like a bomb. Parent bonus carries through |
+| Drill | 10 | 🔄v3.2: × momentum (×1/×2/×4/×6) × cascade × danger_zone |
+| Chunk Burst | cells × 25 × fall_bonus | × cascade × danger_zone |
+| Bomb | blocks × 25 × chain_mult | × cascade × danger_zone |
+| Depth | 50 | Per new deepest row (flat, pas multiplié) |
+| Perfect Clear | 500 **flat** | × danger_zone only |
+| Diamond | 150 | Flat (pas multiplié) |
+| Enemy Kill | 100 (Crawler) / 150 (Boomer) | × cascade × danger_zone. Kill-by-burst × fall_bonus, kill-by-bomb × chain_mult |
+| Boomer explosion | blocks × 25 × parent_bonus | × cascade × danger_zone |
+| 🆕 Graze | 50 **flat** | Pas multiplié. +0.3s au timer momentum |
+| 🆕 Freefall | 15 / cellule vide | Pas multiplié. Maintient le momentum |
+
+**Multiplicateurs (v3.2):**
+| Multiplicateur | Source | Valeurs |
+|---|---|---|
+| `momentum_mult` | MomentumTracker tier | ×1 (T0) / ×2 (T1) / ×4 (T2) / ×6 (T3) |
+| `cascade_mult` | ChainTracker.CurrentChain | ×1 si pas de cascade, ×N sinon |
+| `danger_zone_mult` | AirSystem.IsDangerZone | ×2 si air < 15%, sinon ×1 |
 
 **Air restore** (revised in §15.1 — the draft values were ~20× oversupplied):
 
@@ -41,7 +61,7 @@ to function once the line gate was removed.
 | Level | Rows | New mechanic | Drain | Wobble | Diamonds | Score min | Enemies |
 |---|---|---|---|---|---|---|---|
 | 1 | 24 | Movement + drilling | 4%/s | 0.8 s | 0 | 0 | — |
-| 2 | 30 | Color Streak (tutorial vein) | 4%/s | 0.8 s | 0 | 0 | — |
+| 2 | 30 | 🔄v3.2 Drill Momentum (tutorial zone) | 4%/s | 0.8 s | 0 | 0 | — |
 | 3 | 32 | Chunks + Chunk Burst (tutorial setup) | 4%/s | 0.8 s | 0 | 0 | — |
 | 4 | 40 | Air capsules + drain + **Diamonds** | 7%/s | 0.6 s | 2 | 500 | — |
 | 5 | 44 | Hard blocks | 7%/s | 0.6 s | 3 | 500 | — |

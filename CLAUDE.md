@@ -21,9 +21,9 @@
 | **Inspiration** | Mr. Driller (avatar-in-well, chunk gravity), Downwell (score-chasing descent) |
 
 **Elevator pitch:** You're a tiny pixel-art driller descending through layers of colored
-blocks. Drill streaks of the same color for rising combos, undermine huge chunks to make
-them shatter on impact, chain bombs together for massive bursts — grab diamonds for bonus
-points, crush lurking creatures with falling blocks — and find air pockets before you
+blocks. Build drilling momentum for rising combos, undermine huge chunks to make
+them shatter on impact, chain bombs together for massive bursts — graze past danger for
+bonus points, crush lurking creatures with falling blocks — and find air pockets before you
 suffocate. Campaign teaches you the ropes; Endless is the real game.
 
 **Design philosophy (v3.1 — arcade pivot):** The fun is in drilling, bursting, and exploding.
@@ -44,7 +44,8 @@ feeling didn't match the vision of visceral arcade action.
 - **Grid reduced** from 10 to 7 columns (tighter decisions, mobile-friendly).
 - **Core scoring replaced:** void-lines demoted to rare bonus ("Perfect Clear", +500 pts).
   Three new action-reward systems are the core:
-  1. **Color Streak** — successive same-color drills multiply points.
+  1. **Drill Momentum** — 🔄v3.2 (was "Color Streak"). Time-based momentum: drill fast → rising
+     multipliers (×2/×4/×6). Colors become physics (chunk fusion), not active scoring.
   2. **Chunk Burst** — chunks falling 2+ rows shatter on impact for massive points.
   3. **Bomb Bonanza** — bomb chain explosions are rewarded (not punished); bombs liberate
      air capsules instead of destroying them.
@@ -64,18 +65,37 @@ as an arcade action-descent.
 
 **v3.1 changes — ✅ ALL SHIPPED (R5.1-R5.17, 2026-09-01).** Every item below is implemented,
 tested and play-mode verified; see the R5 delivery notes in `.claude/rules/refactoring-delivery-notes.md`.
-- **Color Streak** → vertical-only: only drills **downward** build the streak.
+- **Color Streak** → vertical-only (v3.1), then **replaced by Drill Momentum** (v3.2 — see below).
 - **Diamonds** → optional bonus: no longer a campaign win gate. +150 pts anywhere.
 - **Enemies** → simplified to 2 types: **Crawler** + **Boomer** (Digger and Tank removed).
 - **Bomb fuse** → reduced from 2.5 s to **1.5 s** for faster arcade tempo.
 - **Air** → every drill restores **+0.5% air**. Drill to stay alive.
 - **Campaign win** → depth reached + **score minimum** (replaces diamond gate).
 
+### v3.2 Drill Momentum — What changed from v3.1
+
+The v3.1 color streak still created a tension: scoring required same-color routing (33%
+chance of continuing straight down), while survival required fast descent. The two loops
+fought for the same input (drill direction). Every successful arcade game aligns these:
+Downwell, Tetris, NecroDancer, Pac-Man CE.
+
+**v3.2 changes — 🟡 PLANNED (see `drill-momentum.md` for full directives):**
+- **Color Streak → Drill Momentum:** `StreakTracker` replaced by `MomentumTracker`. Time-based
+  (0.8s window), not color-based. All drill directions count equally. 4 tiers: ×1 → ×2 → ×4 → ×6.
+  Tier 3 = **Power Drill** (pierce 2 blocks + mini shockwave), then cycle resets to Tier 1.
+- **Colors → physics system:** colors drive chunk fusion/burst (like Mr. Driller), not scoring.
+  Optional color bonus: same-color drills build momentum ×1.5 faster (skill expression).
+- **Cascade visible:** `ChainTracker` surfaced as ×N popup (chain events multiply subsequent points).
+- **Graze bonus:** +50 pts for drilling adjacent to active enemy or armed bomb (+0.3s momentum).
+- **Freefall:** +15 pts per void cell traversed in free fall; momentum maintained during fall.
+- **Danger Zone:** air < 15% = all points ×2 (comeback mechanic).
+- **Scoring formula:** `base × momentum_mult × cascade_mult × danger_zone_mult + graze + freefall`.
+
 ---
 
-## 11. Design rules — NON-NEGOTIABLE (v3.1 arcade)
+## 11. Design rules — NON-NEGOTIABLE (v3.2 momentum)
 
-1. **Drilling IS the reward.** Every drill tap gives points (×streak) AND air (+0.5%). Never drill "for free." 🔄v3.1: drill also restores air.
+1. **Drilling IS the reward.** Every drill tap gives points (×momentum) AND air (+0.5%). Never drill "for free." 🔄v3.2: momentum multiplier replaces color streak.
 2. **Big chunks burst.** Fall from 2+ rows → shatter. Spectacle = score.
 3. **Bombs are friends.** Liberate air, chain for multipliers, clear paths. Player wants bombs.
 4. **Wobble telegraphs everything.** 0.6 s warning. No unfair deaths. (0.8 s campaign 1–3.)
@@ -84,6 +104,7 @@ tested and play-mode verified; see the R5 delivery notes in `.claude/rules/refac
 7. **Perfect Clear is a bonus, not a goal.** Full void row = rare jackpot (+500), not the loop.
 8. **Diamonds are free candy.** 🔄v3.1 (was "on the way down"). Optional +150 pts bonus. Grab them if they're there; ignore them if they're not. Never gated, never required.
 9. **Enemies amplify the action.** 🔄v3.1 (was "die to physics"). Crawlers are bonus targets killed by physics. Boomers amplify destruction — their death explosion creates more chaos. No enemy should interrupt the descent or require puzzle-solving to defeat.
+10. **Scoring and surviving are the same gesture.** 🆕v3.2. Forer vite = survivre (air) = scorer (momentum). No mechanic should ever create a choice between scoring and staying alive. If a scoring system requires the player to stop descending, it is broken.
 
 ---
 
@@ -120,8 +141,7 @@ tested and play-mode verified; see the R5 delivery notes in `.claude/rules/refac
 - **Procedural-first assets, not zero-asset.** All SFX are synthesized (`SfxSynth`), and VFX are
   built from generated primitives — including three procedural **shaders**: `FuseGlow`, `DiamondShine`,
   and `ExitGlow`. The block *sprites* are the exception: AI-generated tiles loaded from
-  `Resources/Tiles/` by `BoardView`, with a procedural white-square fallback — except `tile_capsule.png`,
-  which is generated by `Editor/CapsuleTileGenerator.cs` since R6.5. Enemy sprites are procedural (`EnemySprites`, R6.4).
+  `Resources/Tiles/` by `BoardView`, with a procedural white-square fallback.
 - **Bot playtest harness** — `tools/playtest/` compiles real Core sources. Fully v3-wired (R2.7).
 - **`spawnCell` must be the middle column** — `(3,2)` for 7-wide. Scene serialized value beats code default.
 - **Debug/testing toggles on GameBootstrap:** `disableAir` (gates air tick) and `invincible`
@@ -138,8 +158,9 @@ tested and play-mode verified; see the R5 delivery notes in `.claude/rules/refac
 | `architecture.md` | §3 Architecture + §7 Game loop wiring | Always |
 | `core-systems.md` | §4 Unchanged systems + §6 New systems (6.1–6.9) | `**/Core/**` |
 | `view-systems.md` | §5 Systems to modify (5.1–5.17) | `**/View/**` |
-| `scoring-campaign.md` | §8 Scoring summary + §9 Campaign table | `**/ScoreSystem*`, `**/CampaignManager*` |
-| `refactoring-plan.md` | §10 R1–R6 step tables (compact) | Always |
+| `scoring-campaign.md` | §8 Scoring summary + §9 Campaign table | `**/ScoreSystem*`, `**/CampaignManager*`, `**/MomentumTracker*`, `**/GrazeSystem*` |
+| `drill-momentum.md` | 🆕v3.2 Drill Momentum directives (M1–M10) | `**/MomentumTracker*`, `**/ScoreSystem*`, `**/AirSystem*`, `**/GrazeSystem*`, `**/FissureTracker*`, `**/HUDView*`, `**/VfxManager*`, `**/AudioManager*`, `**/GameBootstrap*` |
+| `refactoring-plan.md` | §10 R1–R7 step tables (compact) | Always |
 | `refactoring-delivery-notes.md` | R5 verbose delivery notes + R6 details | `**/Core/**`, `**/View/**` |
 | `tests.md` | §13 Test status | `**/Tests/**`, `**/CoreTests*` |
 | `balance.md` | §15 Balance findings (all resolved) | `**/AirSystem*`, `**/ScoreSystem*`, `**/StrateGenerator*` |

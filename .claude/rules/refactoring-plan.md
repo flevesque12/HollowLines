@@ -94,7 +94,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R5.16 ✅ | AudioManager: enemy SFX (chirp, crunch, boop, boom) | Audio check |
 | R5.17 ✅ | EnemyView: enemy sprites on grid (dormant/active states) | Visual check, 333/333 |
 
-### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (Sprint 1 ✅ R6.1-R6.5, Sprint 2 ✅ R6.6-R6.9, Sprint 3: R6.12-R6.13 ✅, R6.14 ✅ pulled forward)
+### R6 — Feedback fixes (player testing Sept 2026)  🟡 PLANNED
 
 > **Source:** `FEEDBACK-COMPILATION.md` (16 items, F01–F16).
 > **Detailed prompts:** `PROMPTS-CLAUDE-CODE-R6.md` (R6.1–R6.18).
@@ -104,35 +104,35 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
-| R6.1 ✅ | **DeathTracker** + death recap screen — 10 new, 353/353 | F01 | 🆕 `Core/DeathTracker.cs`, `View/DeathRecapView.cs`, GameBootstrap |
-| R6.2 ✅ | **AirSystem** start buffer + reduced initial drain — 13 new, 366/366, + HUD grace cue | F02 | `Core/AirSystem.cs`, `CampaignManager` |
-| R6.3 ✅ | **Drill-to-breathe popup** when air < 30% — visual check, 366/366 | F02 | `View/HUDView.cs` |
-| R6.4 ✅ | **Enemy visibility** — unique color, pulse, "!" icon, distinct SFX — visual/audio check, 366/366 | F04 | `View/EnemyView.cs`, `View/VfxManager.cs`, `View/AudioManager.cs` |
-| R6.5 ✅ | **Air capsule icon** redesign — procedural "AIR" pill tile + shimmer, visual check | F05 | `View/BoardView.cs`, `Resources/Tiles/` |
+| R6.1 | **DeathTracker** + death recap screen | F01 | 🆕 `Core/DeathTracker.cs`, `View/DeathRecapView.cs`, GameBootstrap |
+| R6.2 | **AirSystem** start buffer + reduced initial drain | F02 | `Core/AirSystem.cs`, `CampaignManager` |
+| R6.3 | **Drill-to-breathe popup** when air < 30% | F02 | `View/HUDView.cs` |
+| R6.4 | **Enemy visibility** — unique color, pulse, "!" icon, distinct SFX | F04 | `View/EnemyView.cs`, `View/VfxManager.cs`, `View/AudioManager.cs` |
+| R6.5 | **Air capsule icon** redesign | F05 | `View/BoardView.cs`, `Resources/Tiles/` |
 
 #### Sprint 2 — "Je vois le score" (P1 — Important)
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
-| R6.6 ✅ | **Score popups on drilled blocks** — visual check, 366/366 | F07 | `View/HUDView.cs` or `View/VfxManager.cs` |
-| R6.7 ✅ | **Streak counter** — bigger, "crack" on break — visual check, 366/366 | F07 | `View/HUDView.cs`, `View/VfxManager.cs` |
-| R6.8 ✅ | **D-pad movement mapping** — D-pad ←/→ walk (OR-ed with stick), hardware check | F11 | `View/GameInput.cs` |
-| R6.9 ✅ | **Volume control menu** — Options screen (main menu + pause): Général / Musique / Effets, PlayerPrefs — play-mode check, 369/369 | F10 | 🆕 `View/OptionsMenu.cs`, `View/AudioManager.cs`, `View/UIScreenManager.cs` |
+| R6.6 | **Score popups on drilled blocks** | F07 | `View/HUDView.cs` or `View/VfxManager.cs` |
+| R6.7 | **Momentum counter** — 🔄v3.2 replaces streak counter (bigger, tier-based) | F07 | `View/HUDView.cs`, `View/VfxManager.cs` |
+| R6.8 | **D-pad movement mapping** | F11 | `View/GameInput.cs` |
+| R6.9 | **Volume control menu** | F10 | 🆕 `View/OptionsMenu.cs`, `View/AudioManager.cs`, `View/UIScreenManager.cs` |
 
 #### Sprint 3 — "J'apprends les mécaniques" (P2 — Important)
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
 | R6.10 | **Puzzle tutorial system** | F08, F09 | 🆕 `Core/PuzzleBoard.cs`, 🆕 `View/PuzzleTutorialView.cs`, `View/UIScreenManager.cs` |
-| R6.11 | **XP progression system** | F06 | 🆕 `Core/ProgressionSystem.cs`, `View/UIScreenManager.cs`, PlayerPrefs |
-| R6.12 ✅ | **Help page in-game** — "Aide" (main menu + pause), 8 pages with board icons — play-mode check, 369/369 | F16 | 🆕 `View/HelpScreenView.cs`, `View/UIScreenManager.cs` |
-| R6.13 ✅ | **Blast radius visual feedback** — predicted zone framed while the fuse burns (red own cross, pale-yellow chain, flares if you're inside) — 7 new, 376/376 | F03 | `View/VfxManager.cs`, `Core/BombSystem.cs` |
+| R6.11 | **XP progression system** (🔄v3.2: may be simplified — momentum tiers handle skill expression; XP becomes tutorial-only) | F06 | 🆕 `Core/ProgressionSystem.cs`, `View/UIScreenManager.cs`, PlayerPrefs |
+| R6.12 | **Help page in-game** | F16 | 🆕 `View/HelpScreenView.cs`, `View/UIScreenManager.cs` |
+| R6.13 | **Blast radius visual feedback** | F03 | `View/VfxManager.cs`, `Core/BombSystem.cs` |
 
 #### Sprint 4 — Polish (P3 — Nice to have)
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
-| R6.14 ✅ | **Level end delay** — cascades finish before score screen (settle phase 0.6–4 s, screen shows the final score) — 3 new, 369/369 | F14 | `GameBootstrap`, `View/UIScreenManager.cs` |
+| R6.14 | **Level end delay** — cascades finish before score screen | F14 | `GameBootstrap`, `View/UIScreenManager.cs` |
 | R6.15 | **Multi-monitor fix** | F12 | Unity PlayerSettings / startup script |
 | R6.16 | **Multi-input fix** | F13 | `View/GameInput.cs` |
 | R6.17 | **Void-line yellow review** | F15 | `View/BoardView.cs` |
@@ -144,12 +144,50 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 > - R6.10 (puzzle tutorial) is the largest single item; may span multiple sessions.
 > - R6.18 (death replay) is the most technically complex — requires frame buffering or state snapshot.
 > - Endless enemy placement (deferred from R5.13) should be addressed as part of R6 or as R6.19.
-> - **⚠️ R6.11 design input — lateral drills and the streak (dev playtest 2026-10-05).** The dev
->   noticed that drilling sideways through same-colour blocks never grows the streak. That is by
->   design (v3.1 / R5.1: only DOWNWARD drills build or break it; lateral/upward are neutral). But a
->   lateral drill still PAYS `10 × CurrentStreak`, whatever its colour — so a pink block drilled
->   sideways mid-teal-×4 paid "+40 ×4". Interim fix shipped in R6.6 ("option A"): the popup drops the
->   "×N" for drills that don't build the streak (score unchanged). **The dev wants XP required to
->   pass to the next tier (R6.11), which may change this design** — if XP is earned from drilling or
->   streaks, revisit: (B) lateral drills pay base 10 only, (C) lateral same-colour drills also build
->   the streak, or keep option A. Any change to drill pay needs a harness re-measure (§15).
+
+### R7 — Drill Momentum (v3.2)  🟡 PLANNED
+
+> **Source:** `drill-momentum.md` (directives M1–M10).
+> **Prerequisite:** R5 complete ✅. Can run in parallel with R6.
+> **Design doc:** `hollow-lines-drill-momentum-directives.docx`.
+
+#### Sprint 1 — Core Momentum (replaces StreakTracker)
+
+| Step | Task | Tests |
+|---|---|---|
+| R7.1 | `MomentumTracker`: 4 tiers, 0.8s window, PowerDrill event, color bonus | TBD |
+| R7.2 | `GrazeSystem`: adjacent-danger detection, +50 pts, +0.3s timer, 0.5s cooldown | TBD |
+| R7.3 | `AvatarModel`: freefall cell counter + `FreefallCell` event | TBD |
+| R7.4 | `AirSystem`: `IsDangerZone` flag (air < 15%) | TBD |
+| R7.5 | `ScoreSystem`: new `AwardDrill(float)`, `AwardGraze()`, `AwardFreefall()`, momentum×cascade×danger formula | TBD |
+
+#### Sprint 2 — Wiring + Fissures
+
+| Step | Task | Tests |
+|---|---|---|
+| R7.6 | `GameBootstrap`: rewire Drilled handler, momentum tick, graze events, freefall, Power Drill orchestration | Integration |
+| R7.7 | ⚡D5 `FissureTracker`: `Dictionary<GridPos, int>`, Tier 2+ drill → +1 fissure adjacents, 2nd fissure → `FissureBroke` event + vide la cellule | TBD |
+| R7.8 | Power Drill: double-drill + mini shockwave (radius 1), cycle reset to Tier 1 | TBD |
+
+#### Sprint 3 — View Layer
+
+| Step | Task |
+|---|---|
+| R7.9 | `HUDView`: momentum counter + tier indicator, cascade ×N popup, graze popup, danger badge |
+| R7.10 | `VfxManager`: Tier 1 trail, Tier 2 fissure overlay, Tier 3 flash, Danger Zone vignette |
+| R7.11 | `AudioManager`: tier pitch, T2 rumble, T3 impact, graze ting, danger heartbeat |
+
+#### Sprint 4 — Migration + Balance
+
+| Step | Task |
+|---|---|
+| R7.12 | Delete `StreakTracker.cs`, update all streak tests → momentum tests |
+| R7.13 | `StrateGenerator`: level 2 tutorial zone for momentum (replace color streak tutorial vein) |
+| R7.14 | Campaign rebalance: score gates vs. momentum economy (playtest harness) |
+| R7.15 | Endless rebalance: momentum progression vs. drain ramp |
+
+> **Notes:**
+> - R7.1–R7.5 are pure Core — no Unity dependency, fully testable with NUnit.
+> - R7.6 is the integration pivot: once wired, the old streak system is dead.
+> - R7.12 is the cleanup — only after R7.6 is verified.
+> - R7.14–R7.15 require the playtest harness (`tools/playtest/`) to be updated for momentum.

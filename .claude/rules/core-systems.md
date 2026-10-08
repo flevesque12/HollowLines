@@ -87,28 +87,41 @@ Cell enum (0–9) + helper methods. Map chars: `.` `A` `B` `C` `H` `S` `P` `X` `
 
 ## 6. Systems — NEW TO BUILD
 
-### 6.1 StreakTracker (Core/)
-Pure C# class. Tracks consecutive same-color drills **downward only** (v3.1 arcade pivot).
+### 6.1 ~~StreakTracker~~ → MomentumTracker (Core/)
+
+> **⚠️ v3.2 — REMPLACÉ.** `StreakTracker` (streak par couleur, v3.1) est remplacé par
+> `MomentumTracker` (streak temporel, v3.2). Le fichier `StreakTracker.cs` sera supprimé.
+>
+> **Spec complète:** voir `drill-momentum.md` → §M1 (MomentumTracker) + §M2 (paliers).
+
+Pure C# class. Tracks consecutive drills within a time window (0.8s). **All drill directions
+count** — no color matching, no directional filtering.
 
 ```
 API:
-  NotifyDrill(CellType drilled, DrillDirection direction)
-    → if direction != Down: IGNORE entirely (streak-neutral, no reset, no increment)
-    → if direction == Down AND drilled is Color and same as _currentColor: _streakCount++, fire StreakGrew(count)
-    → if direction == Down AND drilled is Color and DIFFERENT from _currentColor: fire StreakBroken(oldCount), reset to 1
-    → if drilled is non-color (Hard, HardCracked, AirCapsule, Diamond): IGNORE (streak-neutral, no reset)
-    → Steel and Bomb are not drillable so they never reach here
-  CurrentStreak (int, read-only)
-  CurrentColor (CellType, read-only)
-  StreakGrew event: Action<int>       — new streak count
-  StreakBroken event: Action<int>     — the streak count that just ended
-  Reset()                             — zeroes state for new run/level
+  NotifyDrill(CellType drilled)
+    → _timer = MomentumWindow (0.8s), _drillCount++
+    → color chain tracking (optional bonus: same color = ×1.5 faster accumulation)
+    → if Tier 3 reached: fire PowerDrillActivated, then reset to Tier 1
+
+  Tick(float dt)
+    → _timer -= dt; if expired: Reset (fire MomentumLost)
+
+  CurrentTier (int 0-3), DrillCount (int), Multiplier (float: ×1/×2/×4/×6)
+  TierChanged event: Action<int, int>    — (oldTier, newTier)
+  MomentumLost event: Action             — returned to Tier 0
+  PowerDrillActivated event: Action      — Tier 3 trigger
+  Reset()
 ```
 
-**v3.1 change:** the streak now only tracks **downward drills**. Lateral and upward drills are
-completely ignored (no reset, no increment). This eliminates the Streak × Burst conflict
-(bursts destroy blocks laterally, but the streak only cares about vertical drilling) and makes
-the streak a passive bonus of natural descent rather than an active routing system.
+**Pourquoi le changement:** le streak par couleur forçait du routing latéral (33% de chance
+de continuer en descendant), en antithèse avec la survie (descendre vite pour l'air).
+Le momentum temporel aligne scoring et survie : forer vite = survivre = scorer.
+
+**Nouveaux systèmes compagnons** (voir `drill-momentum.md`):
+- `GrazeSystem` (§M3.2) — +50 pts pour drill adjacent à un danger
+- Freefall tracking dans `AvatarModel` (§M3.3) — +15 pts/cellule vide
+- `AirSystem.IsDangerZone` (§M3.4) — air < 15% = ×2 global
 
 ### 6.2 DepthTracker (Core/)
 Pure C# class. Tracks the deepest row the avatar has reached in the current run.
@@ -393,11 +406,3 @@ Pre-authored micro-puzzles for the tutorial system. Each puzzle isolates one mec
 ### 6.9 ProgressionSystem (Core/) — 🆕R6  🟡 PLANNED (R6.11)
 XP-based unlock of game mechanics. Tracks player XP across sessions (PlayerPrefs-backed).
 Determines which mechanics are available at the player's current level.
-
-> **🆕R6.13 BombSystem blast preview (2026-10-06).** `ArmedRadiusAt(cell)` (Direct/Chain radius, 0 if
-> unlit), `CopyArmedCells(list)`, and `PredictBlastZone(cell, Dictionary<GridPos,int> zone)` — the
-> cells the lit bomb will hit, chain included, mapped to chain depth (0 = own cross). It walks the same
-> cross as `Blast` (shared `CrossDx/CrossDy`; passes through everything, only the board edge stops an
-> arm) and chains through Bomb cells with `ChainBlastRadius`, so on an unchanged board it equals the
-> union of `BlastResolved` cells — pinned by `PredictBlastZone_MatchesWhatTheBlastActuallyReaches`.
-> 7 tests. Read-only: it never arms, mutates or fires anything.

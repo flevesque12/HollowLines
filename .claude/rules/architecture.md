@@ -31,9 +31,13 @@ Assets/_Project/Scripts/
     GravitySystem.cs      — Wobble → fall → crush pipeline + fall distance tracking → ChunkBurst event
     AvatarModel.cs        — Player position, drilling, movement
     CollapseSystem.cs     — Void-row detection + row shift (fires PerfectClear event)
-    StreakTracker.cs       — 🆕 Color streak counting (NotifyDrill → increment or reset)
+    MomentumTracker.cs    — 🔄v3.2 Replaces StreakTracker. Time-based momentum (0.8s window),
+                            4 tiers (×1/×2/×4/×6), Power Drill at Tier 3. See drill-momentum.md §M1
+    GrazeSystem.cs        — 🆕v3.2 Near-miss scoring (+50 pts for drilling adjacent to danger). §M3.2
+    FissureTracker.cs     — 🆕v3.2 ⚡D5 Tier 2+ fissure state (Dictionary<GridPos, int>), 2nd fissure
+                            breaks block → FissureBroke event. See drill-momentum.md §M2
     DepthTracker.cs        — 🆕 Deepest row tracking (NotifyPosition → NewDepthReached event)
-    ScoreSystem.cs        — 🔄 REWRITTEN: streak, burst, bomb, depth, perfect clear scoring
+    ScoreSystem.cs        — 🔄v3.2 REWRITTEN: momentum, burst, bomb, depth, graze, freefall, danger zone scoring
     ScoreEvent.cs         — 🔄 Updated scoring event struct (Points / Source / Detail)
     ScoreSource.cs        — 🆕 Streak, Burst, Bomb, Depth, PerfectClear
     ❌ LineSource.cs      — DELETED (replaced by ScoreSource.cs)
@@ -50,8 +54,6 @@ Assets/_Project/Scripts/
     DiamondSystem.cs      — ✅R4 IMPLEMENTED. Diamond collection tracking + win gate (§6.4)
     EnemySystem.cs        — ✅R5.6-5.10 Enemy entities: spawn, activation, Crawler movement,
                             kills, Boomer death blast + capped chain, avatar contact. Takes GridModel.
-    DeathCause.cs         — 🆕R6.1 What cost a heart / the run (crush, collapse, burst, bomb, enemy, suffocation)
-    DeathTracker.cs       — 🆕R6.1 Run damage log: hits by cause, run clock, time since last drill, DeathReport + Died (once)
     EnemyType.cs          — 🔄R5 Crawler / Boomer enum (Digger + Tank removed — v3.1 arcade pivot)
   View/
     GameBootstrap.cs      — ✅R5.12 Scene entry point; game loop + wiring + endless mode flow (§5.15)
@@ -59,35 +61,26 @@ Assets/_Project/Scripts/
     AvatarController.cs   — Walk-input repeat; does NOT call AvatarModel.Tick()
     AvatarView.cs         — Sprite + lerp follow for the avatar
     EnemyView.cs          — 🆕R5.17 Enemy sprites layered over the cell grid (sortingOrder 8):
-                            🔄R6.4 eyes shut + grey + slow breath when dormant, open + bright pulse when active;
-                            "!" on wake and over a threatening Crawler; DangerStarted event (§5.17)
-    EnemySprites.cs       — 🆕R6.4 Procedural 16×16 pixel-art: lime Crawler, violet Boomer (open/shut eyes), "!" alert
+                            dim+still when dormant, shuffle/pulse when active (§6.5)
     BoardView.cs          — ✅R4 One SpriteRenderer per cell, event-driven updates + wobble shake;
                             Diamond cells get the DiamondShine material instead of a tint (§5.10);
                             🆕 exit-zone glow strips for campaign/tutorial boards (§5.16)
     GameInput.cs          — 🔄 Input System adapter: keyboard + Xbox/gamepad (§16), gated while paused
-    VfxManager.cs         — ✅R4 Burst debris, shockwave ripple, streak glow/trail, chain flash, bomb fuse
+    VfxManager.cs         — ✅R4 Burst debris, shockwave ripple, 🔄v3.2 momentum trail/fissures/power drill, chain flash, bomb fuse
                             telegraph, diamond collect sparkle (§5.10);
                             ✅R5.15 Crawler death crunch, Boomer death burst + ripple, wake flash,
                             Boomer standing halo (reuses the fuse glow material)
     CameraShake.cs        — 🔄 Owns BasePosition; camera follow + additive shake (§5.13)
     SfxSynth.cs           — 🔄 Procedural clip generator + Shatter() (layered noise + tone)
-    AudioManager.cs       — ✅R4 Streak pitch-rising, burst shatter, rewarding bomb SFX, accelerating fuse
+    AudioManager.cs       — ✅R4 🔄v3.2 Momentum tier pitch, burst shatter, rewarding bomb SFX, accelerating fuse
                             beep, diamond collect chime (§5.11);
                             ✅R5.16 Crawler chirp/crunch, Boomer boop, bass-heavy Boomer boom
     HUDView.cs            — ✅R5.14 enemy-kill + Boomer-blast popups (§5.9);
-                            ✅R4 Streak counter, depth display, burst popup, diamond counter (§5.9);
+                            🔄v3.2 Momentum counter + tier indicator + cascade ×N + graze popup (§5.9);
                             🔄R3 SetDepthSource (per-board vs endless)
     UIScreenManager.cs    — 🔄 Score screen + main menu + runtime EventSystem for gamepad nav (§16);
                             🔄R3 "Sans fin" / "Défi du jour" / "Menu principal", endless wording, seam fade (§5.15)
-    DeathRecapView.cs     — 🆕R6.1 Game-over "why you died" block (killer, diagnostic, tip, heart timeline); plain class hosted by UIScreenManager
     DailyDigStore.cs      — 🆕R3 Local best-of-day for the Daily Dig (PlayerPrefs, §6.6)
-    HelpScreenView.cs     — 🆕R6.12 "AIDE": 8 pages (goal, controls, streak, air, burst, bombs, enemies, bonus),
-                            icons from the real tiles/enemy sprites; plain class hosted by UIScreenManager
-    OptionsMenu.cs        — 🆕R6.9 Volume rows of the OPTIONS screen (plain class hosted by UIScreenManager)
-                            + VolumeSettings (master/music/sfx, PlayerPrefs)
-  Editor/
-    CapsuleTileGenerator.cs — 🆕R6.5 Menu "Hollow Lines/Regenerate Air Capsule Tile": writes Resources/Tiles/tile_capsule.png
   Tests/
     EditMode/
       CoreTests.cs        — NUnit suite (runs in PlayMode — see §10)
@@ -112,16 +105,38 @@ Legend: 🆕 = new file · 🔄 = needs modification · ✅ = R-step complete ·
 ### GameBootstrap.Awake() — subscriptions
 
 ```csharp
-// ── Streak tracking + drill air restore ───────────────────────
-_avatar.Drilled += (pos, oldType, direction) =>              // 🔄v3.1: direction added
+// ── 🔄v3.2 Momentum tracking + drill air restore ─────────────────
+_avatar.Drilled += (pos, oldType, direction) =>
 {
-    _streakTracker.NotifyDrill(oldType, direction);           // 🔄v3.1: vertical-only streak
-    _scoreSystem.AwardDrill(_streakTracker.CurrentStreak, _streakTracker.CurrentColor);
-    _airSystem.RestoreDrill();                                // 🆕v3.1: +0.5% air per drill
+    _momentumTracker.NotifyDrill(oldType);                    // 🔄v3.2: time-based, no direction
+    _scoreSystem.AwardDrill(_momentumTracker.Multiplier);     // 🔄v3.2: momentum mult instead of streak
+    _airSystem.RestoreDrill();                                // v3.1: +0.5% air per drill
+    _grazeSystem.NotifyDrill(pos);                            // 🆕v3.2: check adjacent dangers → graze bonus
     if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
-    if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(pos);  // 🆕R4
+    if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(pos);  // R4
     _bombSystem.NotifyDrilled(pos);
-    _enemySystem.NotifyAdjacentDrill(pos);                                 // ✅R5.9 activation
+    _enemySystem.NotifyAdjacentDrill(pos);                                 // R5.9 activation
+};
+
+// ── 🆕v3.2 Graze scoring ─────────────────────────────────────────
+_grazeSystem.GrazeTriggered += () =>
+{
+    _scoreSystem.AwardGraze();                                // +50 pts flat
+    _momentumTracker.ExtendTimer(0.3f);                       // +0.3s momentum window
+};
+
+// ── 🆕v3.2 Momentum events ───────────────────────────────────────
+_momentumTracker.PowerDrillActivated += () =>
+{
+    // GameBootstrap orchestrates: drill 2 blocks + mini shockwave (radius 1)
+    // on the 2nd block. Details in drill-momentum.md §M2.
+};
+
+// ── 🆕v3.2 Freefall scoring ──────────────────────────────────────
+_avatar.FreefallCell += () =>
+{
+    _scoreSystem.AwardFreefall();                             // +15 pts per void cell
+    // Momentum timer does NOT tick during freefall (handled in MomentumTracker.Tick)
 };
 
 // ── Chunk gravity + burst ──────────────────────────────────────
@@ -137,7 +152,7 @@ _gravity.ChunkBurst += (cells, fallDistance, color) =>   // 🆕 (color: see §5
 // must not reference each other, so the wiring lives here.
 _gravity.AirCapsuleLiberated += _   => _airSystem.RestoreCapsule();
 _gravity.BombArmedByBurst    += pos => _bombSystem.ArmBombAt(pos);
-_gravity.AvatarHitByBurst    += () => OnAvatarCrushed(DeathCause.BurstShockwave); // 🔄R6.1 every source tags its cause
+_gravity.AvatarHitByBurst    += OnAvatarCrushed;         // 🆕 (no arg)
 
 // ── Bombs ──────────────────────────────────────────────────────
 _bombSystem.BombScored += (destroyed, chainMult) =>   // 🔄
@@ -146,7 +161,7 @@ _bombSystem.BombScored += (destroyed, chainMult) =>   // 🔄
     if (chainMult > 1) _airSystem.RestoreBombChain(chainMult);
 };
 _bombSystem.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();  // 🆕
-_bombSystem.AvatarHitByBlast += _ => OnAvatarCrushed(DeathCause.BombBlast);
+_bombSystem.AvatarHitByBlast += _ => OnAvatarCrushed();
 
 // ── Perfect Clear (formerly void-line) ─────────────────────────
 _collapse.PerfectClear += (row, cascadeStep) =>       // 🔄
@@ -197,14 +212,7 @@ _bombSystem.BlastResolved += (blastCells, chainMult) => _enemySystem.NotifyBombB
 // LastFallBonus/LastChainMult lookups. See the R5.12 deviation note for why the draft's version
 // couldn't work.
 _enemySystem.EnemyKilled += (id, type, method, bonus) => _scoreSystem.AwardEnemyKill(type, bonus);
-_enemySystem.AvatarHitByEnemy += _ => OnAvatarCrushed(DeathCause.Enemy);
-
-// ── Death (✅R6.1) ─────────────────────────────────────────────
-// OnAvatarCrushed(cause): TryTakeDamage → _deathTracker.NotifyHit(cause, …) → if no hearts left,
-// _deathTracker.NotifyDeath(cause, …). HealthDepleted is NOT wired to EndRun any more: it fires
-// inside TryTakeDamage, before the cause is logged. AirDepleted → NotifyDeath(Suffocation, …).
-// _deathTracker.Died += EndRun(DeathReport) — fires once, so a same-frame double death ends once.
-// Drilled handler also calls _deathTracker.NotifyDrill(); Reset() sits beside every _healthSystem.Reset().
+_enemySystem.AvatarHitByEnemy += _ => OnAvatarCrushed();
 
 // ✅R5.8/R5.12 Boomer detonation: EnemySystem ALREADY applied the radius-1 blast to the grid (and
 // any chain-reaction kills) before this fires, and reports its own block count — GameBootstrap
@@ -221,9 +229,9 @@ _enemySystem.BoomerDetonated += (pos, parentBonus, blocksDestroyed) =>
 ```
 
 > **Subscription order matters in two places** (multicast delegates fire in subscription order):
-> - `AudioManager.OnDrilled` reads `StreakTracker.CurrentStreak` for its rising pitch. GameBootstrap
+> - `AudioManager.OnDrilled` reads `MomentumTracker.CurrentTier` for its pitch. GameBootstrap
 >   subscribes to `Drilled` (and calls `NotifyDrill`) in `LoadLevel()` *before* `_audio.Rewire()`,
->   so the audio sees the fresh value. Don't reorder those two.
+>   so the audio sees the fresh tier. Don't reorder those two.
 > - HUD popups deliberately do **not** subscribe to ChunkBurst/BombScored/PerfectClear — they read
 >   `ScoreSystem.OnScore`, which carries Points + Source + Detail and is order-independent (§5.9).
 
@@ -261,11 +269,18 @@ _gravity.Tick(dt, _avatar.Position);
 // 7. Chain close timer
 _chainTracker.Tick(dt);
 
-// 8. Health i-frames  (+ 8b. ✅R6.1 _deathTracker.Tick(dt) — run clock for the recap)
+// 7b. 🆕v3.2 Momentum timer (skip during freefall — see drill-momentum.md §M3.3)
+if (!_avatar.IsFalling) _momentumTracker.Tick(dt);
+
+// 7c. 🆕v3.2 Graze cooldown
+_grazeSystem.Tick(dt);
+
+// 8. Health i-frames
 _healthSystem.Tick(dt);
 
 // 9. Air drain  (gated by the `disableAir` debug toggle — see §14)
-if (!disableAir)
+//    ⚡D4: ALSO skipped during freefall — reward for finding void space
+if (!disableAir && !_avatar.IsFalling)
     _airSystem.Tick(dt);
 
 // 10. ✅R5.12 Enemy movement + avatar collision (grid comes from the constructor since R5.8)
@@ -275,12 +290,6 @@ _enemySystem.Tick(dt, _avatar.Position);
 //      boards don't need it — the drill and blast triggers already cover activation there.
 if (_endlessMode)
     ActivateEnemiesInView();
-
-// 11. ✅R6.14 Level-end settle: a won level keeps ticking (input locked, damage + air drain off)
-//     until gravity is idle, no fuse is lit and the chain is closed (min 0.6 s, max 4 s) —
-//     THEN the level-complete / tutorial-complete screen shows the final score.
-if (_levelEnding)
-    TickLevelEnd(dt);
 ```
 
 > **Debug/testing toggles (serialized on GameBootstrap, §14).** Two Inspector checkboxes,
