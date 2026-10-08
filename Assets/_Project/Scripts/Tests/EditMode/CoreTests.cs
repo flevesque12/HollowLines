@@ -4998,6 +4998,160 @@ namespace HollowLines.Tests
     }
 
     [TestFixture]
+    public class FissureTrackerTests
+    {
+        // R7.7 — drill-momentum.md §M2 / ⚡D5. The drilled cell is emptied by hand: the tracker is told
+        // about a drill that AvatarModel already resolved.
+
+        private static readonly GridPos Centre = new GridPos(1, 1);
+
+        private static (GridModel grid, FissureTracker fissures) Board(params string[] rows)
+        {
+            var grid = GridModel.FromStringMap(rows);
+            return (grid, new FissureTracker(grid));
+        }
+
+        private static void Drill(GridModel grid, FissureTracker f, GridPos at, int tier)
+        {
+            grid.Set(at, CellType.Empty);
+            f.NotifyDrill(at, tier);
+        }
+
+        [Test]
+        public void BelowTier2_NothingCracks()
+        {
+            var (grid, f) = Board("ABA", "BAB", "ABA");
+            int events = 0;
+            f.FissureAdded += (_, __) => events++;
+
+            Drill(grid, f, Centre, 0);
+            Drill(grid, f, new GridPos(0, 0), 1);
+
+            Assert.AreEqual(0, f.Count);
+            Assert.AreEqual(0, events);
+        }
+
+        [Test]
+        public void Tier2_CracksTheFourCardinalColorNeighbours()
+        {
+            var (grid, f) = Board("ABA", "BAB", "ABA");
+            var added = new List<GridPos>();
+            f.FissureAdded += (pos, count) => { added.Add(pos); Assert.AreEqual(1, count); };
+
+            Drill(grid, f, Centre, 2);
+
+            Assert.AreEqual(4, f.Count);
+            foreach (GridPos n in new[] { new GridPos(1, 0), new GridPos(1, 2), new GridPos(0, 1), new GridPos(2, 1) })
+                Assert.AreEqual(1, f.GetFissures(n), n.ToString());
+            Assert.AreEqual(0, f.GetFissures(new GridPos(0, 0)), "diagonals never crack");
+            Assert.AreEqual(4, added.Count);
+        }
+
+        [Test]
+        public void Tier3_AlsoCracks()
+        {
+            var (grid, f) = Board("ABA", "BAB", "ABA");
+
+            Drill(grid, f, Centre, 3);
+
+            Assert.AreEqual(4, f.Count);
+        }
+
+        [Test]
+        public void SecondFissure_BreaksTheBlock_EmptiesTheCell()
+        {
+            // (1,1) sits between two drills: once from the left (0,1), once from the right (2,1).
+            var (grid, f) = Board("...", "ABA", "...");
+            var broke = new List<GridPos>();
+            f.FissureBroke += broke.Add;
+
+            Drill(grid, f, new GridPos(0, 1), 2);
+            Assert.AreEqual(1, f.GetFissures(Centre));
+            CollectionAssert.IsEmpty(broke);
+
+            Drill(grid, f, new GridPos(2, 1), 2);
+
+            CollectionAssert.AreEqual(new[] { Centre }, broke);
+            Assert.AreEqual(CellType.Empty, grid.Get(Centre));
+            Assert.AreEqual(0, f.GetFissures(Centre));
+            Assert.AreEqual(0, f.Count, "the broken block's entry is removed");
+        }
+
+        [Test]
+        public void OnlyColorBlocksFissure()
+        {
+            // Hard, Steel, Bomb, AirCapsule around the drill; Diamond checked on a second board.
+            var (grid, f) = Board(".H.", "SAX", ".P.");
+            Drill(grid, f, Centre, 2);
+            Drill(grid, f, Centre, 2);
+
+            Assert.AreEqual(0, f.Count);
+            Assert.AreEqual(CellType.Hard,       grid.Get(new GridPos(1, 0)));
+            Assert.AreEqual(CellType.Steel,      grid.Get(new GridPos(0, 1)));
+            Assert.AreEqual(CellType.Bomb,       grid.Get(new GridPos(2, 1)));
+            Assert.AreEqual(CellType.AirCapsule, grid.Get(new GridPos(1, 2)), "a capsule never vanishes uncollected");
+
+            var (grid2, f2) = Board(".D.", ".A.", "...");
+            Drill(grid2, f2, Centre, 2);
+            Drill(grid2, f2, Centre, 2);
+            Assert.AreEqual(CellType.Diamond, grid2.Get(new GridPos(1, 0)), "a diamond never vanishes uncollected");
+        }
+
+        [Test]
+        public void DrillAtTheEdge_IsSafe()
+        {
+            var (grid, f) = Board("AB", "BA");
+
+            Assert.DoesNotThrow(() => Drill(grid, f, new GridPos(0, 0), 2));
+            Assert.AreEqual(2, f.Count, "only the in-bounds neighbours");
+        }
+
+        [Test]
+        public void StaleFissure_IsPruned_WhenTheBlockGoes()
+        {
+            var (grid, f) = Board("...", "ABA", "...");
+            Drill(grid, f, new GridPos(0, 1), 2);
+            Assert.AreEqual(1, f.GetFissures(Centre));
+
+            grid.Set(Centre, CellType.Empty);              // drilled / blasted / fell away
+            Assert.AreEqual(0, f.GetFissures(Centre), "reads 0 at once");
+
+            Drill(grid, f, new GridPos(0, 0), 0);          // any drill prunes
+            grid.Set(Centre, CellType.ColorC);             // a new block slides into the spot
+            Assert.AreEqual(0, f.GetFissures(Centre), "the newcomer does not inherit the old crack");
+        }
+
+        [Test]
+        public void Clear_ForgetsEverything()
+        {
+            var (grid, f) = Board("ABA", "BAB", "ABA");
+            Drill(grid, f, Centre, 2);
+
+            f.Clear();
+
+            Assert.AreEqual(0, f.Count);
+        }
+
+        [Test]
+        public void BrokenBlock_UnsupportsTheChunkAbove()
+        {
+            // B rests on A, A rests on the Hard floor. Two Tier 2 drills beside the A break it: the B
+            // loses its support and GravitySystem starts the wobble — fissures feed the chunks.
+            var (grid, f) = Board("...", ".B.", ".A.", "HHH");
+            var gravity = new GravitySystem(grid);
+            gravity.Tick(0.01f, new GridPos(0, 0));
+            Assert.IsFalse(gravity.IsBusy, "the board starts at rest");
+
+            Drill(grid, f, new GridPos(0, 2), 2);
+            Drill(grid, f, new GridPos(2, 2), 2);
+            gravity.Tick(0.01f, new GridPos(0, 0));
+
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(1, 2)), "the support broke");
+            Assert.IsTrue(gravity.IsBusy, "the chunk above is now unsupported and wobbles");
+        }
+    }
+
+    [TestFixture]
     public class ScoreSystemTests
     {
         // ── AwardDrill: 10 × streak ──────────────────────────────────────────
