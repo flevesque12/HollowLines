@@ -30,11 +30,17 @@ namespace HollowLines.View
         [Tooltip("Semitones added per chain step above 1.")]
         [SerializeField] private float semitonesPerStep = 2f;
 
-        [Header("— Streak Pitch (v3) —")]
-        [Tooltip("Pitch added per streak step above 1 (CLAUDE.md §5.11).")]
-        [SerializeField] private float pitchPerStreakStep = 0.05f;
-        [Tooltip("Streak step at which the rising drill pitch caps out.")]
-        [SerializeField] private int maxStreakForPitch = 10;
+        [Header("— Momentum (v3.2, R7.11) —")]
+        [Tooltip("Semitones the drill note rises per momentum tier (§M8: T1 +1, T2 +2, T3 +3).")]
+        [SerializeField] private float semitonesPerTier = 1f;
+        [Tooltip("Volume of the Tier 2+ rumble layered under every drill.")]
+        [Range(0f, 1f)] [SerializeField] private float rumbleVolume = 0.7f;
+
+        [Header("— Danger Zone Heartbeat (v3.2, R7.11) —")]
+        [SerializeField] private float heartbeatBpm = 60f;
+        [Tooltip("Heartbeat level relative to the SFX mix.")]
+        [Range(0f, 1.5f)] [SerializeField] private float heartbeatVolume = 1f;
+        [SerializeField] private float heartbeatFadeSpeed = 2f;
 
         [Header("— Burst Shatter (v3) —")]
         [Tooltip("Chunk size at which the shatter reaches its deepest pitch.")]
@@ -64,7 +70,12 @@ namespace HollowLines.View
         private AudioClip _boomerWakeClip;
         private AudioClip _boomerBoomClip;
         private AudioClip _enemyAlertClip;   // R6.4: an active Crawler is lining up on the avatar
-        private AudioClip _streakBreakClip;  // R6.7: the streak counter cracks
+        private AudioClip _momentumBreakClip; // R6.7 crack — now for lost momentum (R7.11)
+        private AudioClip _rumbleClip;        // R7.11 Tier 2+ drill underlay
+        private AudioClip _powerImpactClip;   // R7.11 Tier 3 bass hit
+        private AudioClip _powerCryClip;      // R7.11 Tier 3 rising "yes!"
+        private AudioClip _grazeClip;         // R7.11 near miss
+        private AudioClip _heartbeatClip;     // R7.11 Danger Zone loop
         private float     _lastEnemyAlertTime = -10f;
         private const float EnemyAlertCooldown = 0.8f;
         private AudioClip _musicLoopClip;
@@ -81,10 +92,15 @@ namespace HollowLines.View
         private AudioSource _musicSource;
         private AudioSource _diamondSource;
         private AudioSource _enemySource;
-        private AudioSource _uiSource; // R6.9 options preview — its own source, so no streak pitch leaks in
+        private AudioSource _uiSource; // R6.9 options preview — its own source, so no drill pitch leaks in
+        private AudioSource _momentumSource;  // rumble / Power Drill / graze — never pitched
+        private AudioSource _heartbeatSource; // looped; its volume is faded here, not set by ApplyVolumes
+        private float _sfxLevel = 1f;         // current Effets-scaled SFX volume (ApplyVolumes)
+        private float _heartbeatLevel;        // 0 → 1 eased presence
+        private bool  _heartbeatWanted;
 
         // ── Persistent systems ──────────────────────────────────────────────────
-        private StreakTracker _streak;
+        private MomentumTracker _momentum;
 
         // ── Grid-dependent systems, re-pointed every LoadLevel via Rewire() ─────
         private AvatarModel    _avatar;
@@ -106,6 +122,11 @@ namespace HollowLines.View
             _musicSource.clip = _musicLoopClip;
             _musicSource.loop = true;
             _sfxSources.Remove(_musicSource); // music follows its own slider
+
+            _heartbeatSource.clip   = _heartbeatClip;
+            _heartbeatSource.loop   = true;
+            _heartbeatSource.volume = 0f;
+            _sfxSources.Remove(_heartbeatSource); // faded in Update, scaled by _sfxLevel
             ApplyVolumes(VolumeSettings.Load());
             _musicSource.Play();
         }
@@ -119,8 +140,26 @@ namespace HollowLines.View
             AudioListener.volume = Mathf.Clamp01(v.Master);
             _musicSource.volume  = musicVolume * Mathf.Clamp01(v.Music);
             float sfx = sfxVolume * Mathf.Clamp01(v.Sfx);
+            _sfxLevel = sfx;
             foreach (AudioSource src in _sfxSources)
                 src.volume = sfx;
+        }
+
+        /// <summary>
+        /// R7.11 Danger Zone heartbeat: fades in/out (unscaled time, so a pause can't strand it half-way),
+        /// and pauses with the game — a heartbeat under the pause menu would read as "still in danger".
+        /// </summary>
+        private void Update()
+        {
+            bool paused = Time.timeScale == 0f;
+            float target = _heartbeatWanted && !paused ? 1f : 0f;
+            _heartbeatLevel = Mathf.MoveTowards(_heartbeatLevel, target, heartbeatFadeSpeed * Time.unscaledDeltaTime);
+            _heartbeatSource.volume = _sfxLevel * heartbeatVolume * _heartbeatLevel;
+
+            if (_heartbeatLevel > 0f && !_heartbeatSource.isPlaying)
+                _heartbeatSource.Play();
+            else if (_heartbeatLevel <= 0f && _heartbeatSource.isPlaying)
+                _heartbeatSource.Stop(); // restarts on the "lub" next time
         }
 
         /// <summary>R6.9: a short blip at the current Effets level, so moving the slider is heard.</summary>
@@ -128,11 +167,19 @@ namespace HollowLines.View
 
         /// <summary>Hook the systems that live for the whole session (called once from GameBootstrap.Awake).</summary>
         public void InitPersistent(AirSystem air, HealthSystem health, CampaignManager campaign,
-                                   StreakTracker streak = null)
+                                   MomentumTracker momentum = null, GrazeSystem graze = null)
         {
-            _streak = streak;
-            // R6.7: StreakTracker is persistent (Reset per board, never rebuilt), so this is wired once.
-            if (_streak != null) _streak.StreakBroken += OnStreakBroken;
+            // R7.11: momentum, graze and the air tank are persistent (Reset per board, never rebuilt),
+            // so — like this manager — they are wired once.
+            _momentum = momentum;
+            if (_momentum != null)
+            {
+                _momentum.TierChanged         += OnTierChanged;
+                _momentum.PowerDrillActivated += OnPowerDrill;
+            }
+            if (graze != null) graze.GrazeTriggered += OnGraze;
+            air.DangerZoneChanged += inDanger => _heartbeatWanted = inDanger;
+            _heartbeatWanted = air.IsDangerZone;
             air.AirDepleted += PlayGameOver;
             health.HealthDepleted += PlayGameOver;
             campaign.LevelCompleted += _ => PlayLevelComplete();
@@ -205,9 +252,11 @@ namespace HollowLines.View
         // ── Event handlers ──────────────────────────────────────────────
 
         /// <summary>
-        /// The drill note climbs with the color streak (§5.11): pitch = 1 + (step - 1) × 0.05.
-        /// Reads StreakTracker.CurrentStreak, which GameBootstrap's own Drilled handler has already
-        /// updated — it subscribes in LoadLevel() before Rewire() runs, so this sees the fresh value.
+        /// R7.11: the drill note climbs a semitone per momentum tier (§M8), and from Tier 2 a low rumble
+        /// rides under it. Reads MomentumTracker.CurrentTier, which GameBootstrap's own Drilled handler
+        /// has already updated — it subscribes in LoadLevel() before Rewire() runs (§7 ordering note).
+        /// The Power Drill's own drill reads Tier 1 here (completion runs inside that handler); it is
+        /// voiced by OnPowerDrill instead.
         /// </summary>
         private void OnDrilled(GridPos cell, CellType oldType, DrillDirection direction)
         {
@@ -224,10 +273,31 @@ namespace HollowLines.View
                 return;
             }
 
-            int step = Mathf.Clamp(_streak?.CurrentStreak ?? 1, 1, maxStreakForPitch);
-            _drillSource.pitch = 1f + (step - 1) * pitchPerStreakStep;
+            int tier = _momentum?.CurrentTier ?? 0;
+            _drillSource.pitch = Mathf.Pow(2f, tier * semitonesPerTier / 12f);
             _drillSource.PlayOneShot(_drillClip);
+            if (tier >= 2)
+                _momentumSource.PlayOneShot(_rumbleClip, rumbleVolume);
         }
+
+        // ── v3.2 momentum (R7.11) ───────────────────────────────────────
+
+        /// <summary>A dry glass crack when a real tier (×2+) is lost — the audible half of the HUD counter breaking.</summary>
+        private void OnTierChanged(int from, int to)
+        {
+            if (to == 0 && from >= 1)
+                _drillSource.PlayOneShot(_momentumBreakClip);
+        }
+
+        /// <summary>Tier 3: a bass impact under a fast rising "yes!" (§M8 "impact basse, cri satisfaisant").</summary>
+        private void OnPowerDrill(float mult)
+        {
+            _momentumSource.PlayOneShot(_powerImpactClip);
+            _momentumSource.PlayOneShot(_powerCryClip, 0.8f);
+        }
+
+        /// <summary>The highest, shortest sound in the game — a near miss should feel like a spark.</summary>
+        private void OnGraze(GridPos cell) => _momentumSource.PlayOneShot(_grazeClip);
 
         /// <summary>Bigger chunk = deeper shatter. Mass should sound like mass.</summary>
         private void OnChunkBurst(System.Collections.Generic.List<GridPos> cells, int fallDistance, CellType color)
@@ -333,16 +403,6 @@ namespace HollowLines.View
         public void PlayCrush() => _crushSource.PlayOneShot(_crushClip);
 
         /// <summary>
-        /// R6.7: a dry crack when a real streak (×2+) breaks — the audible half of the HUD counter
-        /// shattering. A broken ×1 is just "a new colour started", not a loss, so it stays silent.
-        /// </summary>
-        private void OnStreakBroken(int lostCount)
-        {
-            if (lostCount >= 2)
-                _drillSource.PlayOneShot(_streakBreakClip);
-        }
-
-        /// <summary>
         /// R6.4: EnemyView.DangerStarted — a Crawler just became a threat. Rate-limited so two
         /// Crawlers lining up together (or one wobbling across the threshold) give one warning.
         /// </summary>
@@ -397,10 +457,24 @@ namespace HollowLines.View
             // (capsule, diamond, chain, fanfare = good news), so the falling one reads as a warning.
             _enemyAlertClip    = SfxSynth.Arpeggio(new[] { 987.77f, 698.46f }, 0.075f, 0.34f);
 
-            // R6.7 — streak break: a short, bright, mostly-noise crack (like glass), well above the
+            // R6.7 — the counter cracking: a short, bright, mostly-noise crack (like glass), well above the
             // crush thud and much shorter than the chunk shatter, so it reads as "your bonus broke",
-            // not "you got hit" or "a block burst".
-            _streakBreakClip   = SfxSynth.Shatter(0.12f, 1400f, 0.4f, noiseMix: 0.8f, lowPassFactor: 0.6f);
+            // not "you got hit" or "a block burst". R7.11: now plays when momentum is lost.
+            _momentumBreakClip = SfxSynth.Shatter(0.12f, 1400f, 0.4f, noiseMix: 0.8f, lowPassFactor: 0.6f);
+
+            // R7.11 — momentum (§M8). Tier 2 rumble: a short, very low, mostly-tone thud under each drill.
+            // Measured: at 55 Hz it sat at ~25-55 Hz — below what laptop speakers reproduce. 80 Hz + more
+            // low-passed noise keeps it a rumble that small speakers still carry.
+            _rumbleClip        = SfxSynth.Shatter(0.16f, 80f, 0.45f, noiseMix: 0.45f, lowPassFactor: 0.06f);
+            // Tier 3: a heavier, longer bass hit (lower and rounder than the Boomer boom at 70 Hz)…
+            _powerImpactClip   = SfxSynth.Shatter(0.38f, 48f, 0.75f, noiseMix: 0.4f, lowPassFactor: 0.05f);
+            // …under a fast rising sweep — the "yes!".
+            _powerCryClip      = SfxSynth.Sweep(420f, 1500f, 0.2f, 0.3f);
+            // Graze ting: 2.2 → 3 kHz in 70 ms — above the fuse beep (1.2 kHz) and the diamond chime
+            // (≤ 1.57 kHz), the highest thing in the mix, so a near miss never sounds like a pickup.
+            _grazeClip         = SfxSynth.Sweep(2200f, 3000f, 0.07f, 0.22f);
+            // Danger Zone: lub-dub at 60 bpm, looped.
+            _heartbeatClip     = SfxSynth.Heartbeat(heartbeatBpm, 0.7f);
 
             // Crawler death: a short dry crunch. Higher low-pass than the crush clip so it reads
             // as something small breaking, not as the player getting hit.
@@ -427,6 +501,8 @@ namespace HollowLines.View
             _diamondSource   = NewSource();
             _enemySource     = NewSource();
             _uiSource        = NewSource();
+            _momentumSource  = NewSource();
+            _heartbeatSource = NewSource();
         }
 
         private AudioSource NewSource()

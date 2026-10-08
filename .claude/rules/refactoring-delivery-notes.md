@@ -929,3 +929,18 @@ Notes:
 - The Power Drill flash covers the board (the chain flash's extent), not the full screen — same as bomb chains.
 - **For R7.12:** the run summary still lists "MEILLEUR STREAK —" (UIScreenManager reads
   `ScoreSystem.BestStreak`). Switch it to `PeakMomentum` / Grazes / Freefall (§5.12) during the cleanup.
+
+---
+
+### R7.11 — AudioManager momentum — delivered 2026-10-08 (Sprint 3 complete)
+
+View only, 471/471. Details in §5.11. **Verified by measuring the generated clips and the live sources,
+not by ear:** every new clip starts and ends at 0 (no clicks); heartbeat exactly 1.000 s at 60 bpm; graze
+~2.6 kHz (highest tone in the mix); in play mode the heartbeat source plays looped at full level in the
+Danger Zone, drops to 0 and stops under pause, and stops once air is restored above 15 %.
+
+**Found by measurement:** the first rumble (55 Hz) and heartbeat (70 → 45 Hz) sat below what laptop
+speakers reproduce — rumble raised to 80 Hz with more noise, heartbeat given a 2nd harmonic.
+
+**⚠️ Listen in play mode** (headphones AND laptop speakers): rumble under Tier 2 drills, the Power Drill
+hit + "yes!", the graze ting, and the heartbeat. Levels were set by reasoning, not by ear.

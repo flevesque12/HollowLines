@@ -176,7 +176,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 |---|---|
 | R7.9 ✅ | `HUDView`: momentum counter + tier indicator, cascade ×N popup, graze popup, danger badge |
 | R7.10 ✅ | `VfxManager`: Tier 1 trail, Tier 2 fissure overlay, Tier 3 flash, Danger Zone vignette |
-| R7.11 | `AudioManager`: tier pitch, T2 rumble, T3 impact, graze ting, danger heartbeat |
+| R7.11 ✅ | `AudioManager`: tier pitch, T2 rumble, T3 impact, graze ting, danger heartbeat |
 
 #### Sprint 4 — Migration + Balance
 

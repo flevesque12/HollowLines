@@ -103,6 +103,38 @@ namespace HollowLines.View
             return BuildClip("Arpeggio", data);
         }
 
+        /// <summary>
+        /// R7.11: one heartbeat cycle — a low "lub" then a softer "dub" 0.28 s later, silence to the end —
+        /// exactly 60 / bpm seconds long, silent at both ends, so it loops seamlessly at that tempo.
+        /// Each thump is a sine sliding 70 → 45 Hz (plus its octave, so small speakers still carry it)
+        /// with a fast exponential decay.
+        /// </summary>
+        public static AudioClip Heartbeat(float bpm = 60f, float volume = 0.6f)
+        {
+            int samples = Mathf.Max(1, (int)(SampleRate * 60f / Mathf.Max(1f, bpm)));
+            var data = new float[samples];
+            AddThump(data, 0f,    volume);
+            AddThump(data, 0.28f, volume * 0.7f);
+            return BuildClip("Heartbeat", data);
+        }
+
+        private static void AddThump(float[] data, float startSeconds, float volume)
+        {
+            const float length = 0.16f;
+            int start = (int)(startSeconds * SampleRate);
+            int n = (int)(length * SampleRate);
+            float phase = 0f;
+            for (int i = 0; i < n && start + i < data.Length; i++)
+            {
+                float u = (float)i / n;
+                float f = Mathf.Lerp(70f, 45f, u);
+                phase += 2f * Mathf.PI * f / SampleRate;
+                float env = Mathf.Min(1f, i / (0.004f * SampleRate)) * Mathf.Exp(-u * 5f) * (1f - u);
+                // + a 2nd harmonic: a 45-70 Hz fundamental alone all but vanishes on laptop speakers.
+                data[start + i] += (Mathf.Sin(phase) * 0.75f + Mathf.Sin(2f * phase) * 0.45f) * env * volume;
+            }
+        }
+
         /// <summary>Linear attack → sustain → linear decay, expressed in seconds of the total clip.</summary>
         private static float Envelope(int i, int totalSamples, float attackSeconds, float decaySeconds)
         {

@@ -388,6 +388,16 @@ row-clear farming as a *problem*. The markers worked against the design, so `Cre
 - 🔄v3.2 Drill SFX: pitch rises with **momentum tier** (not streak step):
   T0 = `pitch 1.0`, T1 = `1.05`, T2 = `1.12` + bass rumble overlay, T3 = percussive impact.
   Graze: quick high "ting". Danger Zone: looping heartbeat at 60 bpm (see `drill-momentum.md` §M8).
+  > **✅R7.11 shipped (2026-10-08).** Drill pitch = +`semitonesPerTier` (1) per tier — T1 1.059, T2 1.122,
+  > T3 1.189. T2+: a short rumble one-shot under **every drill** (not a loop — punchier, tied to the gesture,
+  > no loop clicks). Power Drill: bass impact (`Shatter` 48 Hz, lower/longer than the Boomer's 70 Hz) + a
+  > rising "yes!" sweep (420 → 1500 Hz). Lost momentum (tier ≥ 1 → 0): the R6.7 glass crack. Graze: sweep
+  > 2.2 → 3 kHz in 70 ms — measured ~2.6 kHz, the highest tone in the mix (fuse 1.2 kHz, diamond ≤ 1.57 kHz).
+  > Heartbeat: new `SfxSynth.Heartbeat(bpm)` — lub + dub at 0.28 s, exactly 60/bpm s long, silent at both
+  > ends (seamless loop), with a 2nd harmonic so small speakers carry it; own looping source, faded on
+  > unscaled time, **stops while paused**, scaled by the Effets slider. Rumble raised 55 → 80 Hz after
+  > measuring it below what laptop speakers reproduce. `InitPersistent` takes `MomentumTracker` +
+  > `GrazeSystem` (replaces `StreakTracker`).
 - Burst SFX: new "shatter" clip via SfxSynth (Noise + Tone layered, 0.3 s). Pitch scales
   down with chunk size (bigger = deeper = more satisfying).
 - Bomb SFX: unchanged clip, but play a rising arpeggio overlay on chain mult > 1.
