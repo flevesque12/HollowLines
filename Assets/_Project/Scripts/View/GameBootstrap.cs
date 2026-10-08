@@ -463,11 +463,12 @@ namespace HollowLines.View
                 _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(drilledCell)),
                                     earned, momentum, buildsStreak: momentum > 1);
 
-                // ⚡D1: the ×6 covered this drill; the cycle restarts at Tier 1. R7.8 adds the double-drill
-                // and the mini shockwave HERE, before completing, so the whole burst is paid at ×6.
+                // ⚡D1: the whole Power Drill burst — this drill, the pierced 2nd block and the mini
+                // shockwave — is paid at ×6. Only then does the cycle restart at Tier 1.
                 if (_powerDrillPending)
                 {
                     _powerDrillPending = false;
+                    PowerDrillFollowThrough(drilledCell, direction);
                     _momentumTracker.CompletePowerDrill();
                 }
             };
@@ -834,6 +835,52 @@ namespace HollowLines.View
         }
 
         /// <summary>Every damage source lands here, tagged with what hit the avatar (R6.1).</summary>
+        /// <summary>
+        /// v3.2 Power Drill (R7.8, drill-momentum.md §M2 / ⚡D1): pierce the NEXT block in the drill's
+        /// direction (straight down = "le bloc en dessous"), then a radius-1 mini shockwave centred on it.
+        /// Everything is paid at the Power Drill's momentum (×6). The wave can never reach the avatar —
+        /// it is centred two cells away — and GravitySystem's shockwave never harms it anyway.
+        /// If the 2nd cell can't be drilled (Steel, bomb, void, wall) the wave still lands there.
+        /// </summary>
+        private void PowerDrillFollowThrough(GridPos firstCell, DrillDirection direction)
+        {
+            GridPos step = direction == DrillDirection.Down  ? new GridPos(0,  1)
+                         : direction == DrillDirection.Up    ? new GridPos(0, -1)
+                         : direction == DrillDirection.Left  ? new GridPos(-1, 0)
+                         :                                     new GridPos(1,  0);
+            GridPos second = firstCell.Offset(step.X, step.Y);
+            if (!_grid.InBounds(second))
+                return;
+
+            float mult = _momentumTracker.Multiplier; // ×6 — still in the Power Drill until CompletePowerDrill
+            int scoreBefore = _scoreSystem.Score;
+
+            // 1. The pierced 2nd block: a real drill hit, with the drill's own side effects.
+            CellType secondType = _grid.Get(second);
+            if (secondType.IsDrillable() && _grid.Drill(second))
+            {
+                _scoreSystem.AwardDrill(mult);
+                _airSystem.RestoreDrill();
+                if (secondType == CellType.AirCapsule) _airSystem.RestoreCapsule();
+                if (secondType == CellType.Diamond) _diamondSystem.NotifyCollected(second);
+                _bombSystem.NotifyDrilled(second);
+                _enemySystem.NotifyAdjacentDrill(second);
+                _fissureTracker.NotifyDrill(second, _momentumTracker.CurrentTier);
+            }
+
+            // 2. The mini shockwave. Capsules / diamonds / bombs go through GravitySystem's existing
+            //    liberation + arming events (already wired above); blocks are scored here at ×6.
+            var waveCells = new List<GridPos>();
+            int destroyed = _gravity.ApplyShockwave(second, 1, waveCells);
+            _scoreSystem.AwardPowerShockwave(destroyed, mult);
+            _enemySystem.NotifyBombBlast(waveCells, 1); // enemies caught in it die to physics (rule 9)
+
+            _cameraShake.Shake(0.22f, 0.25f); // placeholder until the R7.10 Tier 3 flash
+            _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(second)),
+                                _scoreSystem.Score - scoreBefore, Mathf.RoundToInt(mult), buildsStreak: true);
+            Debug.Log($"[Momentum] Power Drill: pierced {second} ({secondType}), wave destroyed {destroyed} → +{_scoreSystem.Score - scoreBefore}");
+        }
+
         /// <summary>
         /// v3.2 graze sources (§M3.2, R7.6 option A): active enemies + armed bombs. The "shockwave in
         /// progress" condition was dropped — GravitySystem resolves a shockwave in a single frame, so

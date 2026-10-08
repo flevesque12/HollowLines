@@ -131,6 +131,11 @@ Events:
 **Tier 3 — Power Drill:**
 - Le drill perce **2 blocs** au lieu d'un (le bloc ciblé + le bloc en dessous)
 - Génère une **mini shockwave** (rayon 1) sur le 2e bloc percé
+- ✅R7.8 **Le 2ᵉ bloc continue dans la direction du drill** (vers le bas = « le bloc en dessous »; de
+  côté = le bloc suivant sur la ligne). S'il n'est pas forable (Steel, bombe, vide, mur), pas de 2ᵉ
+  drill mais la shockwave tombe quand même là. Shockwave = `GravitySystem.ApplyShockwave` (mêmes
+  règles que l'anneau d'un burst, jamais de dégât à l'avatar). Chaque bloc détruit vaut un drill
+  (`AwardPowerShockwave`, `ScoreSource.PowerDrill`), le tout ×6. Les ennemis dans la croix meurent.
 - Après le Power Drill: le momentum retombe à Tier 1 (pas Tier 0)
 - Le cycle recommence — le joueur peut enchaîner les Power Drills
 

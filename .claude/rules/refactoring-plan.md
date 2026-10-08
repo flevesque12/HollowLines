@@ -168,7 +168,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 |---|---|---|
 | R7.6 ✅ | `GameBootstrap`: rewire Drilled handler, momentum tick, graze events, freefall, Power Drill orchestration | Integration, 453/453 + play mode |
 | R7.7 ✅ | ⚡D5 `FissureTracker`: `Dictionary<GridPos, int>`, Tier 2+ drill → +1 fissure adjacents, 2nd fissure → `FissureBroke` event + vide la cellule | 9 new, 462/462 + play mode |
-| R7.8 | Power Drill: double-drill + mini shockwave (radius 1), cycle reset to Tier 1 | TBD |
+| R7.8 ✅ | Power Drill: double-drill + mini shockwave (radius 1), cycle reset to Tier 1 | 9 new, 471/471 + play mode |
 
 #### Sprint 3 — View Layer
 

@@ -38,6 +38,11 @@ Union-find — same-color adjacent cells form rigid chunks.
 | `GetChunk(col, row)` | Returns chunk ID for a cell |
 | `GetChunkCells(id)` | Returns all cells in a chunk |
 
+### GravitySystem — 🆕R7.8 `ApplyShockwave(center, radius = 1, affected = null)`
+Standalone shockwave for the Power Drill: cardinal cross, centre included, the burst ring's exact
+rules via the shared `ApplyShockwaveCell` (same `AirCapsuleLiberated` / `DiamondLiberated` /
+`BombArmedByBurst` events). Never harms the avatar. Returns blocks destroyed (Steel softening excluded).
+
 ### HealthSystem
 3 hearts, 1.5 s i-frames after each hit.
 | API | Behavior |

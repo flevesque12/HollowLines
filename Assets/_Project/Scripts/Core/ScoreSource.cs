@@ -15,6 +15,7 @@ namespace HollowLines.Core
     ///   Drill        — 🆕R7.5: every drill tap × momentum (v3.2). Replaces Streak, which goes in R7.12.
     ///   Graze        — 🆕R7.5: flat near-miss bonus (drill-momentum.md §M3.2).
     ///   Freefall     — 🆕R7.5: flat bonus per void cell fallen through (§M3.3).
+    ///   PowerDrill   — 🆕R7.8: blocks destroyed by the Power Drill's mini shockwave, × the ×6 (⚡D1).
     /// </summary>
     public enum ScoreSource
     {
@@ -28,6 +29,7 @@ namespace HollowLines.Core
         BoomerBlast,
         Drill,
         Graze,
-        Freefall
+        Freefall,
+        PowerDrill
     }
 }

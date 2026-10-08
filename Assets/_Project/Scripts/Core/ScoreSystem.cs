@@ -21,6 +21,7 @@ namespace HollowLines.Core
     ///   Boomer Blast    blocks × BombPointsPerBlock × parentBonus  Boomer's death explosion scores like a bomb
     ///   Graze           GrazePoints (flat)                       +50 near-miss            (🆕v3.2)
     ///   Freefall        FreefallPointsPerCell (flat)             +15 per void cell fallen (🆕v3.2)
+    ///   Power Drill     blocks × DrillPoints × momentumMult      4 blocks at ×6 → 240     (🆕v3.2)
     ///
     /// === v3.2 global multipliers (drill-momentum.md §M5) ===
     ///
@@ -28,7 +29,7 @@ namespace HollowLines.Core
     ///
     ///   CascadeMultiplier and DangerZone are INPUTS the caller keeps current (Core systems don't
     ///   reference each other). ScoreSystem alone decides which source each one scales:
-    ///     × cascade × danger — Drill, Burst, Bomb, EnemyKill, BoomerBlast
+    ///     × cascade × danger — Drill, Burst, Bomb, EnemyKill, BoomerBlast, PowerDrill
     ///     × danger only      — PerfectClear (rule 7: a cascade never scales the jackpot)
     ///     flat               — Depth, Diamond, Graze, Freefall (⚡D3)
     ///   With the defaults (×1, no danger) every v3.1 formula is unchanged.
@@ -165,6 +166,23 @@ namespace HollowLines.Core
 
             OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.Drill, (int)Math.Round(momentumMult),
                                            CascadeMultiplier, DangerZone));
+        }
+
+        /// <summary>
+        /// 🆕v3.2 (R7.8) The Power Drill's mini shockwave: every block it destroys is worth one drill,
+        /// paid at the Power Drill's momentum (×6 — ⚡D1 says the ×6 covers the whole burst), × cascade
+        /// × danger. Negative counts clamp to 0; a multiplier below 1 (or NaN) clamps to ×1.
+        /// Event Detail = blocks destroyed.
+        /// </summary>
+        public void AwardPowerShockwave(int blocksDestroyed, float momentumMult)
+        {
+            if (blocksDestroyed < 0) blocksDestroyed = 0;
+            if (!(momentumMult >= 1f)) momentumMult = 1f;
+
+            int pts = Amplified((int)Math.Round(blocksDestroyed * DrillPoints * momentumMult));
+            Score += pts;
+
+            OnScore?.Invoke(new ScoreEvent(pts, ScoreSource.PowerDrill, blocksDestroyed, CascadeMultiplier, DangerZone));
         }
 
         /// <summary>🆕v3.2 Flat near-miss bonus (§M3.2). Never multiplied (⚡D3).</summary>

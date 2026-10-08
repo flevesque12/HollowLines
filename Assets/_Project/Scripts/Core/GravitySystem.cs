@@ -404,39 +404,74 @@ namespace HollowLines.Core
             }
 
             foreach (GridPos p in ring)
-            {
-                switch (_grid.Get(p))
-                {
-                    case CellType.ColorA:
-                    case CellType.ColorB:
-                    case CellType.ColorC:
-                    case CellType.Hard:
-                    case CellType.HardCracked:
-                        _grid.Set(p, CellType.Empty);
-                        break;
-
-                    case CellType.Steel:
-                        _grid.Set(p, CellType.Hard); // softened, not destroyed
-                        break;
-
-                    case CellType.AirCapsule:
-                        _grid.Set(p, CellType.Empty);
-                        AirCapsuleLiberated?.Invoke(p);
-                        break;
-
-                    case CellType.Diamond:
-                        _grid.Set(p, CellType.Empty);
-                        DiamondLiberated?.Invoke(p);
-                        break;
-
-                    case CellType.Bomb:
-                        BombArmedByBurst?.Invoke(p); // left on the grid; its fuse does the rest
-                        break;
-                }
-            }
+                ApplyShockwaveCell(p);
 
             if (avatarHit)
                 AvatarHitByBurst?.Invoke();
+        }
+
+        /// <summary>
+        /// v3.2 Power Drill (R7.8, drill-momentum.md §M2): a standalone shockwave — a cardinal cross of
+        /// <paramref name="radius"/> around <paramref name="center"/>, centre included — with exactly the
+        /// burst ring's rules (blocks cleared, Steel softened, capsules/diamonds liberated, bombs armed,
+        /// the SAME events). Never harms the avatar. Out-of-bounds cells are skipped.
+        /// </summary>
+        /// <param name="affected">If given, receives every in-bounds cell the wave reached.</param>
+        /// <returns>Blocks destroyed (Color / Hard / HardCracked) — Steel softening is not destruction.</returns>
+        public int ApplyShockwave(GridPos center, int radius = 1, List<GridPos> affected = null)
+        {
+            if (radius < 0) radius = 0;
+            int destroyed = 0;
+
+            for (int d = -radius; d <= radius; d++)
+            {
+                destroyed += ShockwaveAt(center.Offset(d, 0), affected);
+                if (d != 0)
+                    destroyed += ShockwaveAt(center.Offset(0, d), affected);
+            }
+            return destroyed;
+        }
+
+        private int ShockwaveAt(GridPos p, List<GridPos> affected)
+        {
+            if (!_grid.InBounds(p))
+                return 0;
+            affected?.Add(p);
+            return ApplyShockwaveCell(p) ? 1 : 0;
+        }
+
+        /// <summary>The shockwave rule for one cell (§5.2). Returns true if a block was destroyed.</summary>
+        private bool ApplyShockwaveCell(GridPos p)
+        {
+            switch (_grid.Get(p))
+            {
+                case CellType.ColorA:
+                case CellType.ColorB:
+                case CellType.ColorC:
+                case CellType.Hard:
+                case CellType.HardCracked:
+                    _grid.Set(p, CellType.Empty);
+                    return true;
+
+                case CellType.Steel:
+                    _grid.Set(p, CellType.Hard); // softened, not destroyed
+                    return false;
+
+                case CellType.AirCapsule:
+                    _grid.Set(p, CellType.Empty);
+                    AirCapsuleLiberated?.Invoke(p);
+                    return false;
+
+                case CellType.Diamond:
+                    _grid.Set(p, CellType.Empty);
+                    DiamondLiberated?.Invoke(p);
+                    return false;
+
+                case CellType.Bomb:
+                    BombArmedByBurst?.Invoke(p); // left on the grid; its fuse does the rest
+                    return false;
+            }
+            return false;
         }
 
         private void AddRingCell(HashSet<GridPos> ring, List<GridPos> burstCells, GridPos p)

@@ -864,3 +864,28 @@ at (x+1, y) is a neighbour of exactly ONE cell of column x, so a pure vertical d
 moves on. The block below gets cracked, then drilled anyway. Breaks need lateral drilling or a zigzag.
 So the "passive destabilisation" only fires for players who already move sideways — measure it in the
 harness; levers if it's too rare: break side blocks at 1 fissure, crack diagonals too, or a 2-cell reach.
+
+---
+
+### R7.8 — Power Drill — delivered 2026-10-08 (Sprint 2 complete)
+
+drill-momentum.md §M2 / ⚡D1. Orchestrated in `GameBootstrap.PowerDrillFollowThrough`, called at the end
+of the Drilled handler while `IsInPowerDrill` is still true, then `CompletePowerDrill()` → Tier 1.
+
+- **2nd block = next cell in the drill's direction** (down = "le bloc en dessous"; sideways = the next one
+  along the line). A real drill hit with the drill's side effects (×6 drill pay, air, capsule/diamond,
+  bomb arming, enemy wake, fissures). Not drillable (Steel/bomb/void/wall) → no 2nd drill, wave still lands.
+- **Mini shockwave** = new `GravitySystem.ApplyShockwave(center, 1)`: the burst ring's per-cell rules were
+  extracted into a shared `ApplyShockwaveCell`, so bursts and the Power Drill can't drift apart. Capsules,
+  diamonds and bombs flow through the already-wired GravitySystem events.
+- **Scoring:** each destroyed block is worth one drill — `ScoreSystem.AwardPowerShockwave(blocks, mult)`,
+  new `ScoreSource.PowerDrill`, × cascade × danger. Enemies in the cross die (`NotifyBombBlast(cells, 1)`).
+- Camera shake as a placeholder until the R7.10 Tier 3 flash.
+
+**Verified in play mode** on the tutorial vein: drill 8 went Power Drill — +60 drill, +60 for the pierced
+ColorC slab, +120 for 2 blocks of wave (`PowerDrill, detail 2`), back to Tier 1. Zero console errors.
+471/471 EditMode.
+
+**Known nit:** the pierced 2nd cell also pays +15 freefall when the avatar drops through it (AvatarModel
+only skips the cell it drilled itself). Negligible next to the ×6 burst; fix with an AvatarModel hook if
+the harness shows it matters.

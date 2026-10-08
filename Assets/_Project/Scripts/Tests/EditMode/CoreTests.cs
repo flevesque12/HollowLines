@@ -5152,6 +5152,143 @@ namespace HollowLines.Tests
     }
 
     [TestFixture]
+    public class PowerDrillTests
+    {
+        // R7.8 — drill-momentum.md §M2 / ⚡D1: GravitySystem.ApplyShockwave (the mini shockwave) and
+        // ScoreSystem.AwardPowerShockwave. The orchestration itself lives in GameBootstrap.
+
+        private static readonly GridPos Centre = new GridPos(2, 2);
+
+        [Test]
+        public void ApplyShockwave_Radius1_IsACrossOfFive_CentreIncluded()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AAAAA", "AAAAA", "AAAAA", "AAAAA", "AAAAA" });
+            var gravity = new GravitySystem(grid);
+            var cells = new List<GridPos>();
+
+            int destroyed = gravity.ApplyShockwave(Centre, 1, cells);
+
+            Assert.AreEqual(5, destroyed);
+            CollectionAssert.AreEquivalent(new[]
+            {
+                Centre, Centre.Above, Centre.Below, Centre.Offset(-1, 0), Centre.Offset(1, 0)
+            }, cells);
+            Assert.AreEqual(CellType.ColorA, grid.Get(new GridPos(1, 1)), "diagonals untouched");
+            Assert.AreEqual(CellType.Empty, grid.Get(Centre));
+        }
+
+        [Test]
+        public void ApplyShockwave_FollowsTheBurstRingRules()
+        {
+            // Around the centre: Hard above, Steel left, Capsule right, Diamond below; centre is a Bomb.
+            var grid = GridModel.FromStringMap(new[] { ".....", "..H..", ".SXP.", "..D..", "....." });
+            var gravity = new GravitySystem(grid);
+            var freed = new List<string>();
+            gravity.AirCapsuleLiberated += _ => freed.Add("capsule");
+            gravity.DiamondLiberated    += _ => freed.Add("diamond");
+            GridPos? armed = null;
+            gravity.BombArmedByBurst += p => armed = p;
+
+            int destroyed = gravity.ApplyShockwave(Centre, 1);
+
+            Assert.AreEqual(1, destroyed, "only the Hard counts as destroyed");
+            Assert.AreEqual(CellType.Empty, grid.Get(Centre.Above));
+            Assert.AreEqual(CellType.Hard, grid.Get(Centre.Offset(-1, 0)), "Steel is softened, not destroyed");
+            Assert.AreEqual(CellType.Bomb, grid.Get(Centre), "the bomb stays — its fuse resolves it");
+            Assert.AreEqual(Centre, armed);
+            CollectionAssert.AreEquivalent(new[] { "capsule", "diamond" }, freed);
+        }
+
+        [Test]
+        public void ApplyShockwave_NeverHitsTheAvatar()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AAA", "AAA", "AAA" });
+            var gravity = new GravitySystem(grid);
+            bool hit = false;
+            gravity.AvatarHitByBurst += () => hit = true;
+            gravity.AvatarCrushed    += _ => hit = true;
+
+            gravity.ApplyShockwave(new GridPos(1, 1), 1);
+
+            Assert.IsFalse(hit);
+        }
+
+        [Test]
+        public void ApplyShockwave_AtTheEdge_SkipsOutOfBounds()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AA", "AA" });
+            var gravity = new GravitySystem(grid);
+            var cells = new List<GridPos>();
+
+            int destroyed = 0;
+            Assert.DoesNotThrow(() => destroyed = gravity.ApplyShockwave(new GridPos(0, 0), 1, cells));
+            Assert.AreEqual(3, destroyed, "centre + right + below");
+            Assert.AreEqual(3, cells.Count);
+        }
+
+        [Test]
+        public void ApplyShockwave_RadiusZero_IsJustTheCentre_NegativeClamps()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AAA", "AAA", "AAA" });
+            var gravity = new GravitySystem(grid);
+
+            Assert.AreEqual(1, gravity.ApplyShockwave(new GridPos(1, 1), 0));
+            Assert.AreEqual(0, gravity.ApplyShockwave(new GridPos(1, 1), -3), "already empty — clamped to radius 0");
+            Assert.AreEqual(CellType.ColorA, grid.Get(new GridPos(1, 0)));
+        }
+
+        [Test]
+        public void BurstRing_StillBehavesTheSame_AfterTheRefactor()
+        {
+            // The burst ring now shares ApplyShockwaveCell — a capsule beside a landing burst is still freed.
+            var grid = GridModel.FromStringMap(new[] { "B.", "..", ".P", "AA" });
+            var gravity = new GravitySystem(grid) { WobbleDuration = 0.1f, FallStepInterval = 0.02f };
+            bool freed = false;
+            gravity.AirCapsuleLiberated += _ => freed = true;
+
+            TestUtil.TickMany(gravity, 2f, new GridPos(1, 0));
+
+            Assert.IsTrue(freed);
+        }
+
+        // ── ScoreSystem.AwardPowerShockwave ──────────────────────────────────
+
+        [Test]
+        public void AwardPowerShockwave_EachBlockIsADrill_AtTheMomentum()
+        {
+            var score = new ScoreSystem();
+            ScoreEvent? evt = null;
+            score.OnScore += e => evt = e;
+
+            score.AwardPowerShockwave(4, 6f);
+
+            Assert.AreEqual(240, score.Score, "4 blocks × 10 × 6");
+            Assert.AreEqual(ScoreSource.PowerDrill, evt.Value.Source);
+            Assert.AreEqual(4, evt.Value.Detail);
+        }
+
+        [Test]
+        public void AwardPowerShockwave_CascadeAndDanger_Apply()
+        {
+            var score = new ScoreSystem { CascadeMultiplier = 2, DangerZone = true };
+
+            score.AwardPowerShockwave(1, 6f);
+
+            Assert.AreEqual(240, score.Score, "10 × 6 × 2 × 2");
+        }
+
+        [Test]
+        public void AwardPowerShockwave_Clamps()
+        {
+            var score = new ScoreSystem();
+            score.AwardPowerShockwave(-2, 6f);
+            Assert.AreEqual(0, score.Score, "negative blocks pay nothing");
+            score.AwardPowerShockwave(2, 0f);
+            Assert.AreEqual(20, score.Score, "multiplier below 1 → ×1");
+        }
+    }
+
+    [TestFixture]
     public class ScoreSystemTests
     {
         // ── AwardDrill: 10 × streak ──────────────────────────────────────────
