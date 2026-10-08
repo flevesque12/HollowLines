@@ -6,7 +6,7 @@ paths:
 
 ## 13. Test status
 
-**400 / 400 passing** (EditMode; +24 for R7.1 `MomentumTrackerTests`; +13 for R6.2 — 12 `AirSystemTests` start-buffer cases incl. the HUD countdown's `StartGraceRemaining` + `AirStartGraceForLevel`; +10 for R6.1 `DeathTrackerTests`; was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
+**413 / 413 passing** (EditMode; +13 for R7.2 `GrazeSystemTests`; +24 for R7.1 `MomentumTrackerTests`; +13 for R6.2 — 12 `AirSystemTests` start-buffer cases incl. the HUD countdown's `StartGraceRemaining` + `AirStartGraceForLevel`; +10 for R6.1 `DeathTrackerTests`; was 112 before the v3 refactor; +3 for `Settle`, +0 net from the §5.2
 dev-5 flip, +1 for `EndlessBoard_ContentRows_HavePorosity` — see §15.6; +6 for the tutorial
 showcase board — see §5.14; +5 for AvatarModel coyote time — see §4; +16 for R3.2 endless,
 +2 for the R3.1 steady-state guards (§15.7), +6 for R3.4 Daily Dig (§6.6); +28 for R4 Diamonds
@@ -48,6 +48,7 @@ delta on collection — not just `dotnet build` against the Core sources.
 | `StrateGeneratorTests.EndlessSegment_*` | 🆕R3.2 2 tests: `startDepth 0` ≡ `EndlessBoard`, and the difficulty ramp resumes; 🆕R3.1 2 steady-state guards: color material > 24 %, burst opportunity > 11 % (§15.7) |
 | `DeathTrackerTests` | 🆕R6.1 10 tests: run clock (ignores dt ≤ 0), hit recording (cause/pos/time/hearts), None/Suffocation never a heart hit + hearts clamp, time-since-last-drill, `Died` fires once with a frozen report (second same-frame death ignored), suffocation carries the drill gap + air clamps to 0, `None` falls back to last hit then Suffocation, everything frozen after death, report survives `Reset`, `Reset` re-arms |
 | `MomentumTrackerTests` | 🆕R7.1 24 tests: tier thresholds 3/7/10 (alternating colors), any drillable type counts, same-color reaches Tier 3 in 7 drills, color change / non-color drill break the chain (never earn the bonus), window keep/expire/refresh, `MomentumLost` only when there was momentum (idle Tick/Reset silent), dt ≤ 0 ignored, `ExtendTimer` adds / no-op at idle / clamps negative, `TierChanged` steps, Power Drill fires once with ×6, drills during it never retrigger, `CompletePowerDrill` → Tier 1 and the cycle restarts, no-op outside, window expiry mid-burst resets, `Reset` |
+| `GrazeSystemTests` | 🆕R7.2 13 tests: graze on all four cardinal sides, on the drilled cell itself (zone danger), never diagonal or 2 cells away, null/empty never grazes (and starts no cooldown), several dangers = one graze, event carries the drilled cell, cooldown suppresses / re-arms at exactly 0.5 s / counts down and clamps, negative dt ignored, `Reset` re-arms, tuning constants |
 | `DailyDigTests` | 🆕R3.4 6 tests: same day = same seed (any hour), different days differ, consecutive days generate *unrelated boards*, seed stable across runs, never `int.MinValue`, invariant label |
 
 > **Note:** the M2 Collapse (21) and Score (23) suites referenced in the old plan were never

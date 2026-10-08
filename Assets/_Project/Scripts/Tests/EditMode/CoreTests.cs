@@ -4478,6 +4478,159 @@ namespace HollowLines.Tests
     }
 
     [TestFixture]
+    public class GrazeSystemTests
+    {
+        private static readonly GridPos Drill = new GridPos(3, 5);
+
+        // ── Detection ────────────────────────────────────────────────────────
+
+        [Test]
+        public void CardinallyAdjacentDanger_Grazes_OnAllFourSides()
+        {
+            var sides = new[] { Drill.Offset(1, 0), Drill.Offset(-1, 0), Drill.Below, Drill.Above };
+
+            foreach (GridPos side in sides)
+            {
+                var graze = new GrazeSystem();
+                Assert.IsTrue(graze.NotifyDrill(Drill, new[] { side }), $"danger at {side} must graze");
+            }
+        }
+
+        [Test]
+        public void DangerOnTheDrilledCell_Grazes()
+        {
+            var graze = new GrazeSystem();
+
+            Assert.IsTrue(graze.NotifyDrill(Drill, new[] { Drill }), "a zone danger covering the cell counts");
+        }
+
+        [Test]
+        public void DiagonalDanger_DoesNotGraze()
+        {
+            var graze = new GrazeSystem();
+
+            Assert.IsFalse(graze.NotifyDrill(Drill, new[] { Drill.Offset(1, 1), Drill.Offset(-1, -1) }));
+        }
+
+        [Test]
+        public void DangerTwoCellsAway_DoesNotGraze()
+        {
+            var graze = new GrazeSystem();
+
+            Assert.IsFalse(graze.NotifyDrill(Drill, new[] { Drill.Offset(2, 0), Drill.Offset(0, 2) }));
+        }
+
+        [Test]
+        public void NullOrEmptyDangers_NeverGraze()
+        {
+            var graze = new GrazeSystem();
+
+            Assert.IsFalse(graze.NotifyDrill(Drill, null));
+            Assert.IsFalse(graze.NotifyDrill(Drill, new GridPos[0]));
+            Assert.IsTrue(graze.IsReady, "a miss must not start the cooldown");
+        }
+
+        [Test]
+        public void SeveralAdjacentDangers_GrazeOnlyOnce()
+        {
+            var graze = new GrazeSystem();
+            int fired = 0;
+            graze.GrazeTriggered += _ => fired++;
+
+            graze.NotifyDrill(Drill, new[] { Drill.Below, Drill.Above, Drill.Offset(1, 0) });
+
+            Assert.AreEqual(1, fired, "one drill, one graze — no matter how many dangers");
+        }
+
+        [Test]
+        public void GrazeTriggered_CarriesTheDrilledCell()
+        {
+            var graze = new GrazeSystem();
+            GridPos? at = null;
+            graze.GrazeTriggered += p => at = p;
+
+            graze.NotifyDrill(Drill, new[] { Drill.Below });
+
+            Assert.AreEqual(Drill, at);
+        }
+
+        // ── Cooldown (0.5 s) ─────────────────────────────────────────────────
+
+        [Test]
+        public void SecondGraze_InsideCooldown_IsSuppressed()
+        {
+            var graze = new GrazeSystem();
+            int fired = 0;
+            graze.GrazeTriggered += _ => fired++;
+            graze.NotifyDrill(Drill, new[] { Drill.Below });
+
+            graze.Tick(GrazeSystem.Cooldown - 0.01f);
+            bool second = graze.NotifyDrill(Drill.Below, new[] { Drill.Below.Below });
+
+            Assert.IsFalse(second);
+            Assert.AreEqual(1, fired);
+        }
+
+        [Test]
+        public void Graze_AfterCooldown_TriggersAgain()
+        {
+            var graze = new GrazeSystem();
+            graze.NotifyDrill(Drill, new[] { Drill.Below });
+
+            graze.Tick(GrazeSystem.Cooldown);
+
+            Assert.IsTrue(graze.IsReady);
+            Assert.IsTrue(graze.NotifyDrill(Drill.Below, new[] { Drill.Below.Below }));
+        }
+
+        [Test]
+        public void Cooldown_CountsDown_AndClampsAtZero()
+        {
+            var graze = new GrazeSystem();
+            graze.NotifyDrill(Drill, new[] { Drill.Below });
+            Assert.AreEqual(GrazeSystem.Cooldown, graze.CooldownRemaining, 1e-5f);
+
+            graze.Tick(0.2f);
+            Assert.AreEqual(GrazeSystem.Cooldown - 0.2f, graze.CooldownRemaining, 1e-5f);
+
+            graze.Tick(5f);
+            Assert.AreEqual(0f, graze.CooldownRemaining);
+        }
+
+        [Test]
+        public void Tick_NegativeDt_IsIgnored()
+        {
+            var graze = new GrazeSystem();
+            graze.NotifyDrill(Drill, new[] { Drill.Below });
+
+            graze.Tick(-1f);
+
+            Assert.AreEqual(GrazeSystem.Cooldown, graze.CooldownRemaining, 1e-5f);
+        }
+
+        [Test]
+        public void Reset_ClearsTheCooldown()
+        {
+            var graze = new GrazeSystem();
+            graze.NotifyDrill(Drill, new[] { Drill.Below });
+
+            graze.Reset();
+
+            Assert.IsTrue(graze.IsReady);
+            Assert.IsTrue(graze.NotifyDrill(Drill, new[] { Drill.Below }));
+        }
+
+        // ── Tuning ───────────────────────────────────────────────────────────
+
+        [Test]
+        public void Tuning_MatchesSpec()
+        {
+            Assert.AreEqual(0.5f, GrazeSystem.Cooldown);
+            Assert.AreEqual(0.3f, GrazeSystem.MomentumExtension);
+        }
+    }
+
+    [TestFixture]
     public class ScoreSystemTests
     {
         // ── AwardDrill: 10 × streak ──────────────────────────────────────────

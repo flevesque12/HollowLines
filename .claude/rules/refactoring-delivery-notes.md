@@ -692,3 +692,24 @@ is wired yet (R7.6). Four gaps in the spec, filled as follows:
   and ignores negative values. No cap on graze extensions — revisit at R7.15 if it's abusable.
 
 Extras for the HUD: `TimeRemaining`, `Progress`. 24 new tests, 400/400 EditMode.
+
+---
+
+### R7.2 — GrazeSystem — delivered 2026-10-07
+
+`Core/GrazeSystem.cs`, per drill-momentum.md §M3.2 / §M7.4. Nothing wired yet (R7.6).
+
+- **Danger-agnostic:** `NotifyDrill(GridPos drilled, IEnumerable<GridPos> dangers)` — Core systems
+  don't reference each other, so GameBootstrap gathers the cells (active enemies from
+  `GetAllAlive()`, armed bombs from `CopyArmedCells()`). Grazes when the drilled cell is ON or
+  cardinally adjacent to a danger (Manhattan ≤ 1; "on" covers zone dangers). Returns bool too.
+- **`GrazeTriggered` is `Action<GridPos>`** (the drilled cell, for the popup/VFX anchor) — §7 showed `()`.
+- **Cooldown 0.5 s** starts only on a real graze. `MomentumExtension = 0.3f` lives here so R7.6
+  doesn't hard-code it; the +50 pts belong to `ScoreSystem.AwardGraze()` (R7.5).
+- **R7.6 ordering:** call it BEFORE `_bombSystem.NotifyDrilled` / `_enemySystem.NotifyAdjacentDrill`
+  in the Drilled handler (§7 already does), or the bomb you just lit / enemy you just woke grazes.
+- **⚠️ Open for R7.6 — "shockwave en cours" (M3.2 condition 3) has no source:** the GravitySystem
+  shockwave resolves instantaneously in the burst frame, so there is never one "in progress" to
+  drill through. Options: drop it, or substitute "adjacent to a wobbling chunk" (a real 0.6 s danger).
+
+13 new tests, 413/413 EditMode.
