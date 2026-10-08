@@ -673,3 +673,22 @@ could. Now the answer is drawn on the board for the whole fuse.
   after detonation all 16 pooled frames hide. **Screenshot fix:** the first frame (tinted rim + faint
   fill) was nearly invisible on pink and amber blocks → 1 px black edge, thicker rim, hatching, and a
   pale-yellow chain colour instead of orange.
+
+---
+
+### R7.1 — MomentumTracker — delivered 2026-10-07
+
+`Core/MomentumTracker.cs`, per drill-momentum.md §M1. `StreakTracker` stays until R7.12; nothing
+is wired yet (R7.6). Four gaps in the spec, filled as follows:
+
+- **Color bonus only for real colors (`CanFuse`).** Two capsules, or Hard → HardCracked, in a row
+  would otherwise "chain". A non-color drill adds +1.0 and sets `ColorChain` to 0.
+- **`PowerDrillActivated` is `Action<float>`** carrying the ×6, per decision D1 (the M1 API block
+  still said `()`).
+- **Drills during a Power Drill** refresh the window and count in `DrillCount` but add no progress
+  and never re-fire — GameBootstrap can route the burst's 2nd block through `NotifyDrill` safely.
+- **`MomentumLost` / `TierChanged(old, 0)` fire only when there was momentum** (no per-frame spam
+  from an idle `Tick`/`Reset`). `ExtendTimer` is a no-op at idle (no phantom window from a graze)
+  and ignores negative values. No cap on graze extensions — revisit at R7.15 if it's abusable.
+
+Extras for the HUD: `TimeRemaining`, `Progress`. 24 new tests, 400/400 EditMode.

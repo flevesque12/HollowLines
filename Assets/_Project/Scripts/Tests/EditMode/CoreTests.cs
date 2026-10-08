@@ -4097,6 +4097,387 @@ namespace HollowLines.Tests
     }
 
     [TestFixture]
+    public class MomentumTrackerTests
+    {
+        private static readonly CellType[] Alternating = { CellType.ColorA, CellType.ColorB, CellType.ColorC };
+
+        // Keeps cycling across calls — restarting at ColorA each call would repeat the previous
+        // call's last color and sneak in a color bonus.
+        private int _nextColor;
+
+        /// <summary>n drills that never repeat a color — +1.0 progress each, no color bonus.</summary>
+        private void DrillAlternating(MomentumTracker m, int n)
+        {
+            for (int i = 0; i < n; i++)
+                m.NotifyDrill(Alternating[_nextColor++ % Alternating.Length]);
+        }
+
+        // ── Tiers (§M2) ──────────────────────────────────────────────────────
+
+        [Test]
+        public void NewTracker_IsTierZero_TimesOne()
+        {
+            var m = new MomentumTracker();
+
+            Assert.AreEqual(0, m.CurrentTier);
+            Assert.AreEqual(0, m.DrillCount);
+            Assert.AreEqual(1f, m.Multiplier);
+            Assert.IsFalse(m.IsInPowerDrill);
+        }
+
+        [Test]
+        public void AlternatingColors_TierThresholds_3_7_10()
+        {
+            var m = new MomentumTracker();
+
+            DrillAlternating(m, 2);
+            Assert.AreEqual(0, m.CurrentTier, "2 drills is still Tier 0");
+            DrillAlternating(m, 1);
+            Assert.AreEqual(1, m.CurrentTier, "3rd drill reaches Tier 1");
+            Assert.AreEqual(2f, m.Multiplier);
+
+            DrillAlternating(m, 4);
+            Assert.AreEqual(2, m.CurrentTier, "7th drill reaches Tier 2");
+            Assert.AreEqual(4f, m.Multiplier);
+
+            DrillAlternating(m, 2);
+            Assert.AreEqual(2, m.CurrentTier, "9 drills is still Tier 2");
+            DrillAlternating(m, 1);
+            Assert.AreEqual(3, m.CurrentTier, "10th drill reaches Tier 3");
+            Assert.AreEqual(6f, m.Multiplier);
+            Assert.AreEqual(10, m.DrillCount);
+        }
+
+        [Test]
+        public void AnyDrillableType_BuildsMomentum()
+        {
+            var m = new MomentumTracker();
+
+            m.NotifyDrill(CellType.Hard);
+            m.NotifyDrill(CellType.AirCapsule);
+            m.NotifyDrill(CellType.Diamond);
+
+            Assert.AreEqual(1, m.CurrentTier, "momentum is time-based — every drill counts, colored or not");
+            Assert.AreEqual(3, m.DrillCount);
+        }
+
+        // ── Color bonus (⚡D2) ───────────────────────────────────────────────
+
+        [Test]
+        public void SameColor_ReachesTier3_InSevenDrills()
+        {
+            var m = new MomentumTracker();
+
+            for (int i = 0; i < 6; i++)
+                m.NotifyDrill(CellType.ColorA);
+            Assert.AreEqual(2, m.CurrentTier, "6 same-color drills = 8.5 progress, Tier 2");
+
+            m.NotifyDrill(CellType.ColorA);
+
+            Assert.AreEqual(3, m.CurrentTier, "1.0 + 6 × 1.5 = 10.0 → Tier 3");
+            Assert.AreEqual(7, m.DrillCount, "DrillCount stays the real number of drills");
+            Assert.AreEqual(7, m.ColorChain);
+        }
+
+        [Test]
+        public void ColorChange_ResetsColorChain_KeepsMomentum()
+        {
+            var m = new MomentumTracker();
+
+            m.NotifyDrill(CellType.ColorA);
+            m.NotifyDrill(CellType.ColorA);
+            m.NotifyDrill(CellType.ColorB);
+
+            Assert.AreEqual(1, m.ColorChain);
+            Assert.AreEqual(3.5f, m.Progress, 1e-4f, "1.0 + 1.5 + 1.0");
+            Assert.AreEqual(1, m.CurrentTier);
+        }
+
+        [Test]
+        public void NonColorDrill_NeverEarnsColorBonus_AndBreaksTheChain()
+        {
+            var m = new MomentumTracker();
+
+            m.NotifyDrill(CellType.ColorA);
+            m.NotifyDrill(CellType.Hard);
+            Assert.AreEqual(0, m.ColorChain, "Hard is not a color");
+            m.NotifyDrill(CellType.ColorA);
+
+            Assert.AreEqual(3f, m.Progress, 1e-4f, "A, Hard, A: no bonus — the Hard drill broke the chain");
+            Assert.AreEqual(1, m.ColorChain);
+        }
+
+        [Test]
+        public void RepeatedNonColor_NeverEarnsColorBonus()
+        {
+            var m = new MomentumTracker();
+
+            m.NotifyDrill(CellType.AirCapsule);
+            m.NotifyDrill(CellType.AirCapsule);
+
+            Assert.AreEqual(2f, m.Progress, 1e-4f, "two capsules in a row are not a color chain");
+            Assert.AreEqual(0, m.ColorChain);
+        }
+
+        // ── Window (0.8 s) ───────────────────────────────────────────────────
+
+        [Test]
+        public void Tick_InsideWindow_KeepsMomentum()
+        {
+            var m = new MomentumTracker();
+            DrillAlternating(m, 3);
+
+            m.Tick(MomentumTracker.MomentumWindow - 0.01f);
+
+            Assert.AreEqual(1, m.CurrentTier);
+            Assert.AreEqual(3, m.DrillCount);
+        }
+
+        [Test]
+        public void Tick_PastWindow_ResetsToTierZero_FiresTierChangedThenLost()
+        {
+            var m = new MomentumTracker();
+            DrillAlternating(m, 3);
+            var log = new List<string>();
+            m.TierChanged  += (from, to) => log.Add($"tier {from}->{to}");
+            m.MomentumLost += () => log.Add("lost");
+
+            m.Tick(MomentumTracker.MomentumWindow + 0.01f);
+
+            Assert.AreEqual(0, m.CurrentTier);
+            Assert.AreEqual(0, m.DrillCount);
+            Assert.AreEqual(0f, m.Progress);
+            CollectionAssert.AreEqual(new[] { "tier 1->0", "lost" }, log);
+        }
+
+        [Test]
+        public void EachDrill_RefreshesTheWindow()
+        {
+            var m = new MomentumTracker();
+
+            for (int i = 0; i < 5; i++)
+            {
+                m.NotifyDrill(Alternating[i % 3]);
+                m.Tick(0.7f); // 3.5 s total — far past one window, but never 0.8 s without a drill
+            }
+
+            Assert.AreEqual(5, m.DrillCount);
+            Assert.AreEqual(1, m.CurrentTier);
+        }
+
+        [Test]
+        public void MomentumLost_TierZeroDrills_StillFires()
+        {
+            var m = new MomentumTracker();
+            bool lost = false;
+            m.MomentumLost += () => lost = true;
+            int tierEvents = 0;
+            m.TierChanged += (_, __) => tierEvents++;
+
+            m.NotifyDrill(CellType.ColorA);
+            m.Tick(1f);
+
+            Assert.IsTrue(lost, "1 drill of momentum is still momentum to lose");
+            Assert.AreEqual(0, tierEvents, "no tier change: it never left Tier 0");
+        }
+
+        [Test]
+        public void Idle_TickAndReset_FireNothing()
+        {
+            var m = new MomentumTracker();
+            int events = 0;
+            m.MomentumLost += () => events++;
+            m.TierChanged  += (_, __) => events++;
+
+            m.Tick(5f);
+            m.Reset();
+
+            Assert.AreEqual(0, events, "nothing to lose — no MomentumLost spam every frame");
+        }
+
+        [Test]
+        public void Tick_NegativeOrZeroDt_IsIgnored()
+        {
+            var m = new MomentumTracker();
+            DrillAlternating(m, 3);
+
+            m.Tick(-5f);
+            m.Tick(0f);
+
+            Assert.AreEqual(MomentumTracker.MomentumWindow, m.TimeRemaining, 1e-5f);
+            Assert.AreEqual(1, m.CurrentTier);
+        }
+
+        // ── ExtendTimer (graze, §M3.2) ───────────────────────────────────────
+
+        [Test]
+        public void ExtendTimer_AddsToTheWindow()
+        {
+            var m = new MomentumTracker();
+            DrillAlternating(m, 3);
+
+            m.ExtendTimer(0.3f);
+            m.Tick(1.0f);
+            Assert.AreEqual(1, m.CurrentTier, "0.8 + 0.3 = 1.1 s — still alive after 1.0 s");
+
+            m.Tick(0.2f);
+            Assert.AreEqual(0, m.CurrentTier, "1.2 s > 1.1 s — lost");
+        }
+
+        [Test]
+        public void ExtendTimer_WithoutMomentum_IsNoOp()
+        {
+            var m = new MomentumTracker();
+            bool lost = false;
+            m.MomentumLost += () => lost = true;
+
+            m.ExtendTimer(0.3f);
+            m.Tick(0.1f);
+
+            Assert.AreEqual(0f, m.TimeRemaining);
+            Assert.IsFalse(lost, "a graze at Tier 0 with no drill must not open a phantom window");
+        }
+
+        [Test]
+        public void ExtendTimer_Negative_IsClamped()
+        {
+            var m = new MomentumTracker();
+            DrillAlternating(m, 1);
+
+            m.ExtendTimer(-1f);
+
+            Assert.AreEqual(MomentumTracker.MomentumWindow, m.TimeRemaining, 1e-5f);
+        }
+
+        // ── Power Drill (⚡D1) ───────────────────────────────────────────────
+
+        [Test]
+        public void TierChanged_FiresOnEveryStepUp()
+        {
+            var m = new MomentumTracker();
+            var steps = new List<string>();
+            m.TierChanged += (from, to) => steps.Add($"{from}->{to}");
+
+            DrillAlternating(m, 10);
+
+            CollectionAssert.AreEqual(new[] { "0->1", "1->2", "2->3" }, steps);
+        }
+
+        [Test]
+        public void Tier3_FiresPowerDrillOnce_WithTimesSix()
+        {
+            var m = new MomentumTracker();
+            var fired = new List<float>();
+            m.PowerDrillActivated += fired.Add;
+
+            DrillAlternating(m, 10);
+
+            CollectionAssert.AreEqual(new[] { 6f }, fired);
+            Assert.IsTrue(m.IsInPowerDrill);
+        }
+
+        [Test]
+        public void DrillsDuringPowerDrill_KeepTheWindow_NeverRetrigger()
+        {
+            var m = new MomentumTracker();
+            int fired = 0;
+            m.PowerDrillActivated += _ => fired++;
+            DrillAlternating(m, 10);
+            m.Tick(0.7f);
+
+            m.NotifyDrill(CellType.ColorA); // the 2nd block the Power Drill pierces
+            m.Tick(0.7f);
+
+            Assert.AreEqual(1, fired, "the burst's own drills must not fire a second Power Drill");
+            Assert.AreEqual(3, m.CurrentTier, "×6 holds for the whole burst");
+            Assert.AreEqual(6f, m.Multiplier);
+            Assert.AreEqual(11, m.DrillCount);
+            Assert.IsTrue(m.IsInPowerDrill, "the drill refreshed the window — still in the burst");
+        }
+
+        [Test]
+        public void CompletePowerDrill_DropsToTier1_AndTheCycleRestarts()
+        {
+            var m = new MomentumTracker();
+            var steps = new List<string>();
+            int fired = 0;
+            DrillAlternating(m, 10);
+            m.TierChanged += (from, to) => steps.Add($"{from}->{to}");
+            m.PowerDrillActivated += _ => fired++;
+
+            m.CompletePowerDrill();
+
+            Assert.IsFalse(m.IsInPowerDrill);
+            Assert.AreEqual(1, m.CurrentTier, "back to Tier 1, not Tier 0");
+            Assert.AreEqual(MomentumTracker.Tier1Threshold, m.DrillCount);
+            Assert.AreEqual((float)MomentumTracker.Tier1Threshold, m.Progress);
+            CollectionAssert.AreEqual(new[] { "3->1" }, steps);
+
+            DrillAlternating(m, 7);
+            Assert.AreEqual(1, fired, "3 + 7 = 10 → a second Power Drill");
+        }
+
+        [Test]
+        public void CompletePowerDrill_OutsidePowerDrill_IsNoOp()
+        {
+            var m = new MomentumTracker();
+            DrillAlternating(m, 5);
+
+            m.CompletePowerDrill();
+
+            Assert.AreEqual(5, m.DrillCount);
+            Assert.AreEqual(1, m.CurrentTier);
+        }
+
+        [Test]
+        public void WindowExpiresDuringPowerDrill_ResetsEverything()
+        {
+            var m = new MomentumTracker();
+            DrillAlternating(m, 10);
+
+            m.Tick(1f);
+
+            Assert.IsFalse(m.IsInPowerDrill);
+            Assert.AreEqual(0, m.CurrentTier);
+        }
+
+        // ── Reset ────────────────────────────────────────────────────────────
+
+        [Test]
+        public void Reset_ZeroesEverything_FiresTierChangedAndLost()
+        {
+            var m = new MomentumTracker();
+            for (int i = 0; i < 4; i++)
+                m.NotifyDrill(CellType.ColorA);
+            var log = new List<string>();
+            m.TierChanged  += (from, to) => log.Add($"tier {from}->{to}");
+            m.MomentumLost += () => log.Add("lost");
+
+            m.Reset();
+
+            Assert.AreEqual(0, m.CurrentTier);
+            Assert.AreEqual(0, m.DrillCount);
+            Assert.AreEqual(0, m.ColorChain);
+            Assert.AreEqual(0f, m.Progress);
+            Assert.AreEqual(0f, m.TimeRemaining);
+            CollectionAssert.AreEqual(new[] { "tier 1->0", "lost" }, log);
+        }
+
+        [Test]
+        public void Reset_ForgetsLastColor_NoBonusOnNextDrill()
+        {
+            var m = new MomentumTracker();
+            m.NotifyDrill(CellType.ColorA);
+            m.Reset();
+
+            m.NotifyDrill(CellType.ColorA);
+
+            Assert.AreEqual(1f, m.Progress, 1e-4f);
+            Assert.AreEqual(1, m.ColorChain);
+        }
+    }
+
+    [TestFixture]
     public class ScoreSystemTests
     {
         // ── AwardDrill: 10 × streak ──────────────────────────────────────────
