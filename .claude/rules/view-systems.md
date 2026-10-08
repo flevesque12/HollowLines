@@ -270,6 +270,23 @@ public enum ScoreSource { Drill, Burst, Bomb, Depth, PerfectClear, Diamond, Enem
 - 🆕v3.2 **Add:** Freefall popup — "+15" per cell (small, subtle, stacks vertically during fall).
 - 🆕v3.2 **Add:** Danger Zone indicator — "×2 DANGER" persistent badge when `AirSystem.IsDangerZone`.
   Red pulsing, matches the vignette.
+
+> **✅R7.9 shipped (2026-10-08):** the momentum counter took over the R6.7 streak counter's slot and
+> effects (punch on tier-up, crack on loss). "×2/×4/×6" in yellow/orange/red; a **progress bar** under it
+> fills toward the Power Drill (`Progress / Tier3Threshold`) and **blinks under 0.3 s of window left**.
+> Power Drill: the counter holds "×6" and strobes red/white for 0.5 s (the 3 → 1 drop is deferred until
+> the flash ends) + "POWER DRILL ×6 !" centre popup. Cascade label reads "CASCADE ×N" (from ×2).
+> Graze ("+50 GRAZE", cyan, above the drill popup) and freefall ("+15", small, pale) are world-anchored
+> popups from the shared pool (now 24), raised by GameBootstrap (`ShowGrazePopup` / `ShowFreefallPopup`)
+> because `ScoreEvent` has no position. Danger badge sits at the air bar's right end — the centre
+> belongs to the breathe hint, and both show at once below 15 %. Drill popups are tier-coloured.
+>
+> **R7.9b — the drill popup shows every factor (dev request, 2026-10-08).** "+40 ×2" in the Danger Zone
+> hid the danger ×2 inside the total. Now each multiplier that applied is its own rich-text factor, in the
+> colour of the HUD element that causes it: momentum in its tier colour (Tier 3 lifted to salmon), cascade
+> in gold (the CASCADE label), danger in **bold saturated red** (the badge). "+40 ×2 ×2" = 10 × 2 × 2.
+> Factors of ×1 are omitted. `ShowDrillPopup(..., cascade, danger)` — GameBootstrap passes
+> `ScoreSystem.CascadeMultiplier` / `DangerZone`. Screenshot-verified in and out of the Danger Zone.
 - **Keep:** Depth display — "DEPTH: 42" (top area, prominent in Endless).
 - **Keep:** Burst popup — "BURST! +300" centered, fades after 1 s.
 - **Keep:** Bomb chain popup — "CHAIN ×3! +750" (chainMult > 1 only).

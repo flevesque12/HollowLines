@@ -889,3 +889,27 @@ ColorC slab, +120 for 2 blocks of wave (`PowerDrill, detail 2`), back to Tier 1.
 **Known nit:** the pierced 2nd cell also pays +15 freefall when the avatar drops through it (AvatarModel
 only skips the cell it drilled itself). Negligible next to the ×6 burst; fix with an AvatarModel hook if
 the harness shows it matters.
+
+---
+
+### R7.9 — HUDView momentum — delivered 2026-10-08
+
+View only, 471/471. Details in §5.9. `HUDView.Init` gained `MomentumTracker momentum`; it subscribes to
+`TierChanged` / `PowerDrillActivated` and `AirSystem.DangerZoneChanged`. StreakTracker is no longer read
+by the HUD (the param stays until R7.12).
+
+- **Counter = the R6.7 streak counter, renamed and re-sourced** — same slot under the score, same punch
+  and crack. Tier colours are deliberately NOT block colours: momentum isn't about colour any more.
+- **Progress bar** (new): the time-based rule needed to be visible. It fills toward Tier 3 and blinks
+  when the window is about to close; it freezes in freefall because the window does.
+- **Power Drill hold:** `TierChanged(3,1)` arrives in the same frame as the activation, so "×6" would
+  never be seen. The drop is deferred while the 0.5 s flash runs; the live tier is re-read when it ends.
+- `OnLevelLoaded` re-reads the tier instead of hiding the counter: momentum survives an endless seam.
+
+**Verified in play mode (screenshots, `timeScale = 0`) on the tutorial board:** Tier 1 "×2" yellow with
+the bar at 50 % and "+20 ×2" popups; then air forced to 11 % and drilled into a Power Drill — red "×6"
+with a full bar, "POWER DRILL ×6 !", "×2 DANGER" badge, "+80 ×4" (danger-doubled) and "+15" freefall
+popups. Not exercised live: the graze popup and "CASCADE ×N" (need an enemy/bomb neighbour and a burst chain).
+
+**Tooling note:** grabbing a screenshot right after a long `execute_code` logs "PlayerLoop called
+recursively" and can capture a frame without the UI — take a second screenshot; the game is fine.

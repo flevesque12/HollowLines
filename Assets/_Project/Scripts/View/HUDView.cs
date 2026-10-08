@@ -25,21 +25,28 @@ namespace HollowLines.View
         // ── Cached VisualElement refs ─────────────────────────────────────────
         private Label         _scoreLabel;
         private Label         _depthLabel;
-        private Label         _streakLabel;
+        private Label         _momentumLabel;
 
-        // ── R6.7 streak counter (F07) ─────────────────────────────────────────
-        // Bigger, and alive: the "×N" grows with the run and punches on every step; when a real
-        // streak (×2+) breaks, a copy of the old number shakes, splits in two and falls away.
-        private VisualElement _streakBox;                  // relative container: label + crack halves
+        // ── R7.9 momentum counter (v3.2 — takes over the R6.7 streak counter's slot and effects) ─────
+        // "×2 / ×4 / ×6" in the tier colour, punching on every tier-up; when momentum is lost a copy of
+        // the old number shakes, splits in two and falls away. A bar under it fills toward the Power
+        // Drill and blinks when the 0.8 s window is about to close — the time-based rule made visible.
+        private VisualElement _momentumBox;                  // relative container: label + crack halves
         private VisualElement _crackLeft, _crackRight;     // overflow-clipped halves
         private Label         _crackLeftText, _crackRightText;
-        private float         _streakPunch;                // 1 → 0 after each step
+        private float         _momentumPunch;                // 1 → 0 after each step
         private float         _crackTimer;                 // counts down CrackSeconds → 0
         private float         _crackHalfWidth;
         private Color         _crackColor;
-        private const float   StreakPunchSeconds = 0.18f;
+        private const float   MomentumPunchSeconds = 0.18f;
         private const float   CrackSeconds       = 0.6f;
         private const float   CrackShakeSeconds  = 0.12f;
+        private VisualElement _momentumBar;
+        private VisualElement _momentumBarFill;
+        private float         _powerFlash;                 // 1 → 0 after a Power Drill: hold "×6", flash red
+        private const float   PowerFlashSeconds  = 0.5f;
+        private const float   WindowWarnSeconds  = 0.3f;   // bar blinks when the window has less than this
+        private Label         _dangerBadge;                // R7.9: "×2 DANGER" while air < 15 % (§M3.4)
         private Label         _diamondLabel;
         private VisualElement _airFill;
         private Label         _airCaption;
@@ -61,13 +68,14 @@ namespace HollowLines.View
         {
             public Label   Label;
             public Vector3 World;
+            public float   YOffset; // extra cells up (graze sits above the drill popup)
             public float   Age;
             public bool    Live;
         }
         private VisualElement              _root;
         private readonly System.Collections.Generic.List<DrillPopup> _drillPopups =
             new System.Collections.Generic.List<DrillPopup>();
-        private const int   DrillPopupPool     = 16;
+        private const int   DrillPopupPool     = 24; // R7.9: graze + freefall share the pool
         private const float DrillPopupLife     = 0.7f;
         private const float DrillPopupRise     = 0.7f;  // cells risen over its life
         private const float DrillPopupStartY   = 0.1f;  // cells above the drilled cell's centre
@@ -106,7 +114,8 @@ namespace HollowLines.View
         private AirSystem       _air;
         private HealthSystem    _health;
         private ChainTracker    _chain;
-        private StreakTracker   _streak;
+        private StreakTracker   _streak;   // v3.1 — unused since R7.9, removed in R7.12
+        private MomentumTracker _momentum; // v3.2 — persistent (Reset per fresh board, never rebuilt)
         private DepthTracker    _depth;
         private DiamondSystem   _diamonds; // R4: per-board collection state; see RefreshDiamonds
         private CampaignManager _campaign; // null when campaign mode is off
@@ -119,8 +128,9 @@ namespace HollowLines.View
         private Action<int>        _onHeartsChanged;
         private Action<int>        _onChainLink;
         private Action<int>        _onChainCompleted;
-        private Action<int>        _onStreakGrew;
-        private Action<int>        _onStreakBroken;
+        private Action<int, int>   _onTierChanged;
+        private Action<float>      _onPowerDrill;
+        private Action<bool>       _onDangerZone;
         private Action<int>        _onNewDepth;
         private Action<int>        _onEndlessDepth;
         private Action<int, int>   _onDiamondCollected;
@@ -139,10 +149,13 @@ namespace HollowLines.View
         private static readonly Color ColKill   = new Color(0.55f, 0.95f, 0.35f);
         private static readonly Color ColBoom   = new Color(0.78f, 0.45f, 1.00f);
 
-        // Streak tint mirrors the BoardView block palette so "×5" reads as "×5 amber".
-        private static readonly Color ColBlockA = new Color(0.94f, 0.62f, 0.15f); // amber
-        private static readonly Color ColBlockB = new Color(0.11f, 0.62f, 0.46f); // teal
-        private static readonly Color ColBlockC = new Color(0.83f, 0.33f, 0.49f); // pink
+        // R7.9 momentum tiers (§5.9): yellow → orange → red. None of them is a block colour — momentum
+        // is no longer about colour.
+        private static readonly Color ColTier1 = new Color(1.00f, 0.90f, 0.30f);
+        private static readonly Color ColTier2 = new Color(1.00f, 0.56f, 0.12f);
+        private static readonly Color ColTier3 = new Color(1.00f, 0.22f, 0.16f);
+        private static readonly Color ColGraze = new Color(0.45f, 0.95f, 1.00f);
+        private static readonly Color ColFall  = new Color(0.72f, 0.80f, 0.90f);
 
         // ─────────────────────────────────────────────────────────────────────
         // Public API
@@ -155,7 +168,7 @@ namespace HollowLines.View
         public void Init(ScoreSystem score, AirSystem air, HealthSystem health, ChainTracker chain,
                          StreakTracker streak = null, DepthTracker depth = null,
                          CampaignManager campaign = null, PanelSettings ps = null,
-                         DiamondSystem diamonds = null)
+                         DiamondSystem diamonds = null, MomentumTracker momentum = null)
         {
             _score    = score;
             _air      = air;
@@ -165,6 +178,7 @@ namespace HollowLines.View
             _depth    = depth;
             _campaign = campaign;
             _diamonds = diamonds;
+            _momentum = momentum;
             if (ps != null) panelSettings = ps;
         }
 
@@ -225,8 +239,9 @@ namespace HollowLines.View
             _onHeartsChanged  = h   => RefreshHearts(h);
             _onChainLink      = step => ShowChain(step);
             _onChainCompleted = _    => _chainHideTimer = ChainHoldSeconds;
-            _onStreakGrew     = count => ShowStreak(count);
-            _onStreakBroken   = lost  => BreakStreak(lost);
+            _onTierChanged    = OnTierChanged;
+            _onPowerDrill     = OnPowerDrill;
+            _onDangerZone     = SetDangerBadge;
             _onNewDepth       = row   => RefreshDepth(row);
             _onEndlessDepth   = depth => RefreshDepth(depth);
             _onDiamondCollected = (collected, total) => RefreshDiamonds(collected, total);
@@ -239,11 +254,12 @@ namespace HollowLines.View
                 _chain.LinkAdded      += _onChainLink;
                 _chain.ChainCompleted += _onChainCompleted;
             }
-            if (_streak != null)
+            if (_momentum != null)
             {
-                _streak.StreakGrew   += _onStreakGrew;
-                _streak.StreakBroken += _onStreakBroken;
+                _momentum.TierChanged         += _onTierChanged;
+                _momentum.PowerDrillActivated += _onPowerDrill;
             }
+            _air.DangerZoneChanged += _onDangerZone;
             if (_diamonds != null)
                 _diamonds.DiamondCollected += _onDiamondCollected;
             SubscribeDepth();
@@ -254,7 +270,8 @@ namespace HollowLines.View
             RefreshAir(_air.Air);
             RefreshHearts(_health.Hearts);
             RefreshDepth(CurrentDepth());
-            HideStreak();
+            HideMomentum();
+            SetDangerBadge(_air.IsDangerZone);
             RefreshDiamonds(_diamonds?.Collected ?? 0, _diamonds?.Total ?? 0);
         }
 
@@ -279,15 +296,16 @@ namespace HollowLines.View
         }
 
         /// <summary>
-        /// Call after LoadLevel(). StreakTracker.Reset()/DepthTracker.Reset() are silent by design,
-        /// so the HUD would otherwise keep showing the previous board's streak and depth. Same
-        /// story for DiamondSystem.Init() (R4) — it re-arms Collected/Total with no event.
+        /// Call after LoadLevel(). DepthTracker.Reset() is silent by design, so the HUD would otherwise
+        /// keep the previous board's depth; same for DiamondSystem.Init() (R4). Momentum is re-read rather
+        /// than hidden: it survives an endless seam (R7.6), and a fresh board's Reset already fired its events.
         /// </summary>
         public void OnLevelLoaded()
         {
-            if (_streakLabel == null) return; // UI not built yet — the first load runs during Awake
+            if (_momentumLabel == null) return; // UI not built yet — the first load runs during Awake
 
-            HideStreak();
+            _powerFlash = 0f;
+            ShowMomentum(_momentum?.CurrentTier ?? 0, punch: false);
             RefreshDepth(CurrentDepth());
             RefreshDiamonds(_diamonds?.Collected ?? 0, _diamonds?.Total ?? 0);
         }
@@ -302,11 +320,12 @@ namespace HollowLines.View
                 _chain.LinkAdded      -= _onChainLink;
                 _chain.ChainCompleted -= _onChainCompleted;
             }
-            if (_streak != null)
+            if (_momentum != null)
             {
-                _streak.StreakGrew   -= _onStreakGrew;
-                _streak.StreakBroken -= _onStreakBroken;
+                _momentum.TierChanged         -= _onTierChanged;
+                _momentum.PowerDrillActivated -= _onPowerDrill;
             }
+            if (_air != null) _air.DangerZoneChanged -= _onDangerZone;
             if (_diamonds != null)
                 _diamonds.DiamondCollected -= _onDiamondCollected;
             UnsubscribeDepth();
@@ -319,7 +338,8 @@ namespace HollowLines.View
             TickAirBufferCue(dt);
             TickBreatheHint(dt);
             TickDrillPopups(dt);
-            TickStreakCounter(dt);
+            TickMomentumCounter(dt);
+            TickDangerBadge();
 
             if (_chainHideTimer > 0f)
             {
@@ -440,50 +460,72 @@ namespace HollowLines.View
         }
 
         /// <summary>
-        /// R6.7: shown from ×2 (a ×1 "streak" is just the colour you're on), 30 → 60 px as the run grows
-        /// (capped at ×10), with a scale punch on every step.
+        /// R7.9: TierChanged drives the counter. Tier-ups punch; dropping to Tier 0 cracks the old number.
+        /// The Power Drill's 3 → 1 drop is held back while "×6" flashes (PowerFlashSeconds), so the ×6 is
+        /// actually seen — TickMomentumCounter re-reads the live tier when the flash ends.
         /// </summary>
-        private void ShowStreak(int count)
+        private void OnTierChanged(int from, int to)
         {
-            if (count < 2)
+            if (to == 0)
             {
-                HideStreak();
+                _powerFlash = 0f;
+                BreakMomentum(from);
+                return;
+            }
+            if (_powerFlash > 0f)
+                return; // shown when the flash ends
+            ShowMomentum(to, punch: to > from);
+        }
+
+        private void OnPowerDrill(float mult)
+        {
+            ShowMomentum(3, punch: true);
+            _powerFlash = 1f;
+            ShowPopup($"POWER DRILL ×{mult:0} !", ColTier3);
+        }
+
+        /// <summary>"×2 / ×4 / ×6" in the tier colour, 38 → 54 px; hidden at Tier 0.</summary>
+        private void ShowMomentum(int tier, bool punch = true)
+        {
+            if (tier <= 0)
+            {
+                HideMomentum();
                 return;
             }
 
-            _streakLabel.text           = $"×{count}";
-            _streakLabel.style.color    = new StyleColor(Color.Lerp(StreakColor(), Color.white, 0.15f));
-            _streakLabel.style.fontSize = 30f + 3f * Mathf.Min(count, 10);
-            _streakLabel.style.display  = DisplayStyle.Flex;
-            _streakPunch = 1f;
+            _momentumLabel.text           = $"×{TierMultiplier(tier)}";
+            _momentumLabel.style.color    = new StyleColor(TierColor(tier));
+            _momentumLabel.style.fontSize = 30f + 8f * tier;
+            _momentumLabel.style.display  = DisplayStyle.Flex;
+            _momentumBar.style.display    = DisplayStyle.Flex;
+            if (punch) _momentumPunch = 1f;
         }
 
-        private void HideStreak()
+        private void HideMomentum()
         {
-            _streakLabel.style.display = DisplayStyle.None;
+            _momentumLabel.style.display = DisplayStyle.None;
+            if (_momentumBar != null) _momentumBar.style.display = DisplayStyle.None;
         }
 
         /// <summary>
-        /// R6.7: StreakBroken carries the count that just ended. A ×1 ending is just a colour change —
-        /// no ceremony. A real streak cracks: a copy of the last "×N" (clipped into a left and a right
-        /// half) shakes, then the halves fall apart, tilt and fade. StreakGrew(1) for the new colour
-        /// fires right after this and keeps the live label hidden (count < 2).
+        /// R6.7 crack, now for lost momentum: a copy of the last "×N" (clipped into a left and a right half)
+        /// shakes, then the halves fall apart, tilt and fade. Only when a real tier (×2+) was showing.
         /// </summary>
-        private void BreakStreak(int lost)
+        private void BreakMomentum(int lostTier)
         {
-            if (lost >= 2 && _streakLabel.style.display == DisplayStyle.Flex)
+            if (lostTier >= 1 && _momentumLabel.style.display == DisplayStyle.Flex)
             {
-                float w = _streakLabel.resolvedStyle.width;
-                float h = _streakLabel.resolvedStyle.height;
+                float w = _momentumLabel.resolvedStyle.width;
+                float h = _momentumLabel.resolvedStyle.height;
                 if (float.IsNaN(w) || w <= 0f) w = 80f;
                 if (float.IsNaN(h) || h <= 0f) h = 40f;
 
                 _crackHalfWidth = w * 0.5f;
-                _crackColor     = _streakLabel.resolvedStyle.color;
+                _crackColor     = _momentumLabel.resolvedStyle.color;
                 foreach (Label l in new[] { _crackLeftText, _crackRightText })
                 {
-                    l.text           = _streakLabel.text;
-                    l.style.fontSize = _streakLabel.style.fontSize;
+                    l.text           = _momentumLabel.text;
+                    l.style.fontSize = _momentumLabel.style.fontSize;
                     l.style.color    = new StyleColor(_crackColor);
                     l.style.width    = w;
                 }
@@ -498,22 +540,33 @@ namespace HollowLines.View
                     half.style.height  = h;
                     half.style.display = DisplayStyle.Flex;
                 }
-                _streakBox.style.minHeight = h; // the live label hides; keep the slot while it breaks
+                _momentumBox.style.minHeight = h; // the live label hides; keep the slot while it breaks
                 _crackTimer = CrackSeconds;
             }
-            HideStreak();
+            HideMomentum();
         }
 
-        private void TickStreakCounter(float dt)
+        private void TickMomentumCounter(float dt)
         {
             if (!_built) return;
 
-            if (_streakPunch > 0f)
+            if (_momentumPunch > 0f)
             {
-                _streakPunch = Mathf.Max(0f, _streakPunch - dt / StreakPunchSeconds);
-                float k = 1f + 0.35f * _streakPunch * _streakPunch;
-                _streakLabel.style.scale = new StyleScale(new Scale(new Vector3(k, k, 1f)));
+                _momentumPunch = Mathf.Max(0f, _momentumPunch - dt / MomentumPunchSeconds);
+                float k = 1f + 0.35f * _momentumPunch * _momentumPunch;
+                _momentumLabel.style.scale = new StyleScale(new Scale(new Vector3(k, k, 1f)));
             }
+
+            if (_powerFlash > 0f)
+            {
+                _powerFlash = Mathf.Max(0f, _powerFlash - dt / PowerFlashSeconds);
+                bool on = Mathf.Repeat(Time.time * 16f, 1f) < 0.5f; // fast red/white strobe
+                _momentumLabel.style.color = new StyleColor(on ? Color.white : ColTier3);
+                if (_powerFlash <= 0f)
+                    ShowMomentum(_momentum?.CurrentTier ?? 0, punch: false); // the held 3 → 1 drop lands now
+            }
+
+            TickMomentumBar();
 
             if (_crackTimer <= 0f) return;
             _crackTimer = Mathf.Max(0f, _crackTimer - dt);
@@ -523,7 +576,7 @@ namespace HollowLines.View
             {
                 _crackLeft.style.display   = DisplayStyle.None;
                 _crackRight.style.display  = DisplayStyle.None;
-                _streakBox.style.minHeight = StyleKeyword.Null;
+                _momentumBox.style.minHeight = StyleKeyword.Null;
                 return;
             }
 
@@ -555,53 +608,120 @@ namespace HollowLines.View
             half.style.opacity   = alpha;
         }
 
-        private Color StreakColor()
+        /// <summary>
+        /// Progress toward the Power Drill (0 → Tier3Threshold), tier-coloured. Blinks when the momentum
+        /// window has less than WindowWarnSeconds left — "drill now or lose it". Frozen in freefall,
+        /// because the window is (§M3.3).
+        /// </summary>
+        private void TickMomentumBar()
         {
-            switch (_streak?.CurrentColor)
+            if (_momentum == null || _momentumBar.style.display.value != DisplayStyle.Flex) return;
+
+            bool flashing = _powerFlash > 0f;
+            float fill = flashing ? 1f : Mathf.Clamp01(_momentum.Progress / MomentumTracker.Tier3Threshold);
+            _momentumBarFill.style.width = new StyleLength(new Length(fill * 100f, LengthUnit.Percent));
+            _momentumBarFill.style.backgroundColor = new StyleColor(TierColor(flashing ? 3 : _momentum.CurrentTier));
+
+            bool warn = !flashing && _momentum.TimeRemaining < WindowWarnSeconds;
+            bool blinkOff = warn && Mathf.Repeat(Time.time * 12f, 1f) < 0.5f;
+            _momentumBarFill.style.opacity = blinkOff ? 0.25f : 1f;
+        }
+
+        private static int TierMultiplier(int tier) => tier >= 3 ? 6 : tier == 2 ? 4 : tier == 1 ? 2 : 1;
+
+        private static Color TierColor(int tier)
+        {
+            switch (tier)
             {
-                case CellType.ColorA: return ColBlockA;
-                case CellType.ColorB: return ColBlockB;
-                case CellType.ColorC: return ColBlockC;
-                default:              return Color.white;
+                case 1:  return ColTier1;
+                case 2:  return ColTier2;
+                case 3:  return ColTier3;
+                default: return Color.white;
             }
+        }
+
+        private static int TierForMultiplier(int mult) => mult >= 6 ? 3 : mult >= 4 ? 2 : mult >= 2 ? 1 : 0;
+
+        // ── R7.9 Danger Zone badge ────────────────────────────────────────────
+
+        private void SetDangerBadge(bool inDanger)
+        {
+            if (_dangerBadge == null) return;
+            _dangerBadge.style.display = inDanger ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        /// <summary>~1 Hz pulse, in step with the planned R7.10 vignette and R7.11 heartbeat.</summary>
+        private void TickDangerBadge()
+        {
+            if (!_built || _dangerBadge.style.display.value != DisplayStyle.Flex) return;
+            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 2f * Mathf.PI);
+            _dangerBadge.style.opacity = Mathf.Lerp(0.55f, 1f, pulse);
+            float k = 1f + 0.08f * pulse;
+            _dangerBadge.style.scale = new StyleScale(new Scale(new Vector3(k, k, 1f)));
         }
 
         /// <summary>
         /// R6.6: a small "+N" rising off a drilled cell. `points` is what the drill actually earned
-        /// (GameBootstrap measures the score delta, so streak × base and a drilled diamond's +150 are
-        /// both included without duplicating any formula here). Coloured and sized by the streak;
-        /// "×N" is appended from a ×2 streak up, so the multiplier is visible, not just the total.
-        /// Call after StreakTracker.NotifyDrill so the colour is the current streak's.
+        /// (GameBootstrap measures the score delta, so a drilled diamond's +150 is included without
+        /// duplicating a formula here).
         ///
-        /// `buildsStreak` = this drill was a downward drill on a fusable colour, i.e. it grew or reset
-        /// the streak. A lateral/upward drill (v3.1: streak-neutral) still PAYS the current multiplier
-        /// — rule 1, unchanged — but showing "×4" in teal over a pink block it doesn't belong to read
-        /// as "this block is part of the run". So those get a plain white "+40": same points, no claim.
-        /// (Dev playtest, 2026-10-05 — option A. See refactoring-plan.md R6.11 note before changing.)
+        /// R7.9b: every multiplier that applied is shown as its own factor, in the colour of the HUD
+        /// element that causes it — momentum in its tier colour (the counter), cascade in gold (the
+        /// CASCADE label), danger in red (the badge). "+40 ×2 ×2" reads as 10 × 2 × 2: the player can do
+        /// the maths and see where each ×2 came from. Factors of ×1 are left out.
         /// </summary>
-        public void ShowDrillPopup(Vector3 worldCellCentre, int points, int streak, bool buildsStreak = true)
+        public void ShowDrillPopup(Vector3 worldCellCentre, int points, int multiplier, bool showMultiplier = true,
+                                   int cascade = 1, bool danger = false)
         {
             if (!_built || points <= 0) return;
+
+            int tier = showMultiplier && multiplier >= 2 ? TierForMultiplier(multiplier) : 0;
+            var text = new System.Text.StringBuilder($"+{points}");
+            // Tier 3 red is lifted toward salmon so it never reads as the danger factor's saturated red.
+            if (tier > 0)    text.Append(Factor(multiplier, Color.Lerp(TierColor(tier), Color.white, tier >= 3 ? 0.45f : 0.15f)));
+            if (cascade > 1) text.Append(Factor(cascade, ColGold));
+            if (danger)      text.Append($" <b>{Factor(ScoreSystem.DangerZoneMultiplier, ColDanger).Substring(1)}</b>");
+
+            // The "+N" itself takes the tier colour (lifted toward white for dark blocks), white at ×1.
+            Color color = tier > 0 ? Color.Lerp(TierColor(tier), Color.white, 0.2f) : Color.white;
+            ShowWorldPopup(worldCellCentre, text.ToString(), color, 18f + 3f * tier);
+        }
+
+        /// <summary>" ×N" as a rich-text run in its own colour.</summary>
+        private static string Factor(int value, Color color) =>
+            $" <color=#{ColorUtility.ToHtmlStringRGB(color)}>×{value}</color>";
+
+        /// <summary>R7.9: "+50 GRAZE" — cyan, a little above the drill popup on the same cell.</summary>
+        public void ShowGrazePopup(Vector3 worldCellCentre) =>
+            ShowWorldPopup(worldCellCentre, $"+{ScoreSystem.GrazePoints} GRAZE", ColGraze, 20f, yOffsetCells: 0.45f);
+
+        /// <summary>R7.9: "+15" per void cell fallen through — small and pale, they stack up the shaft.</summary>
+        public void ShowFreefallPopup(Vector3 worldCellCentre) =>
+            ShowWorldPopup(worldCellCentre, $"+{ScoreSystem.FreefallPointsPerCell}", ColFall, 14f);
+
+        /// <summary>One pooled, world-anchored popup (shared by drill / graze / freefall).</summary>
+        private void ShowWorldPopup(Vector3 world, string text, Color color, float fontSize, float yOffsetCells = 0f)
+        {
+            if (!_built) return;
 
             DrillPopup p = null;
             foreach (DrillPopup c in _drillPopups)
                 if (!c.Live) { p = c; break; }
             if (p == null)
             {
-                // Pool exhausted (very fast drilling): recycle the oldest one.
+                // Pool exhausted (very fast drilling / long fall): recycle the oldest one.
                 p = _drillPopups[0];
                 foreach (DrillPopup c in _drillPopups)
                     if (c.Age > p.Age) p = c;
             }
 
-            bool streaking = buildsStreak && streak >= 2;
-            p.Label.text = streaking ? $"+{points} ×{streak}" : $"+{points}";
-            // Lifted toward white: raw block colours (teal especially) were too dark on the black well.
-            p.Label.style.color    = new StyleColor(streaking ? Color.Lerp(StreakColor(), Color.white, 0.3f) : Color.white);
-            p.Label.style.fontSize = 18f + 2f * Mathf.Min(streaking ? streak : 1, 6);
-            p.World = worldCellCentre;
-            p.Age   = 0f;
-            p.Live  = true;
+            p.Label.text           = text;
+            p.Label.style.color    = new StyleColor(color);
+            p.Label.style.fontSize = fontSize;
+            p.World   = world;
+            p.YOffset = yOffsetCells;
+            p.Age     = 0f;
+            p.Live    = true;
             p.Label.style.display = DisplayStyle.Flex;
             PlaceDrillPopup(p);
         }
@@ -630,7 +750,7 @@ namespace HollowLines.View
             if (cam == null || _root?.panel == null) return;
 
             float t = p.Age / DrillPopupLife;
-            Vector3 world = p.World + new Vector3(DrillPopupOffsetX, DrillPopupStartY + DrillPopupRise * (1f - (1f - t) * (1f - t)), 0f);
+            Vector3 world = p.World + new Vector3(DrillPopupOffsetX, DrillPopupStartY + p.YOffset + DrillPopupRise * (1f - (1f - t) * (1f - t)), 0f);
             Vector2 panelPos = RuntimePanelUtils.CameraTransformWorldToPanel(_root.panel, world, cam);
 
             p.Label.style.left    = panelPos.x;
@@ -769,7 +889,7 @@ namespace HollowLines.View
         private void ShowChain(int step)
         {
             if (step < 2) return; // R7.5b: bursts are links now — a single one is not a cascade
-            _chainLabel.text                  = $"×{step}";
+            _chainLabel.text                  = $"CASCADE ×{step}"; // R7.9 (§5.9)
             _chainLabel.style.display         = DisplayStyle.Flex;
             _chainHideTimer                   = 0f; // cancel any pending hide
         }
@@ -851,25 +971,44 @@ namespace HollowLines.View
             _scoreLabel.style.unityFontStyleAndWeight     = FontStyle.Bold;
             panel.Add(_scoreLabel);
 
-            // Streak counter lives under the score (§5.9), hidden below ×2. R6.7: inside a relative box
-            // that also holds the two clipped halves of the crack effect, laid exactly over the label.
-            _streakBox = new VisualElement();
-            _streakBox.style.position  = Position.Relative;
-            _streakBox.style.marginTop = 2f;
-            panel.Add(_streakBox);
+            // Momentum counter lives under the score (§5.9), hidden at Tier 0. Inside a relative box that
+            // also holds the two clipped halves of the crack effect (R6.7), laid exactly over the label.
+            _momentumBox = new VisualElement();
+            _momentumBox.style.position  = Position.Relative;
+            _momentumBox.style.marginTop = 2f;
+            panel.Add(_momentumBox);
 
-            _streakLabel = new Label("×0");
-            _streakLabel.style.fontSize                = 30f;
-            _streakLabel.style.color                   = new StyleColor(ColAmber);
-            _streakLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _streakLabel.style.unityTextOutlineWidth   = 0.15f;
-            _streakLabel.style.unityTextOutlineColor   = new StyleColor(Color.black);
-            _streakLabel.style.transformOrigin         = new TransformOrigin(new Length(0f), new Length(50f, LengthUnit.Percent));
-            _streakLabel.style.display                 = DisplayStyle.None;
-            _streakBox.Add(_streakLabel);
+            _momentumLabel = new Label("×0");
+            _momentumLabel.style.fontSize                = 30f;
+            _momentumLabel.style.color                   = new StyleColor(ColAmber);
+            _momentumLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _momentumLabel.style.unityTextOutlineWidth   = 0.15f;
+            _momentumLabel.style.unityTextOutlineColor   = new StyleColor(Color.black);
+            _momentumLabel.style.transformOrigin         = new TransformOrigin(new Length(0f), new Length(50f, LengthUnit.Percent));
+            _momentumLabel.style.display                 = DisplayStyle.None;
+            _momentumBox.Add(_momentumLabel);
 
-            (_crackLeft,  _crackLeftText)  = BuildCrackHalf(_streakBox);
-            (_crackRight, _crackRightText) = BuildCrackHalf(_streakBox);
+            (_crackLeft,  _crackLeftText)  = BuildCrackHalf(_momentumBox);
+            (_crackRight, _crackRightText) = BuildCrackHalf(_momentumBox);
+
+            // R7.9: progress toward the Power Drill; blinks when the window is closing.
+            _momentumBar = new VisualElement();
+            _momentumBar.style.width           = 120f;
+            _momentumBar.style.height          = 6f;
+            _momentumBar.style.marginTop       = 3f;
+            _momentumBar.style.backgroundColor = new StyleColor(new Color(0.12f, 0.12f, 0.12f));
+            _momentumBar.style.borderTopLeftRadius     = 3f;
+            _momentumBar.style.borderTopRightRadius    = 3f;
+            _momentumBar.style.borderBottomLeftRadius  = 3f;
+            _momentumBar.style.borderBottomRightRadius = 3f;
+            _momentumBar.style.overflow        = Overflow.Hidden;
+            _momentumBar.style.display         = DisplayStyle.None;
+            panel.Add(_momentumBar);
+
+            _momentumBarFill = new VisualElement();
+            _momentumBarFill.style.height = new StyleLength(new Length(100f, LengthUnit.Percent));
+            _momentumBarFill.style.width  = new StyleLength(new Length(0f, LengthUnit.Percent));
+            _momentumBar.Add(_momentumBarFill);
 
             return panel;
         }
@@ -960,7 +1099,7 @@ namespace HollowLines.View
             _chainLabel.style.left        = 0f;
             _chainLabel.style.right       = 0f;
             _chainLabel.style.top         = new StyleLength(new Length(35f, LengthUnit.Percent));
-            _chainLabel.style.fontSize    = 72f;
+            _chainLabel.style.fontSize    = 56f;
             _chainLabel.style.color       = new StyleColor(ColGold);
             _chainLabel.style.unityFontStyleAndWeight = FontStyle.Bold;
             _chainLabel.style.unityTextAlign          = TextAnchor.MiddleCenter;
@@ -1064,6 +1203,29 @@ namespace HollowLines.View
             _breatheHint.style.display                 = DisplayStyle.None;
             _breatheHint.pickingMode                   = PickingMode.Ignore;
             hintRow.Add(_breatheHint);
+
+            // R7.9 Danger Zone badge: right end, just above the bar — the centre belongs to the
+            // breathe hint, and the two show together (danger is < 15 %, the hint < 30 %).
+            _dangerBadge = new Label("×2 DANGER");
+            _dangerBadge.style.position                = Position.Absolute;
+            _dangerBadge.style.right                   = 16f;
+            _dangerBadge.style.bottom                  = 34f;
+            _dangerBadge.style.fontSize                = 22f;
+            _dangerBadge.style.color                   = new StyleColor(Color.white);
+            _dangerBadge.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _dangerBadge.style.backgroundColor         = new StyleColor(ColDanger);
+            _dangerBadge.style.paddingTop              = 3f;
+            _dangerBadge.style.paddingBottom           = 3f;
+            _dangerBadge.style.paddingLeft             = 10f;
+            _dangerBadge.style.paddingRight            = 10f;
+            _dangerBadge.style.borderTopLeftRadius     = 6f;
+            _dangerBadge.style.borderTopRightRadius    = 6f;
+            _dangerBadge.style.borderBottomLeftRadius  = 6f;
+            _dangerBadge.style.borderBottomRightRadius = 6f;
+            _dangerBadge.style.transformOrigin         = new TransformOrigin(new Length(100f, LengthUnit.Percent), new Length(50f, LengthUnit.Percent));
+            _dangerBadge.style.display                 = DisplayStyle.None;
+            _dangerBadge.pickingMode                   = PickingMode.Ignore;
+            root.Add(_dangerBadge);
         }
 
         // ─────────────────────────────────────────────────────────────────────

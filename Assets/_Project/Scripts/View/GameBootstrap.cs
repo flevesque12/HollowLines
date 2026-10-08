@@ -203,10 +203,11 @@ namespace HollowLines.View
             };
 
             _grazeSystem = new GrazeSystem();
-            _grazeSystem.GrazeTriggered += _ =>
+            _grazeSystem.GrazeTriggered += cell =>
             {
                 _scoreSystem.AwardGraze();                                     // +50 flat (⚡D3)
                 _momentumTracker.ExtendTimer(GrazeSystem.MomentumExtension);   // +0.3 s window
+                _hud.ShowGrazePopup(CellToWorld(cell));                        // R7.9
             };
 
             _depthTracker = new DepthTracker();
@@ -246,7 +247,7 @@ namespace HollowLines.View
             _hud.Init(_scoreSystem, _airSystem, _healthSystem, null,
                       _streakTracker, _depthTracker,
                       useCampaign ? _campaign : null, hudPanelSettings,
-                      _diamondSystem);
+                      _diamondSystem, _momentumTracker);
             _hud.SetDepthSource(_endlessMode ? _endless : null);
 
             var screensGo = new GameObject("Screens");
@@ -461,7 +462,8 @@ namespace HollowLines.View
                 int momentum = Mathf.RoundToInt(_momentumTracker.Multiplier);
                 int earned   = _scoreSystem.Score - scoreBefore - (grazed ? ScoreSystem.GrazePoints : 0);
                 _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(drilledCell)),
-                                    earned, momentum, buildsStreak: momentum > 1);
+                                    earned, momentum, showMultiplier: momentum > 1,
+                                    cascade: _scoreSystem.CascadeMultiplier, danger: _scoreSystem.DangerZone);
 
                 // ⚡D1: the whole Power Drill burst — this drill, the pierced 2nd block and the mini
                 // shockwave — is paid at ×6. Only then does the cycle restart at Tier 1.
@@ -474,7 +476,11 @@ namespace HollowLines.View
             };
 
             // v3.2 Freefall (§M3.3): +15 per void cell fallen through (never the drill's own follow-through).
-            _avatar.FreefallCell += _ => _scoreSystem.AwardFreefall();
+            _avatar.FreefallCell += _ =>
+            {
+                _scoreSystem.AwardFreefall();
+                _hud.ShowFreefallPopup(CellToWorld(_avatar.Position)); // R7.9
+            };
 
             // ── Chunk gravity + burst ────────────────────────────────────────
             _gravity.ChunkLanded += chunk =>
@@ -835,6 +841,10 @@ namespace HollowLines.View
         }
 
         /// <summary>Every damage source lands here, tagged with what hit the avatar (R6.1).</summary>
+        /// <summary>World position of a cell's centre (popups ride with the board).</summary>
+        private Vector3 CellToWorld(GridPos cell) =>
+            _boardViewGo.transform.TransformPoint(BoardView.ToLocal(cell));
+
         /// <summary>
         /// v3.2 Power Drill (R7.8, drill-momentum.md §M2 / ⚡D1): pierce the NEXT block in the drill's
         /// direction (straight down = "le bloc en dessous"), then a radius-1 mini shockwave centred on it.
@@ -877,7 +887,8 @@ namespace HollowLines.View
 
             _cameraShake.Shake(0.22f, 0.25f); // placeholder until the R7.10 Tier 3 flash
             _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(second)),
-                                _scoreSystem.Score - scoreBefore, Mathf.RoundToInt(mult), buildsStreak: true);
+                                _scoreSystem.Score - scoreBefore, Mathf.RoundToInt(mult), showMultiplier: true,
+                                cascade: _scoreSystem.CascadeMultiplier, danger: _scoreSystem.DangerZone);
             Debug.Log($"[Momentum] Power Drill: pierced {second} ({secondType}), wave destroyed {destroyed} → +{_scoreSystem.Score - scoreBefore}");
         }
 
