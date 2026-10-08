@@ -577,7 +577,8 @@ namespace HollowLines.View
             var vfxGo = new GameObject("VfxManager");
             vfxGo.transform.SetParent(_boardViewGo.transform, false);
             vfxGo.AddComponent<VfxManager>().Init(_avatar, _collapse, _chainTracker, _bombSystem, _grid,
-                                                  _gravity, _streakTracker, avatarView, _enemySystem);
+                                                  _gravity, _momentumTracker, avatarView, _enemySystem,
+                                                  _fissureTracker, _airSystem);
 
             // Enemy sprites live under the board view, so they're torn down with it on the next load.
             var enemyViewGo = new GameObject("EnemyView");

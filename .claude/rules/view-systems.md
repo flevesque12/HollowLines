@@ -322,6 +322,17 @@ public enum ScoreSource { Drill, Burst, Bomb, Depth, PerfectClear, Diamond, Enem
     Shader overlay or sprite; second fissure on same block → block breaks.
   - **Tier 3 Power Drill flash:** white screen flash + light shake on the double-drill.
   - **Danger Zone vignette:** red pulsing fullscreen overlay at ~1 Hz when air < 15%.
+  > **✅R7.10 shipped (2026-10-08).** Trail = last drilled **colour** block, interval ÷ tier; the avatar
+  > takes the tier colour (same yellow/orange/red as the HUD counter). **Fissure overlay lives in
+  > VfxManager, not BoardView** (deviation from §M8): VfxManager already owns per-cell overlays (blast
+  > frames), so BoardView stays untouched — procedural 16×16 hairline crack, quarter-turned per cell,
+  > sortingOrder 3, pruned each frame when `GetFissures` reads 0; a break throws crumbs + a ripple.
+  > Power Drill = white board flash (the chain flash, generalised to `ShowScreenFlash(color, a)`) + white
+  > ripples. Vignette = procedural radial sprite parented to the camera and sized to its ortho view
+  > (sortingOrder 30), alpha 0.30-0.60 at ~1 Hz; the fade runs on **unscaled** time. First pass started
+  > the ramp at 38 % of the radius and reddened the whole screen (screenshot) → now 62 %.
+  > `Init` takes `MomentumTracker` (replaces `StreakTracker`), `FissureTracker`, `AirSystem`; the
+  > persistent trackers are unsubscribed in `OnDestroy` (this view is rebuilt per board).
 - Bomb chain flash: screen flash on sympathetic detonation, intensity scales with chain mult.
 - Shockwave ripple: visual wave expanding from burst/bomb center (1 cell radius, 0.2 s).
 - **Bomb fuse telegraph** (added 2026-07-23): one pulsing halo per armed bomb, driven by

@@ -913,3 +913,19 @@ popups. Not exercised live: the graze popup and "CASCADE ×N" (need an enemy/bom
 
 **Tooling note:** grabbing a screenshot right after a long `execute_code` logs "PlayerLoop called
 recursively" and can capture a frame without the UI — take a second screenshot; the game is fine.
+
+---
+
+### R7.10 — VfxManager momentum effects — delivered 2026-10-08
+
+View only, 471/471. Details in §5.10. Streak glow/trail removed from VfxManager (StreakTracker no longer
+passed). **Verified in play mode (screenshots):** Tier 2 orange avatar tint; crack overlays on amber and
+pink blocks (dark, readable on both); Power Drill white board flash; Danger Zone vignette — first pass far
+too strong (ramp from 38 % of the radius reddened everything), retuned to 62 % and alpha 0.30-0.60:
+red edges, board fully readable, in step with the HUD badge. Zero console errors.
+
+Notes:
+- The level-2 crack sprite exists but is rarely seen: the 2nd fissure breaks the block in the same call.
+- The Power Drill flash covers the board (the chain flash's extent), not the full screen — same as bomb chains.
+- **For R7.12:** the run summary still lists "MEILLEUR STREAK —" (UIScreenManager reads
+  `ScoreSystem.BestStreak`). Switch it to `PeakMomentum` / Grazes / Freefall (§5.12) during the cleanup.

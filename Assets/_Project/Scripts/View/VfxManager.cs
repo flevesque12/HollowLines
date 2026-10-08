@@ -7,7 +7,9 @@ namespace HollowLines.View
 {
     /// <summary>
     /// Gameplay VFX: drill flash, perfect-clear dust, bomb burst, chain glow, plus the v3
-    /// effects — chunk-burst debris, shockwave ripples, streak glow/trail and bomb chain flash.
+    /// effects — chunk-burst debris, shockwave ripples and bomb chain flash, and the v3.2 momentum
+    /// effects (R7.10): Tier 1+ trail + avatar tint, Tier 2 fissure overlays, Tier 3 Power Drill flash,
+    /// and the Danger Zone vignette.
     /// Grid-dependent — created as a child of BoardView in LoadLevel() and torn down with it,
     /// same lifecycle as AvatarView. Subscribes to Core events itself (like ChainTracker does to
     /// CollapseSystem) so GameBootstrap only has to instantiate it.
@@ -45,13 +47,19 @@ namespace HollowLines.View
         [Tooltip("End diameter in cells. The shockwave reaches 1 cell around the center → 3 cells across.")]
         [SerializeField] private float rippleEndSize = 3f;
 
-        [Header("— Streak Glow (v3) —")]
-        [Tooltip("Streak step at which the avatar starts taking the streak color.")]
-        [SerializeField] private int streakTintStep = 3;
-        [Tooltip("Streak step at which the avatar starts leaving a particle trail.")]
-        [SerializeField] private int streakTrailStep = 8;
-        [SerializeField] private float trailInterval = 0.06f;
+        [Header("— Momentum (v3.2, R7.10) —")]
+        [Tooltip("Seconds between trail particles at Tier 1; halved at Tier 2, thirded at Tier 3.")]
+        [SerializeField] private float trailInterval = 0.09f;
         [SerializeField] private float trailDuration = 0.35f;
+        [SerializeField] private Color fissureColor  = new Color(0.05f, 0.03f, 0.02f);
+        [SerializeField] private Color powerFlashColor = Color.white;
+        [SerializeField] private float powerFlashIntensity = 0.55f;
+
+        [Header("— Danger Zone Vignette (v3.2, R7.10) —")]
+        [SerializeField] private Color vignetteColor = new Color(0.95f, 0.08f, 0.05f);
+        [Tooltip("Vignette alpha range over one ~1 Hz pulse.")]
+        [SerializeField] private Vector2 vignetteAlpha = new Vector2(0.30f, 0.60f);
+        [SerializeField] private float vignetteFadeSpeed = 3f;
 
         [Header("— Bomb Chain Flash (v3) —")]
         [SerializeField] private Color chainFlashColor = new Color(1f, 0.75f, 0.35f);
@@ -106,7 +114,9 @@ namespace HollowLines.View
         private BombSystem _bombs;
         private GridModel _grid;
         private GravitySystem _gravity;
-        private StreakTracker _streak;
+        private MomentumTracker _momentum;   // persistent — MUST be unsubscribed in OnDestroy (this view is per board)
+        private FissureTracker  _fissures;   // per board
+        private AirSystem       _air;        // persistent
         private AvatarView _avatarView;
 
         private SpriteRenderer _glow;
@@ -115,8 +125,19 @@ namespace HollowLines.View
         private SpriteRenderer _flash;          // full-screen bomb chain flash
         private Coroutine _flashRoutine;
 
-        private int   _currentStreak;
         private float _trailTimer;
+        private Color _trailColor = Color.white; // colour of the last drilled block (§M8)
+
+        // Tier 2 fissure overlays, one per cracked cell; polled each frame so a drilled / broken /
+        // fallen block takes its crack with it (fissures are keyed by position, §M2).
+        private readonly Dictionary<GridPos, SpriteRenderer> _fissureOverlays = new Dictionary<GridPos, SpriteRenderer>();
+        private readonly List<GridPos> _fissureStale = new List<GridPos>();
+        private static Sprite _fissureSprite1, _fissureSprite2;
+
+        // Danger Zone vignette — parented to the camera (the board scrolls under it), torn down with this view.
+        private SpriteRenderer _vignette;
+        private float _vignetteLevel;   // 0 → 1 eased presence
+        private static Sprite _vignetteSprite;
 
         // One pulsing halo per armed bomb, keyed by its grid cell. FuseProgress feeds the fraction;
         // Update() animates the pulse; a bomb that stops reporting (detonated, disarmed, or shifted by
@@ -176,8 +197,9 @@ namespace HollowLines.View
             new System.Collections.Generic.Dictionary<int, SpriteRenderer>();
 
         public void Init(AvatarModel avatar, CollapseSystem collapse, ChainTracker chain, BombSystem bombs,
-                         GridModel grid, GravitySystem gravity = null, StreakTracker streak = null,
-                         AvatarView avatarView = null, EnemySystem enemies = null)
+                         GridModel grid, GravitySystem gravity = null, MomentumTracker momentum = null,
+                         AvatarView avatarView = null, EnemySystem enemies = null,
+                         FissureTracker fissures = null, AirSystem air = null)
         {
             _avatar     = avatar;
             _collapse   = collapse;
@@ -185,7 +207,9 @@ namespace HollowLines.View
             _bombs      = bombs;
             _grid       = grid;
             _gravity    = gravity;
-            _streak     = streak;
+            _momentum   = momentum;
+            _fissures   = fissures;
+            _air        = air;
             _avatarView = avatarView;
             _enemies    = enemies;
 
@@ -204,10 +228,16 @@ namespace HollowLines.View
             }
             _bombs.DiamondLiberated += OnDiamondLiberated;
 
-            if (_streak != null)
+            if (_momentum != null)
             {
-                _streak.StreakGrew   += OnStreakGrew;
-                _streak.StreakBroken += OnStreakBroken;
+                _momentum.TierChanged         += OnTierChanged;
+                _momentum.PowerDrillActivated += OnPowerDrill;
+                OnTierChanged(0, _momentum.CurrentTier); // momentum survives an endless seam (R7.6)
+            }
+            if (_fissures != null)
+            {
+                _fissures.FissureAdded += OnFissureAdded;
+                _fissures.FissureBroke += OnFissureBroke;
             }
 
             if (_enemies != null)
@@ -220,6 +250,7 @@ namespace HollowLines.View
 
             BuildGlowSprite();
             BuildFlashSprite();
+            BuildVignette();
         }
 
         private void OnDestroy()
@@ -243,11 +274,18 @@ namespace HollowLines.View
                 _gravity.ChunkBurst       -= OnChunkBurst;
                 _gravity.DiamondLiberated -= OnDiamondLiberated;
             }
-            if (_streak != null)
+            if (_momentum != null)
             {
-                _streak.StreakGrew   -= OnStreakGrew;
-                _streak.StreakBroken -= OnStreakBroken;
+                _momentum.TierChanged         -= OnTierChanged;
+                _momentum.PowerDrillActivated -= OnPowerDrill;
             }
+            if (_fissures != null)
+            {
+                _fissures.FissureAdded -= OnFissureAdded;
+                _fissures.FissureBroke -= OnFissureBroke;
+            }
+            if (_vignette != null)
+                Destroy(_vignette.gameObject); // lives under the camera, not under this view
             if (_enemies != null)
             {
                 _enemies.EnemySpawned    -= OnEnemySpawned;
@@ -264,18 +302,29 @@ namespace HollowLines.View
             RefreshEnemyMarkers();
             AnimateBoomerGlows();
 
-            // Streak trail: a fading breadcrumb behind the driller at high streaks.
-            if (_currentStreak < streakTrailStep || _avatarView == null)
+            PruneFissureOverlays();
+            AnimateVignette();
+            TickMomentumTrail();
+        }
+
+        /// <summary>
+        /// R7.10 Tier 1+ trail (§M8): a fading breadcrumb behind the driller, in the colour of the last
+        /// drilled block, denser at each tier (interval ÷ tier).
+        /// </summary>
+        private void TickMomentumTrail()
+        {
+            int tier = _momentum?.CurrentTier ?? 0;
+            if (tier < 1 || _avatarView == null)
                 return;
 
             _trailTimer -= Time.deltaTime;
             if (_trailTimer > 0f)
                 return;
 
-            _trailTimer = trailInterval;
-            GameObject go = NewParticle("StreakTrail", _avatarView.transform.localPosition,
-                                        StreakColor(), 0.7f, 6);
-            go.transform.localScale = Vector3.one * 0.45f;
+            _trailTimer = trailInterval / tier;
+            GameObject go = NewParticle("MomentumTrail", _avatarView.transform.localPosition,
+                                        _trailColor, 0.7f, 6);
+            go.transform.localScale = Vector3.one * (0.35f + 0.08f * tier);
             StartCoroutine(FadeAndScale(go.transform, go.GetComponent<SpriteRenderer>(), trailDuration, 0.1f));
         }
 
@@ -283,6 +332,7 @@ namespace HollowLines.View
 
         private void OnDrilled(GridPos cell, CellType oldType, DrillDirection direction)
         {
+            if (oldType.CanFuse()) _trailColor = BlockColor(oldType); // non-colour blocks keep the last colour
             SpawnFlash(cell);
             if (oldType == CellType.Diamond) SpawnDiamondSparkle(cell);
         }
@@ -320,7 +370,7 @@ namespace HollowLines.View
             if (chainMult <= 1) return;
 
             float intensity = Mathf.Clamp01(0.12f + (chainMult - 1) * 0.10f);
-            ShowChainFlash(intensity);
+            ShowScreenFlash(chainFlashColor, intensity);
         }
 
         /// <summary>
@@ -356,26 +406,184 @@ namespace HollowLines.View
             SpawnRipple(CenterOf(cells), tint);
         }
 
-        private void OnStreakGrew(int count)
-        {
-            _currentStreak = count;
-            if (_avatarView == null) return;
+        // ── v3.2 momentum (R7.10) ────────────────────────────────────────
 
-            if (count < streakTintStep)
+        /// <summary>The avatar takes the tier colour — the same yellow / orange / red as the HUD counter.</summary>
+        private void OnTierChanged(int from, int to)
+        {
+            if (_avatarView == null) return;
+            if (to <= 0)
             {
                 _avatarView.ClearStreakTint();
                 return;
             }
-
-            // Ramp the tint in from the first qualifying step up to the trail threshold.
-            float t = Mathf.InverseLerp(streakTintStep, streakTrailStep, count);
-            _avatarView.SetStreakTint(StreakColor(), Mathf.Lerp(0.45f, 1f, t));
+            _avatarView.SetStreakTint(TierColor(to), Mathf.Lerp(0.45f, 1f, (to - 1) / 2f));
         }
 
-        private void OnStreakBroken(int _)
+        /// <summary>Tier 3: white screen flash + a wide white ring off the driller (§M8). Shake is GameBootstrap's.</summary>
+        private void OnPowerDrill(float mult)
         {
-            _currentStreak = 0;
-            _avatarView?.ClearStreakTint();
+            ShowScreenFlash(powerFlashColor, powerFlashIntensity);
+            Vector3 at = _avatarView != null ? _avatarView.transform.localPosition : BoardView.ToLocal(_avatar.Position);
+            SpawnRipple(at, Color.white);
+            SpawnRipple(at + new Vector3(0f, -1f, 0f), Color.white);
+        }
+
+        /// <summary>Tier 2 crack overlay on a block (§M2). The 2nd fissure breaks the block, so only count 1 lands here.</summary>
+        private void OnFissureAdded(GridPos pos, int count)
+        {
+            if (!_fissureOverlays.TryGetValue(pos, out SpriteRenderer sr))
+            {
+                var go = new GameObject("Fissure");
+                go.transform.SetParent(transform, false);
+                go.transform.localPosition = BoardView.ToLocal(pos);
+                // Random quarter-turn so a cracked wall doesn't repeat one pattern.
+                go.transform.localRotation = Quaternion.Euler(0f, 0f, 90f * ((pos.X * 7 + pos.Y * 13) & 3));
+                sr = go.AddComponent<SpriteRenderer>();
+                sr.sortingOrder = 3; // over the tile (0) and exit glow (1), under ripples (4) and the avatar (10)
+                _fissureOverlays[pos] = sr;
+            }
+            sr.sprite = count >= 2 ? GetFissureSprite(2) : GetFissureSprite(1);
+            sr.color  = new Color(fissureColor.r, fissureColor.g, fissureColor.b, 0.9f);
+        }
+
+        /// <summary>The block snapped: crumbs + a small ripple, and the overlay goes with it.</summary>
+        private void OnFissureBroke(GridPos pos)
+        {
+            RemoveFissureOverlay(pos);
+            Vector3 origin = BoardView.ToLocal(pos);
+            for (int i = 0; i < 8; i++)
+            {
+                GameObject go = NewParticle("FissureCrumb", origin + new Vector3(Random.Range(-0.3f, 0.3f), Random.Range(-0.3f, 0.3f), 0f),
+                                            new Color(0.75f, 0.70f, 0.62f), 0.9f, 5);
+                go.transform.localScale = Vector3.one * Random.Range(0.12f, 0.25f);
+                var drift = new Vector3(Random.Range(-0.8f, 0.8f), Random.Range(-1.4f, -0.4f), 0f); // crumbs fall
+                StartCoroutine(FadeAndDrift(go.transform, go.GetComponent<SpriteRenderer>(), 0.4f, drift));
+            }
+            SpawnRipple(origin, new Color(0.85f, 0.80f, 0.70f));
+        }
+
+        /// <summary>Drops overlays whose block is gone (drilled, blasted, fell) — the tracker reads 0 there.</summary>
+        private void PruneFissureOverlays()
+        {
+            if (_fissureOverlays.Count == 0 || _fissures == null) return;
+            _fissureStale.Clear();
+            foreach (var kv in _fissureOverlays)
+                if (_fissures.GetFissures(kv.Key) == 0)
+                    _fissureStale.Add(kv.Key);
+            foreach (GridPos p in _fissureStale)
+                RemoveFissureOverlay(p);
+        }
+
+        private void RemoveFissureOverlay(GridPos pos)
+        {
+            if (!_fissureOverlays.TryGetValue(pos, out SpriteRenderer sr)) return;
+            if (sr != null) Destroy(sr.gameObject);
+            _fissureOverlays.Remove(pos);
+        }
+
+        /// <summary>
+        /// Procedural hairline crack, 16×16 (§M8 "hairline cracks, overlay sprite"). Level 1: one jagged line
+        /// from a corner toward the centre with a short branch; level 2: a second line from the opposite side.
+        /// White pixels, tinted by fissureColor — dark on every block colour.
+        /// </summary>
+        private static Sprite GetFissureSprite(int level)
+        {
+            if (level >= 2 && _fissureSprite2 != null) return _fissureSprite2;
+            if (level < 2 && _fissureSprite1 != null) return _fissureSprite1;
+
+            const int n = 16;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+            var px  = new Color32[n * n];
+            void Dot(int x, int y) { if (x >= 0 && x < n && y >= 0 && y < n) px[y * n + x] = new Color32(255, 255, 255, 255); }
+            void Path(int[] pts) { for (int i = 0; i + 1 < pts.Length; i += 2) Dot(pts[i], pts[i + 1]); }
+
+            // Main crack: top-left corner zig-zagging to the centre, plus a branch.
+            Path(new[] { 1,14, 2,13, 3,13, 4,12, 5,11, 5,10, 6,9, 7,9, 8,8, 9,7 });
+            Path(new[] { 5,11, 6,12, 7,12, 8,13 });
+            if (level >= 2)
+            {
+                // Second crack from the bottom-right, meeting the first — the block is about to go.
+                Path(new[] { 14,1, 13,2, 13,3, 12,4, 11,5, 10,5, 10,6, 9,7 });
+                Path(new[] { 12,4, 13,5, 14,6 });
+                Path(new[] { 8,8, 7,7, 6,6, 6,5 });
+            }
+
+            tex.SetPixels32(px);
+            tex.Apply();
+            Sprite sprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+            if (level >= 2) _fissureSprite2 = sprite; else _fissureSprite1 = sprite;
+            return sprite;
+        }
+
+        // ── Danger Zone vignette (R7.10, §M3.4) ──────────────────────────
+
+        /// <summary>
+        /// Red edges, clear centre, parented to the camera and sized to its orthographic view each frame
+        /// (the camera follows the avatar). Fades in/out, pulses at ~1 Hz — in step with the HUD badge.
+        /// </summary>
+        private void AnimateVignette()
+        {
+            if (_vignette == null || _air == null) return;
+
+            // Unscaled: entering the zone right before a pause still shows it (the pulse itself uses scaled time).
+            _vignetteLevel = Mathf.MoveTowards(_vignetteLevel, _air.IsDangerZone ? 1f : 0f, vignetteFadeSpeed * Time.unscaledDeltaTime);
+            if (_vignetteLevel <= 0f)
+            {
+                _vignette.enabled = false;
+                return;
+            }
+
+            Camera cam = Camera.main;
+            if (cam != null && _vignette.transform.parent != cam.transform)
+                _vignette.transform.SetParent(cam.transform, false);
+            if (cam != null && cam.orthographic)
+            {
+                float h = cam.orthographicSize * 2f;
+                _vignette.transform.localScale = new Vector3(h * cam.aspect, h, 1f);
+            }
+
+            float pulse = 0.5f + 0.5f * Mathf.Sin(Time.time * 2f * Mathf.PI);
+            float a = Mathf.Lerp(vignetteAlpha.x, vignetteAlpha.y, pulse) * _vignetteLevel;
+            _vignette.color   = new Color(vignetteColor.r, vignetteColor.g, vignetteColor.b, a);
+            _vignette.enabled = true;
+        }
+
+        private void BuildVignette()
+        {
+            var go = new GameObject("DangerVignette");
+            Camera cam = Camera.main;
+            if (cam != null) go.transform.SetParent(cam.transform, false);
+            go.transform.localPosition = new Vector3(0f, 0f, 1f); // just in front of the camera
+
+            _vignette = go.AddComponent<SpriteRenderer>();
+            _vignette.sprite       = GetVignetteSprite();
+            _vignette.sortingOrder = 30; // over the board, the avatar and the chain flash (20)
+            _vignette.enabled      = false;
+        }
+
+        /// <summary>64×64 radial ramp, alpha 0 inside ~62 % of the centre-to-corner distance, smoothstepped to 1 at the corners.</summary>
+        private static Sprite GetVignetteSprite()
+        {
+            if (_vignetteSprite != null) return _vignetteSprite;
+
+            const int n = 64;
+            var tex = new Texture2D(n, n, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var px  = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float dx = (x + 0.5f) / n * 2f - 1f;
+                    float dy = (y + 0.5f) / n * 2f - 1f;
+                    float d  = Mathf.Sqrt(dx * dx + dy * dy) / 1.4142f; // 0 centre → 1 corner
+                    float t  = Mathf.Clamp01((d - 0.62f) / (1.00f - 0.62f)); // first screenshot: 0.38 reddened the whole screen
+                    byte  al = (byte)(255f * t * t * (3f - 2f * t));
+                    px[y * n + x] = new Color32(255, 255, 255, al);
+                }
+            tex.SetPixels32(px);
+            tex.Apply();
+            _vignetteSprite = Sprite.Create(tex, new Rect(0, 0, n, n), new Vector2(0.5f, 0.5f), n);
+            return _vignetteSprite;
         }
 
         private void OnLinkAdded(int chainStep)
@@ -621,14 +829,15 @@ namespace HollowLines.View
             StartCoroutine(FadeAndScale(go.transform, sr, rippleDuration, rippleEndSize));
         }
 
-        private void ShowChainFlash(float intensity)
+        /// <summary>Full-board flash — bomb chains (warm) and the Power Drill (white, R7.10).</summary>
+        private void ShowScreenFlash(Color color, float intensity)
         {
             if (_flashRoutine != null)
             {
                 StopCoroutine(_flashRoutine);
                 _flashRoutine = null;
             }
-            _flash.color = new Color(chainFlashColor.r, chainFlashColor.g, chainFlashColor.b, intensity);
+            _flash.color = new Color(color.r, color.g, color.b, intensity);
             _flash.gameObject.SetActive(true);
             _flashRoutine = StartCoroutine(FadeFlash());
         }
@@ -827,7 +1036,12 @@ namespace HollowLines.View
             return sum / cells.Count;
         }
 
-        private Color StreakColor() => BlockColor(_streak?.CurrentColor ?? CellType.Empty);
+        // Same tier colours as the HUD counter (R7.9) — the avatar and the "×N" must agree.
+        private static readonly Color ColTier1 = new Color(1.00f, 0.90f, 0.30f);
+        private static readonly Color ColTier2 = new Color(1.00f, 0.56f, 0.12f);
+        private static readonly Color ColTier3 = new Color(1.00f, 0.22f, 0.16f);
+
+        private static Color TierColor(int tier) => tier >= 3 ? ColTier3 : tier == 2 ? ColTier2 : ColTier1;
 
         private static Color BlockColor(CellType type)
         {
