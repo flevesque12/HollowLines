@@ -94,30 +94,30 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R5.16 ✅ | AudioManager: enemy SFX (chirp, crunch, boop, boom) | Audio check |
 | R5.17 ✅ | EnemyView: enemy sprites on grid (dormant/active states) | Visual check, 333/333 |
 
-### R6 — Feedback fixes (player testing Sept 2026)  🟡 PLANNED
+### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (12/19 ✅ — see the ✅ rows)
 
 > **Source:** `FEEDBACK-COMPILATION.md` (16 items, F01–F16).
 > **Detailed prompts:** `PROMPTS-CLAUDE-CODE-R6.md` (R6.1–R6.18).
 > **Prerequisite:** R5 complete ✅.
 
-#### Sprint 1 — "Je comprends pourquoi je suis mort" (P0 — Critical)
+#### Sprint 1 — "Je comprends pourquoi je suis mort" (P0 — Critical) ✅
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
-| R6.1 | **DeathTracker** + death recap screen | F01 | 🆕 `Core/DeathTracker.cs`, `View/DeathRecapView.cs`, GameBootstrap |
-| R6.2 | **AirSystem** start buffer + reduced initial drain | F02 | `Core/AirSystem.cs`, `CampaignManager` |
-| R6.3 | **Drill-to-breathe popup** when air < 30% | F02 | `View/HUDView.cs` |
-| R6.4 | **Enemy visibility** — unique color, pulse, "!" icon, distinct SFX | F04 | `View/EnemyView.cs`, `View/VfxManager.cs`, `View/AudioManager.cs` |
-| R6.5 | **Air capsule icon** redesign | F05 | `View/BoardView.cs`, `Resources/Tiles/` |
+| R6.1 ✅ | **DeathTracker** + death recap screen | F01 | 🆕 `Core/DeathTracker.cs`, `View/DeathRecapView.cs`, GameBootstrap |
+| R6.2 ✅ | **AirSystem** start buffer + reduced initial drain | F02 | `Core/AirSystem.cs`, `CampaignManager` |
+| R6.3 ✅ | **Drill-to-breathe popup** when air < 30% | F02 | `View/HUDView.cs` |
+| R6.4 ✅ | **Enemy visibility** — unique color, pulse, "!" icon, distinct SFX | F04 | `View/EnemyView.cs`, `View/VfxManager.cs`, `View/AudioManager.cs` |
+| R6.5 ✅ | **Air capsule icon** redesign | F05 | `View/BoardView.cs`, `Resources/Tiles/` |
 
-#### Sprint 2 — "Je vois le score" (P1 — Important)
+#### Sprint 2 — "Je vois le score" (P1 — Important) ✅
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
-| R6.6 | **Score popups on drilled blocks** | F07 | `View/HUDView.cs` or `View/VfxManager.cs` |
-| R6.7 | **Momentum counter** — 🔄v3.2 replaces streak counter (bigger, tier-based) | F07 | `View/HUDView.cs`, `View/VfxManager.cs` |
-| R6.8 | **D-pad movement mapping** | F11 | `View/GameInput.cs` |
-| R6.9 | **Volume control menu** | F10 | 🆕 `View/OptionsMenu.cs`, `View/AudioManager.cs`, `View/UIScreenManager.cs` |
+| R6.6 ✅ | **Score popups on drilled blocks** | F07 | `View/HUDView.cs` or `View/VfxManager.cs` |
+| R6.7 ✅ | **Momentum counter** — 🔄v3.2 replaces streak counter (bigger, tier-based) | F07 | `View/HUDView.cs`, `View/VfxManager.cs` |
+| R6.8 ✅ | **D-pad movement mapping** | F11 | `View/GameInput.cs` |
+| R6.9 ✅ | **Volume control menu** | F10 | 🆕 `View/OptionsMenu.cs`, `View/AudioManager.cs`, `View/UIScreenManager.cs` |
 
 #### Sprint 3 — "J'apprends les mécaniques" (P2 — Important)
 
@@ -125,27 +125,29 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 |---|---|---|---|
 | R6.10 | **Puzzle tutorial system** | F08, F09 | 🆕 `Core/PuzzleBoard.cs`, 🆕 `View/PuzzleTutorialView.cs`, `View/UIScreenManager.cs` |
 | R6.11 | **XP progression system** (🔄v3.2: may be simplified — momentum tiers handle skill expression; XP becomes tutorial-only) | F06 | 🆕 `Core/ProgressionSystem.cs`, `View/UIScreenManager.cs`, PlayerPrefs |
-| R6.12 | **Help page in-game** | F16 | 🆕 `View/HelpScreenView.cs`, `View/UIScreenManager.cs` |
-| R6.13 | **Blast radius visual feedback** | F03 | `View/VfxManager.cs`, `Core/BombSystem.cs` |
+| R6.12 ✅ | **Help page in-game** | F16 | 🆕 `View/HelpScreenView.cs`, `View/UIScreenManager.cs` |
+| R6.13 ✅ | **Blast radius visual feedback** | F03 | `View/VfxManager.cs`, `Core/BombSystem.cs` |
 
 #### Sprint 4 — Polish (P3 — Nice to have)
 
 | Step | Task | Feedback | Systems touched |
 |---|---|---|---|
-| R6.14 | **Level end delay** — cascades finish before score screen | F14 | `GameBootstrap`, `View/UIScreenManager.cs` |
+| R6.14 ✅ | **Level end delay** — cascades finish before score screen | F14 | `GameBootstrap`, `View/UIScreenManager.cs` |
 | R6.15 | **Multi-monitor fix** | F12 | Unity PlayerSettings / startup script |
 | R6.16 | **Multi-input fix** | F13 | `View/GameInput.cs` |
 | R6.17 | **Void-line yellow review** | F15 | `View/BoardView.cs` |
 | R6.18 | **Death replay** — 3 s slow-motion replay | F01 | 🆕 `View/DeathReplaySystem.cs`, `GameBootstrap` |
+| R6.19 | **Endless enemy placement** — deferred from R5.13 (campaign-only today) | — | `Core/StrateGenerator.cs`, GameBootstrap |
+| R6.20 | **UI overflow at 16:9** — help card's "Retour" cut off at 1280×720 (found 2026-10-08). `HUD Panel Settings.asset`: ScaleWithScreenSize, ref 1200×800 (3:2), `m_Match: 0` → ~675 units of height at 16:9. Likely fix `m_Match` 0.5-1, then re-check every screen at 16:9 + 16:10. Details: delivery notes, "Help text touch-up after R7.14". | — | `HUD Panel Settings.asset`, all UI screens |
 
 > **Notes:**
 > - Sprint 1 is blocking: the game is unplayable for new players without death recap and longer parties.
 > - R6.2 (air buffer) must be balanced against the existing drain curve (§15) — playtest after implementation.
 > - R6.10 (puzzle tutorial) is the largest single item; may span multiple sessions.
 > - R6.18 (death replay) is the most technically complex — requires frame buffering or state snapshot.
-> - Endless enemy placement (deferred from R5.13) should be addressed as part of R6 or as R6.19.
+> - Endless enemy placement (deferred from R5.13) is tracked as R6.19.
 
-### R7 — Drill Momentum (v3.2)  🟡 PLANNED
+### R7 — Drill Momentum (v3.2)  ✅ COMPLETE (2026-10-08)
 
 > **Source:** `drill-momentum.md` (directives M1–M10).
 > **Prerequisite:** R5 complete ✅. Can run in parallel with R6.
