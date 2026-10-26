@@ -94,7 +94,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R5.16 ✅ | AudioManager: enemy SFX (chirp, crunch, boop, boom) | Audio check |
 | R5.17 ✅ | EnemyView: enemy sprites on grid (dormant/active states) | Visual check, 333/333 |
 
-### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (12/19 ✅ — see the ✅ rows)
+### R6 — Feedback fixes (player testing Sept 2026)  🟡 IN PROGRESS (13/20 ✅ — see the ✅ rows)
 
 > **Source:** `FEEDBACK-COMPILATION.md` (16 items, F01–F16).
 > **Detailed prompts:** `PROMPTS-CLAUDE-CODE-R6.md` (R6.1–R6.18).
@@ -138,7 +138,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R6.17 | **Void-line yellow review** | F15 | `View/BoardView.cs` |
 | R6.18 | **Death replay** — 3 s slow-motion replay | F01 | 🆕 `View/DeathReplaySystem.cs`, `GameBootstrap` |
 | R6.19 | **Endless enemy placement** — deferred from R5.13 (campaign-only today) | — | `Core/StrateGenerator.cs`, GameBootstrap |
-| R6.20 | **UI overflow at 16:9** — help card's "Retour" cut off at 1280×720 (found 2026-10-08). `HUD Panel Settings.asset`: ScaleWithScreenSize, ref 1200×800 (3:2), `m_Match: 0` → ~675 units of height at 16:9. Likely fix `m_Match` 0.5-1, then re-check every screen at 16:9 + 16:10. Details: delivery notes, "Help text touch-up after R7.14". | — | `HUD Panel Settings.asset`, all UI screens |
+| R6.20 ✅ | **UI scales with the window** — help card's "Retour" was cut off at 1280×720 (found 2026-10-08). Real cause: `HUD Panel Settings.asset` was **ConstantPhysicalSize** (UI sized by DPI, not by window), so a small window on a high-DPI screen overflowed. Now ScaleWithScreenSize, ref 1280×720, Expand — 720p looks exactly as before, every size ≥ 720 units tall. Verified 16:9 + 16:10 + 1080p + 540p, all screens. | — | `HUD Panel Settings.asset` |
 
 > **Notes:**
 > - Sprint 1 is blocking: the game is unplayable for new players without death recap and longer parties.

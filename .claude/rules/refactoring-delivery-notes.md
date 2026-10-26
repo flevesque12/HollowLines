@@ -1053,3 +1053,30 @@ ScaleWithScreenSize, reference **1200×800 (3:2)**, `m_Match: 0` (match width) �
 reference height drops to ~675 units, so anything laid out for 800 overflows. The R6.12 screenshots were taken
 at a taller Game view. Candidate fix: `m_Match` 0.5 or 1 (height) — it rescales every UI screen, so it needs
 a pass over HUD / menus / game over / options / help at 16:9 and 16:10.
+
+### R6.20 — UI scales with the window — 2026-10-26
+
+**The 10-08 diagnosis above was wrong.** `HUD Panel Settings.asset` was not ScaleWithScreenSize: `m_ScaleMode: 1`
+is **ConstantPhysicalSize** (enum: 0 ConstantPixelSize, 1 ConstantPhysicalSize, 2 ScaleWithScreenSize), so
+`m_ReferenceResolution` / `m_ScreenMatchMode` / `m_Match` were all ignored. The UI was sized by screen DPI
+(`m_ReferenceDpi: 96`), not by the window: at 96 DPI a 1280×720 window gave 720 units and the help card fit,
+but a small window on a scaled display (125-150 % Windows scaling → 120-144 DPI) gave 480-576 units → "Retour"
+cut off. That is almost certainly what the 10-08 check hit. It also meant the UI shrank on big 100 %-scaled screens.
+
+**Fix (asset only, no code):** `m_ScaleMode: 2` (ScaleWithScreenSize), `m_ReferenceResolution: 1280×720`,
+`m_ScreenMatchMode: 2` (**Expand** — the panel is never smaller than 1280×720 units on either axis).
+- 1280×720 → scale 1, so 16:9 at 720p looks exactly like the layout that was already verified.
+- 16:9 at any size (960×540, 1920×1080…) → always 1280×720 units, just scaled.
+- 16:10 1280×800 → 1280×800 units (extra height = extra margin). Narrower than 16:9 (4:3, portrait) still
+  gets ≥ 1280 units of width, so nothing is cut horizontally either.
+- The runtime fallbacks in `HUDView` / `UIScreenManager` (1920×1080, used only when no asset is assigned) were
+  left alone — the scene assigns the asset.
+
+**Verified in play mode** (Game view forced via `GameViewSizes` reflection, UI opened via `UIScreenManager`
+reflection, every visible element's `worldBound` checked against the panel): main menu, pause, options, game
+over + run summary, death recap, all **9** help pages — at 1280×720, 1280×800, 1920×1080 and 960×540.
+**0 elements outside the panel anywhere.** Screenshots checked at 16:9 and 16:10.
+
+**⚠️ Tight spot:** help page 6/9 ("Les blocs qui tombent") is the tallest card — 693 of 720 units at 16:9
+(≈14 units margin top and bottom). One more line on that page will overflow at 16:9; split it across two
+pages instead.
