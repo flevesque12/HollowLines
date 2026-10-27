@@ -215,6 +215,28 @@ inchangé → les cartes authored restent valides). Une poche de gaz coincée da
 - **Toucher le gaz = −1 cœur** (`DeathCause.Gas`, i-frames normales). Pas de téléport (§3.2).
 - Le gaz qui atteint le front de l'effondrement est **absorbé** par les débris.
 
+**✅ R8.3 — implémenté (`Core/GasSystem.cs`, pur C#)** :
+
+```
+GasSystem(GridModel grid)
+  HissDuration 0.6 · StepInterval 0.25 · CloudVolume 4 · CloudLifetime 3   (provisoires → R8.7)
+  Release(GridPos vent) → bool     // foré ou libéré ; l'appelant a déjà vidé la cellule
+  Tick(float dt, GridPos avatar)   // nuages, puis hisses, puis contact
+  IsGas / IsHissing / HasActiveGas / CopyGasCells / CopyHissingCells / Clear
+  events : PocketHissing(pos) · CloudReleased(vent) · CloudDissipated(vent) · AvatarHitByGas(pos)
+```
+
+- **`CellType.Gas` est un alias d'`AirCapsule`** (même valeur 7, même `P`), pas une nouvelle cellule : la poche
+  hérite de toutes les règles de la capsule (forable, ne fusionne pas, libérée par burst/bombe/Boomer), et
+  l'air marche tel quel jusqu'à la bascule R8.6. R8.9 supprime le nom `AirCapsule`.
+- **Le gaz ne touche jamais la grille** : il vit dans des cellules vides. Une bouffée dont la cellule redevient
+  solide (chunk, débris) disparaît — c'est ainsi que l'effondrement « absorbe » le gaz, sans code dédié.
+  Une poche rebouchée pendant son sifflement ne s'ouvre jamais.
+- Pas : les bouffées les plus hautes bougent d'abord (une colonne monte d'un bloc) ; bloquée en haut, une
+  bouffée glisse sur le côté, préférence gauche/droite **alternée à chaque pas** (étalement symétrique).
+- Le Perfect Clear ne décale pas le gaz (contrairement aux bombes armées) : une bouffée qui se retrouve dans
+  du solide disparaît, les autres continuent de monter. Assez bon pour 3 s de vie.
+
 ### 4.2 Pourquoi ça respecte les règles
 
 **Le seul refuge, c'est en bas** (règle 6). Tu fores une poche → tu tombes dans sa case → elle siffle

@@ -77,7 +77,7 @@ binding table and rationale in **§16**.
 Immutable grid coordinate struct.
 
 ### CellType
-Cell enum (0–10) + helper methods. Map chars: `.` `A` `B` `C` `H` `S` `P` `X` `D` `R`. 🆕R8.2 `Rubble` (10, `R`) — see `ceiling-gas.md` §3.1.
+Cell enum (0–10) + helper methods. Map chars: `.` `A` `B` `C` `H` `S` `P` `X` `D` `R`. 🆕R8.2 `Rubble` (10, `R`) — see `ceiling-gas.md` §3.1. 🆕R8.3 `Gas` = an **alias** of `AirCapsule` (same value 7, char `P`) until R8.9 deletes the old name — never both in one switch.
 
 > **🆕 Diamond (`D`, CellType.Diamond).** Added in R4. Drillable in 1 tap (like a color
 > block). Drilling → Empty + fires `DiamondCollected(GridPos)`. Does NOT fuse with anything.

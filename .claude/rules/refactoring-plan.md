@@ -209,7 +209,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 |---|---|---|
 | R8.1 ✅ | `CeilingSystem` (Core): front, speed, leash (`MaxLead` 12), start buffer, recoils, contact + `HitRecoil`, Danger Zone, `RowsSwallowed` | 25 new, 485/485 |
 | R8.2 ✅ | `CellType.Rubble` + swallowed-row conversion (grid, bombs, enemies, fissures, diamonds) | 15 new, 500/500 |
-| R8.3 | `CellType.Gas` (replaces AirCapsule, char `P`) + `GasSystem` (0.6 s hiss, 4-cell rising cloud, 3 s life, contact) | NUnit |
+| R8.3 ✅ | `CellType.Gas` (alias of AirCapsule = 7, char `P`) + `GasSystem` (0.6 s hiss, 4-cell rising cloud, 3 s life, contact) | 15 new, 515/515 |
 | R8.4 | `GasReleased` events (gravity / bombs / Boomer), Crawlers die in gas, gas as a graze source | NUnit |
 | R8.5 | `ScoreSystem` / `DeathTracker` (`CaveIn`, `Gas`, drop `Suffocation`) / `CampaignManager` / `EndlessManager` speeds | NUnit |
 | R8.6 | `GameBootstrap`: wiring, tick order, stay-in-place respawn (decision B), Endless seam, switch off `AirSystem` | Integration + play mode |

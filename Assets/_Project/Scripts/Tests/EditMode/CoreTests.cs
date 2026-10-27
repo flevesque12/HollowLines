@@ -2008,6 +2008,265 @@ namespace HollowLines.Tests
         }
     }
 
+    /// <summary>R8.3 — gas pockets (ceiling-gas.md §4): hiss, rising cloud, contact.</summary>
+    [TestFixture]
+    public class GasSystemTests
+    {
+        private static readonly GridPos Far  = new GridPos(-5, -5); // an avatar nowhere near the gas
+        private static readonly GridPos Vent = new GridPos(1, 8);
+
+        /// <summary>An all-empty 3×10 board and a pocket at Vent whose hiss has just ended.</summary>
+        private static (GridModel grid, GasSystem gas) Vented()
+        {
+            var grid = new GridModel(3, 10);
+            var gas = new GasSystem(grid);
+            gas.Release(Vent);
+            gas.Tick(GasSystem.HissDuration, Far);
+            return (grid, gas);
+        }
+
+        private static List<GridPos> Puffs(GasSystem gas)
+        {
+            var cells = new List<GridPos>();
+            gas.CopyGasCells(cells);
+            return cells;
+        }
+
+        // ── The cell ────────────────────────────────────────────────
+
+        [Test]
+        public void Gas_IsTheAirCapsuleCell_UnderItsNewName()
+        {
+            Assert.AreEqual(CellType.AirCapsule, CellType.Gas, "an alias until R8.9 — same value 7");
+            Assert.AreEqual(CellType.Gas, GridModel.FromStringMap(new[] { "P" }).Get(new GridPos(0, 0)));
+            Assert.IsTrue(CellType.Gas.IsDrillable());
+            Assert.IsFalse(CellType.Gas.CanFuse());
+        }
+
+        // ── Hiss (the telegraph) ────────────────────────────────────
+
+        [Test]
+        public void Release_StartsAHiss_WithNoGasYet()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            GridPos? hissed = null;
+            gas.PocketHissing += p => hissed = p;
+
+            Assert.IsTrue(gas.Release(Vent));
+            gas.Tick(0.5f, Far);
+
+            Assert.AreEqual(Vent, hissed);
+            Assert.IsTrue(gas.IsHissing(Vent));
+            Assert.IsFalse(gas.IsGas(Vent));
+            Assert.IsTrue(gas.HasActiveGas);
+        }
+
+        [Test]
+        public void Release_OutOfBounds_OrAlreadyHissing_IsIgnored()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            int hisses = 0;
+            gas.PocketHissing += _ => hisses++;
+
+            Assert.IsFalse(gas.Release(new GridPos(5, 0)));
+            Assert.IsTrue(gas.Release(Vent));
+            Assert.IsFalse(gas.Release(Vent));
+            Assert.AreEqual(1, hisses);
+        }
+
+        [Test]
+        public void HissEnds_TheVentOpens_WithTheFirstPuffInIt()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            GridPos? released = null;
+            gas.CloudReleased += p => released = p;
+            gas.Release(Vent);
+
+            gas.Tick(GasSystem.HissDuration, Far);
+
+            Assert.AreEqual(Vent, released);
+            Assert.IsFalse(gas.IsHissing(Vent));
+            Assert.IsTrue(gas.IsGas(Vent));
+            Assert.AreEqual(1, Puffs(gas).Count);
+        }
+
+        [Test]
+        public void SmotheredPocket_SolidAgainWhenTheHissEnds_NeverVents()
+        {
+            var grid = new GridModel(3, 10);
+            var gas = new GasSystem(grid);
+            int released = 0;
+            gas.CloudReleased += _ => released++;
+            gas.Release(Vent);
+
+            grid.Set(Vent, CellType.ColorA); // a chunk landed on it mid-hiss
+            gas.Tick(GasSystem.HissDuration, Far);
+
+            Assert.AreEqual(0, released);
+            Assert.IsFalse(gas.HasActiveGas);
+        }
+
+        // ── The cloud ───────────────────────────────────────────────
+
+        [Test]
+        public void Cloud_RisesOneRowPerStep_AndTheVentEmitsUpToTheVolume()
+        {
+            var (_, gas) = Vented();
+
+            for (int i = 0; i < 3; i++)
+                gas.Tick(GasSystem.StepInterval, Far);
+
+            CollectionAssert.AreEquivalent(
+                new[] { new GridPos(1, 5), new GridPos(1, 6), new GridPos(1, 7), new GridPos(1, 8) },
+                Puffs(gas), "three steps: a 4-puff column with the vent still feeding it");
+
+            gas.Tick(GasSystem.StepInterval, Far);
+
+            CollectionAssert.AreEquivalent(
+                new[] { new GridPos(1, 4), new GridPos(1, 5), new GridPos(1, 6), new GridPos(1, 7) },
+                Puffs(gas), "full — the column rises off the vent");
+            Assert.IsFalse(gas.IsGas(Vent));
+        }
+
+        [Test]
+        public void Cloud_BlockedAbove_SpreadsSideways_AndNeverEntersASolidCell()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AAA", "...", "...", "AAA" });
+            var gas = new GasSystem(grid);
+            gas.Release(new GridPos(1, 2));
+            gas.Tick(GasSystem.HissDuration, Far);
+
+            for (int i = 0; i < 6; i++)
+                gas.Tick(GasSystem.StepInterval, Far);
+
+            List<GridPos> puffs = Puffs(gas);
+            Assert.AreEqual(GasSystem.CloudVolume, puffs.Count);
+            foreach (GridPos p in puffs)
+                Assert.IsFalse(grid.IsSolid(p), $"{p} is solid");
+            Assert.IsTrue(puffs.Exists(p => p.X != 1), "the ceiling pushed it out of the vent's column");
+        }
+
+        [Test]
+        public void Cloud_FadesAfterItsLifetime()
+        {
+            var (_, gas) = Vented();
+            GridPos? faded = null;
+            gas.CloudDissipated += p => faded = p;
+
+            for (int i = 0; i < 11; i++)
+                gas.Tick(GasSystem.StepInterval, Far);
+            Assert.IsNull(faded, "2.75 s — still there");
+
+            gas.Tick(GasSystem.StepInterval, Far); // 3.0 s
+
+            Assert.AreEqual(Vent, faded);
+            Assert.AreEqual(0, Puffs(gas).Count);
+            Assert.IsFalse(gas.HasActiveGas);
+        }
+
+        [Test]
+        public void ALongFrame_AcrossTheHissEnd_StillStepsTheNewCloud()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            gas.Release(Vent);
+
+            gas.Tick(GasSystem.HissDuration + 0.3f, Far); // the vent opened 0.3 s into... the past
+
+            Assert.AreEqual(2, Puffs(gas).Count, "one step already taken: risen puff + a new one at the vent");
+            Assert.IsTrue(gas.IsGas(new GridPos(1, 7)));
+        }
+
+        [Test]
+        public void Puffs_InACellThatTurnsSolid_AreGone_LikeTheRubbleAbsorbingThem()
+        {
+            var (grid, gas) = Vented();
+            for (int i = 0; i < 3; i++)
+                gas.Tick(GasSystem.StepInterval, Far); // column rows 5-8
+
+            grid.FillRows(0, 7, CellType.Rubble);
+            gas.Tick(0f, Far);
+
+            CollectionAssert.AreEquivalent(new[] { new GridPos(1, 7), new GridPos(1, 8) }, Puffs(gas));
+        }
+
+        [Test]
+        public void TwoPockets_HissAndVentOnTheirOwnClocks()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            gas.Release(new GridPos(0, 8));
+            gas.Tick(0.5f, Far);
+            gas.Release(new GridPos(2, 8));
+
+            gas.Tick(0.2f, Far); // first vent opens (0.7 s), second still hissing (0.2 s) — no 0.6 − 0.5 − 0.1 float trap
+
+            Assert.IsTrue(gas.IsGas(new GridPos(0, 8)));
+            Assert.IsTrue(gas.IsHissing(new GridPos(2, 8)));
+            var hissing = new List<GridPos>();
+            gas.CopyHissingCells(hissing);
+            CollectionAssert.AreEqual(new[] { new GridPos(2, 8) }, hissing);
+        }
+
+        // ── Contact ─────────────────────────────────────────────────
+
+        [Test]
+        public void Contact_NeverDuringTheHiss()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            int hits = 0;
+            gas.AvatarHitByGas += _ => hits++;
+            gas.Release(Vent);
+
+            gas.Tick(0.5f, Vent); // standing right on the hissing pocket
+
+            Assert.AreEqual(0, hits, "the hiss is the telegraph — harmless");
+        }
+
+        [Test]
+        public void Contact_StandingStillOnThePocket_IsHitWhenItVents_EveryTick()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            var hits = new List<GridPos>();
+            gas.AvatarHitByGas += p => hits.Add(p);
+            gas.Release(Vent);
+
+            gas.Tick(GasSystem.HissDuration, Vent);
+            gas.Tick(0.1f, Vent);
+
+            Assert.AreEqual(2, hits.Count, "every overlapping tick — the caller's i-frames dedupe");
+            Assert.AreEqual(Vent, hits[0]);
+        }
+
+        [Test]
+        public void Contact_DrillingDownBeforeTheVentOpens_Escapes()
+        {
+            var gas = new GasSystem(new GridModel(3, 10));
+            int hits = 0;
+            gas.AvatarHitByGas += _ => hits++;
+            gas.Release(Vent);
+
+            gas.Tick(0.3f, Vent);                   // still on the pocket
+            var below = new GridPos(1, 9);
+            gas.Tick(0.5f, below);                  // dropped a row — the vent opens above
+            for (int i = 0; i < 12; i++)
+                gas.Tick(GasSystem.StepInterval, below);
+
+            Assert.AreEqual(0, hits, "the gas rises — away from a player who keeps going down");
+        }
+
+        [Test]
+        public void Clear_ForgetsEveryHissAndCloud()
+        {
+            var (_, gas) = Vented();
+            gas.Release(new GridPos(0, 2));
+
+            gas.Clear();
+
+            Assert.IsFalse(gas.HasActiveGas);
+            Assert.AreEqual(0, Puffs(gas).Count);
+            Assert.IsFalse(gas.IsHissing(new GridPos(0, 2)));
+        }
+    }
+
     [TestFixture]
     public class HealthSystemTests
     {

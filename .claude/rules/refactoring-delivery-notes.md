@@ -1137,3 +1137,31 @@ above, a collapse still clears and shifts the rubble along with them (§5.2, `Ce
 
 **Known gap until R8.8:** `BoardView.VisualFor` has no `Rubble` case, so it would render as an empty cell.
 Harmless today — nothing in the game creates rubble before R8.6.
+
+### R8.3 — `CellType.Gas` + `GasSystem` (Core) — 2026-10-27
+
+Core only, still not wired (R8.6). 15 new NUnit tests (`GasSystemTests`), **515/515** (EditMode); the
+`tools/playtest` harness still builds. Spec: `ceiling-gas.md` §4.
+
+**`CellType.Gas = AirCapsule` — an alias, not a new value.** Renaming the enum member now would have dragged
+every air-capsule site (12 in Core/View, plus the tests) into this step while the air must keep working
+until R8.6. As an alias the pocket inherits every capsule rule for free (drillable, never fuses, freed by
+bursts / bombs / Boomers — the `AirCapsuleLiberated` events become the gas release points in R8.4). Cost:
+`ToString()` on value 7 is ambiguous, and a switch must never list both names (duplicate case). R8.9 deletes
+`AirCapsule`.
+
+**`GasSystem`:** `Release(vent)` → 0.6 s hiss (harmless — the telegraph) → the vent opens with one puff →
+every 0.25 s each puff moves up, else sideways (preference alternates each step), and the vent emits until
+4 puffs → gone at 3 s. `AvatarHitByGas` fires on every overlapping Tick (caller's i-frames dedupe, like a
+Crawler). Two details that matter:
+- **Tick order is clouds, THEN hisses**, and a vent opening mid-frame is advanced only by its overshoot —
+  otherwise a long frame would age a brand-new cloud twice (`ALongFrame_AcrossTheHissEnd_StillStepsTheNewCloud`).
+- **The gas never writes to the grid.** A puff in a cell that turns solid is dropped — which is all the
+  "rubble absorbs gas" rule needed. A pocket refilled during its hiss never vents.
+
+**Measured design check (test, not harness):** a player who drills one row down before the vent opens is
+never touched over the cloud's whole life — the gas rises away (`Contact_DrillingDownBeforeTheVentOpens_Escapes`).
+Standing on the pocket is a hit the instant it vents.
+
+**Two tests had to dodge float traps** (`0.6f − 0.5f − 0.1f` > 0): ticks are chosen so the hiss end never
+lands on a subtraction residue.

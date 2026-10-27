@@ -30,6 +30,14 @@ namespace HollowLines.Core
         Bomb        = 8,
         Diamond     = 9,
         Rubble      = 10,
+
+        /// <summary>
+        /// v3.3 gas pocket (ceiling-gas.md §4) — the SAME cell as AirCapsule (value 7, map char 'P'), under
+        /// its new name. An alias, not a new cell, so the pocket inherits every capsule rule (drillable,
+        /// never fuses, freed by bursts and bombs) and the air keeps working until R8.6 switches over.
+        /// R8.9 deletes the AirCapsule name. Never put both names in one switch (duplicate case).
+        /// </summary>
+        Gas         = AirCapsule,
     }
 
     public static class CellTypeExtensions
