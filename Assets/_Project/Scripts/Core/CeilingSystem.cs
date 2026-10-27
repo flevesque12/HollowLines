@@ -77,6 +77,9 @@ namespace HollowLines.Core
         /// <summary>Seconds left in the still window (0 outside it).</summary>
         public float StartGraceRemaining => InStartGrace ? _startGrace - _bufferTime : 0f;
 
+        /// <summary>R8.8: the still window's full length, for the HUD's grace fuse (StartGraceRemaining / this).</summary>
+        public float StartGraceDuration => _startGrace;
+
         /// <summary>Speed multiplier right now: 0 in the grace window, ramping to 1, then 1.</summary>
         public float StartBufferFactor
         {

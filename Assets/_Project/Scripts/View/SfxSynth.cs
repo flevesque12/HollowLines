@@ -118,6 +118,44 @@ namespace HollowLines.View
             return BuildClip("Heartbeat", data);
         }
 
+        /// <summary>
+        /// R8.8 Cave-in rumble: brown-ish noise (two low-pass stages) with a slow 0.7 Hz churn, plus an
+        /// 80 Hz body so laptop speakers carry it (the R7.11 lesson). Built to LOOP: the last 0.25 s is
+        /// cross-faded into the first, so there is no click at the seam.
+        /// </summary>
+        public static AudioClip Rumble(float duration = 3f, float volume = 0.6f)
+        {
+            int samples = Mathf.Max(1, (int)(SampleRate * duration));
+            int fade    = Mathf.Min(samples / 4, (int)(0.25f * SampleRate));
+            var raw = new float[samples + fade];
+            float a = 0f, b = 0f, phase = 0f;
+            for (int i = 0; i < raw.Length; i++)
+            {
+                a = Mathf.Lerp(a, Random.Range(-1f, 1f), 0.02f);
+                b = Mathf.Lerp(b, a, 0.05f);
+                float t = (float)i / SampleRate;
+                phase += 2f * Mathf.PI * 80f / SampleRate;
+                float churn = 0.75f + 0.25f * Mathf.Sin(2f * Mathf.PI * 0.7f * t);
+                raw[i] = (b * 9f + Mathf.Sin(phase) * 0.18f * churn) * churn;
+            }
+
+            var data = new float[samples];
+            for (int i = 0; i < samples; i++)
+                data[i] = raw[i];
+            // The tail that runs past the clip's end is faded INTO its start, so end → start is continuous.
+            for (int i = 0; i < fade; i++)
+            {
+                float u = (float)i / fade;
+                data[i] = Mathf.Lerp(raw[samples + i], raw[i], u);
+            }
+
+            float peak = 0.0001f;
+            foreach (float v in data) peak = Mathf.Max(peak, Mathf.Abs(v));
+            for (int i = 0; i < samples; i++)
+                data[i] = data[i] / peak * volume;
+            return BuildClip("Rumble", data);
+        }
+
         private static void AddThump(float[] data, float startSeconds, float volume)
         {
             const float length = 0.16f;

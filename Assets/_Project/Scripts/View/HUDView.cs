@@ -46,18 +46,18 @@ namespace HollowLines.View
         private float         _powerFlash;                 // 1 → 0 after a Power Drill: hold "×6", flash red
         private const float   PowerFlashSeconds  = 0.5f;
         private const float   WindowWarnSeconds  = 0.3f;   // bar blinks when the window has less than this
-        private Label         _dangerBadge;                // R7.9: "×2 DANGER" while air < 15 % (§M3.4)
+        private Label         _dangerBadge;                // R7.9: "×2 DANGER" while the margin is < 15 % (§M3.4)
         private Label         _diamondLabel;
-        private VisualElement _airFill;
-        private Label         _airCaption;
-        private VisualElement _graceFuse;   // R6.2: thin strip over the air bar that burns down through the grace window
+        private VisualElement _leadFill;
+        private Label         _leadCaption;
+        private VisualElement _graceFuse;   // R6.2: thin strip over the bar that burns down through the grace window
 
-        // ── R6.2 air start-buffer cue ─────────────────────────────────────────
-        // Grace: pale, slowly shimmering fill + "AIR · 3" countdown + a shrinking fuse strip.
-        // Grace end: a short white flash. Ramp: the fill slides from pale to cyan as the drain wakes up.
+        // ── R6.2 → R8.8 Cave-in start-buffer cue ──────────────────────────────
+        // Grace: pale, slowly shimmering fill + "ÉBOULEMENT · 3" countdown + a shrinking fuse strip.
+        // Grace end: a short white flash. Ramp: the fill slides from pale to sand as the front wakes up.
         private bool        _wasInGrace;
-        private float       _airFlashTimer;
-        private const float AirFlashSeconds = 0.35f;
+        private float       _leadFlashTimer;
+        private const float LeadFlashSeconds = 0.35f;
 
         // ── R6.6 drill score popups (F07) ─────────────────────────────────────
         // "+30 ×3" rising off every drilled cell, so the player SEES that drilling pays (design
@@ -83,20 +83,21 @@ namespace HollowLines.View
         // so a popup centred on it sat right on the driller (screenshot check).
         private const float DrillPopupOffsetX  = 0.6f;
 
-        // ── R6.3 "drill to breathe" hint (F02) ────────────────────────────────
-        // v3.1 made drilling the main air source, but nothing ever said so — new players watched the
-        // bar empty without knowing the answer was under their feet. Shown above the air bar (the
+        // ── R6.3 → R8.8 "DESCENDS !" hint (F02) ───────────────────────────────
+        // Descending is what buys margin from the Cave-in, but nothing ever said so — new players watched
+        // the bar empty without knowing the answer was under their feet. Shown above the bar (the
         // centre is the celebration popup and the avatar), with hysteresis so drilling right at the
         // threshold doesn't make it flicker, and a pop each time air comes back to confirm the fix.
-        private Label       _breatheHint;
-        private bool        _breatheShown;
-        private float       _breatheAlpha;      // eased 0..1 so it fades in/out instead of popping
-        private float       _breathePop;        // 1 → 0 after each air gain while shown
-        private float       _lastAir = AirSystem.MaxAir;
-        private const float BreatheShowBelow = 30f; // % air
-        private const float BreatheHideAbove = 35f;
-        private const float BreatheFadeSpeed = 6f;  // alpha per second
-        private const float BreathePopSeconds = 0.25f;
+        private Label       _descendHint;
+        private bool        _descendShown;
+        private float       _descendAlpha;      // eased 0..1 so it fades in/out instead of popping
+        private float       _descendPop;        // 1 → 0 after each air gain while shown
+        private float       _lastLead = 100f;
+        private const float DescendShowBelow = 30f; // % of the margin
+        private const float DescendHideAbove = 35f;
+        private const string LeadCaption = "ÉBOULEMENT"; // R8.8 (dev's pick): the bar names the threat
+        private const float DescendFadeSpeed = 6f;  // alpha per second
+        private const float DescendPopSeconds = 0.25f;
         private VisualElement[] _heartIcons;
         private Label         _chainLabel;
         private Label         _popupLabel;
@@ -111,7 +112,7 @@ namespace HollowLines.View
 
         // ── System refs (stored by Init, used by Start) ───────────────────────
         private ScoreSystem     _score;
-        private AirSystem       _air;
+        private CeilingSystem   _ceiling;
         private HealthSystem    _health;
         private ChainTracker    _chain;
         private MomentumTracker _momentum; // v3.2 — persistent (Reset per fresh board, never rebuilt)
@@ -123,7 +124,7 @@ namespace HollowLines.View
 
         // ── Stored delegates for clean unsubscription ─────────────────────────
         private Action<ScoreEvent> _onScore;
-        private Action<float>      _onAirChanged;
+        private Action<float>      _onLeadChanged;
         private Action<int>        _onHeartsChanged;
         private Action<int>        _onChainLink;
         private Action<int>        _onChainCompleted;
@@ -137,7 +138,8 @@ namespace HollowLines.View
         // ── Colors (match BoardView palette) ─────────────────────────────────
         private static readonly Color ColAmber  = new Color(0.94f, 0.62f, 0.15f);
         private static readonly Color ColCyan   = new Color(0.35f, 0.85f, 0.95f);
-        private static readonly Color ColAirIdle = new Color(0.78f, 0.93f, 1.00f); // R6.2: "frozen" air (grace)
+        private static readonly Color ColLeadIdle = new Color(0.95f, 0.90f, 0.80f); // R6.2: "frozen" front (grace)
+        private static readonly Color ColLead    = new Color(0.86f, 0.70f, 0.46f); // R8.8: the margin bar — warm stone, not air cyan
         private static readonly Color ColDanger = new Color(0.95f, 0.25f, 0.10f);
         private static readonly Color ColGold   = new Color(1.00f, 0.85f, 0.20f);
         private static readonly Color ColDim    = new Color(0.20f, 0.16f, 0.12f);
@@ -164,13 +166,13 @@ namespace HollowLines.View
         /// Store system references. Must be called from GameBootstrap.Awake() before
         /// this component's Start() runs.
         /// </summary>
-        public void Init(ScoreSystem score, AirSystem air, HealthSystem health, ChainTracker chain,
+        public void Init(ScoreSystem score, CeilingSystem ceiling, HealthSystem health, ChainTracker chain,
                          DepthTracker depth = null,
                          CampaignManager campaign = null, PanelSettings ps = null,
                          DiamondSystem diamonds = null, MomentumTracker momentum = null)
         {
             _score    = score;
-            _air      = air;
+            _ceiling  = ceiling;
             _health   = health;
             _chain    = chain;
             _depth    = depth;
@@ -233,7 +235,7 @@ namespace HollowLines.View
 
             // Subscribe — store delegates so OnDestroy can unsubscribe cleanly.
             _onScore          = OnScoreEvent;
-            _onAirChanged     = pct => RefreshAir(pct);
+            _onLeadChanged     = pct => RefreshLead(pct);
             _onHeartsChanged  = h   => RefreshHearts(h);
             _onChainLink      = step => ShowChain(step);
             _onChainCompleted = _    => _chainHideTimer = ChainHoldSeconds;
@@ -245,7 +247,7 @@ namespace HollowLines.View
             _onDiamondCollected = (collected, total) => RefreshDiamonds(collected, total);
 
             _score.OnScore        += _onScore;
-            _air.AirChanged       += _onAirChanged;
+            _ceiling.LeadChanged  += _onLeadChanged;   // R8.8: the bar is the Cave-in margin, in %
             _health.HeartsChanged += _onHeartsChanged;
             if (_chain != null)
             {
@@ -257,7 +259,7 @@ namespace HollowLines.View
                 _momentum.TierChanged         += _onTierChanged;
                 _momentum.PowerDrillActivated += _onPowerDrill;
             }
-            _air.DangerZoneChanged += _onDangerZone;
+            _ceiling.DangerZoneChanged += _onDangerZone;
             if (_diamonds != null)
                 _diamonds.DiamondCollected += _onDiamondCollected;
             SubscribeDepth();
@@ -265,11 +267,11 @@ namespace HollowLines.View
 
             // Initial state
             RefreshScore();
-            RefreshAir(_air.Air);
+            RefreshLead(_ceiling.LeadPercent);
             RefreshHearts(_health.Hearts);
             RefreshDepth(CurrentDepth());
             HideMomentum();
-            SetDangerBadge(_air.IsDangerZone);
+            SetDangerBadge(_ceiling.IsDangerZone);
             RefreshDiamonds(_diamonds?.Collected ?? 0, _diamonds?.Total ?? 0);
         }
 
@@ -311,7 +313,7 @@ namespace HollowLines.View
         private void OnDestroy()
         {
             if (_score  != null) _score.OnScore          -= _onScore;
-            if (_air    != null) _air.AirChanged          -= _onAirChanged;
+            if (_ceiling != null) _ceiling.LeadChanged    -= _onLeadChanged;
             if (_health != null) _health.HeartsChanged    -= _onHeartsChanged;
             if (_chain  != null)
             {
@@ -323,7 +325,7 @@ namespace HollowLines.View
                 _momentum.TierChanged         -= _onTierChanged;
                 _momentum.PowerDrillActivated -= _onPowerDrill;
             }
-            if (_air != null) _air.DangerZoneChanged -= _onDangerZone;
+            if (_ceiling != null) _ceiling.DangerZoneChanged -= _onDangerZone;
             if (_diamonds != null)
                 _diamonds.DiamondCollected -= _onDiamondCollected;
             UnsubscribeDepth();
@@ -333,8 +335,8 @@ namespace HollowLines.View
         {
             float dt = Time.deltaTime;
 
-            TickAirBufferCue(dt);
-            TickBreatheHint(dt);
+            TickLeadBufferCue(dt);
+            TickDescendHint(dt);
             TickDrillPopups(dt);
             TickMomentumCounter(dt);
             TickDangerBadge();
@@ -769,110 +771,109 @@ namespace HollowLines.View
             _popupTimer                 = PopupHoldSeconds;
         }
 
-        private void RefreshAir(float air)
+        private void RefreshLead(float air)
         {
-            float pct = Mathf.Clamp01(air / AirSystem.MaxAir);
-            _airFill.style.width = new StyleLength(new Length(pct * 100f, LengthUnit.Percent));
-            _airFill.style.backgroundColor = new StyleColor(AirColor(pct));
+            float pct = Mathf.Clamp01(air / 100f);
+            _leadFill.style.width = new StyleLength(new Length(pct * 100f, LengthUnit.Percent));
+            _leadFill.style.backgroundColor = new StyleColor(LeadColor(pct));
 
-            // R6.3: any air gain while the hint is up (a drill, a capsule, a burst) earns a pop —
+            // R6.3: any margin gained while the hint is up (a row down, a capsule, a burst) earns a pop —
             // the hint says what to do, the pop says "yes, that".
-            if (_breatheShown && air > _lastAir + 0.01f)
-                _breathePop = 1f;
-            _lastAir = air;
+            if (_descendShown && air > _lastLead + 0.01f)
+                _descendPop = 1f;
+            _lastLead = air;
         }
 
         /// <summary>
-        /// R6.3: "FORE POUR RESPIRER !" while air is low. Show below 30 %, hide above 35 % (hysteresis),
-        /// eased fade, slow pulse that speeds up as the tank empties, amber → red under 15 %.
+        /// R6.3 → R8.8: "DESCENDS !" while the margin is low. Show below 30 %, hide above 35 % (hysteresis),
+        /// eased fade, slow pulse that speeds up as the front closes in, amber → red under 15 %.
         /// Scaled time throughout, so it freezes with the game under the pause/game-over overlay.
         /// </summary>
-        private void TickBreatheHint(float dt)
+        private void TickDescendHint(float dt)
         {
-            if (!_built || _air == null) return;
+            if (!_built || _ceiling == null) return;
 
-            float air = _air.Air;
-            if (!_breatheShown && air < BreatheShowBelow && air > 0f) _breatheShown = true;
-            else if (_breatheShown && (air >= BreatheHideAbove || air <= 0f)) _breatheShown = false;
+            float air = _ceiling.LeadPercent;
+            if (!_descendShown && air < DescendShowBelow && air > 0f) _descendShown = true;
+            else if (_descendShown && (air >= DescendHideAbove || air <= 0f)) _descendShown = false;
 
-            _breatheAlpha = Mathf.MoveTowards(_breatheAlpha, _breatheShown ? 1f : 0f, BreatheFadeSpeed * dt);
-            if (_breathePop > 0f) _breathePop = Mathf.Max(0f, _breathePop - dt / BreathePopSeconds);
+            _descendAlpha = Mathf.MoveTowards(_descendAlpha, _descendShown ? 1f : 0f, DescendFadeSpeed * dt);
+            if (_descendPop > 0f) _descendPop = Mathf.Max(0f, _descendPop - dt / DescendPopSeconds);
 
-            if (_breatheAlpha <= 0f)
+            if (_descendAlpha <= 0f)
             {
-                _breatheHint.style.display = DisplayStyle.None;
+                _descendHint.style.display = DisplayStyle.None;
                 return;
             }
-            _breatheHint.style.display = DisplayStyle.Flex;
+            _descendHint.style.display = DisplayStyle.Flex;
 
-            float urgency = 1f - Mathf.Clamp01(air / BreatheShowBelow);           // 0 at 30 %, 1 at 0 %
+            float urgency = 1f - Mathf.Clamp01(air / DescendShowBelow);           // 0 at 30 %, 1 at 0 %
             float pulse   = 0.5f + 0.5f * Mathf.Sin(Time.time * Mathf.Lerp(4f, 10f, urgency));
-            _breatheHint.style.opacity = _breatheAlpha * Mathf.Lerp(0.65f, 1f, pulse);
-            _breatheHint.style.color   = new StyleColor(air < 15f ? Color.Lerp(ColAmber, ColDanger, pulse) : ColAmber);
+            _descendHint.style.opacity = _descendAlpha * Mathf.Lerp(0.65f, 1f, pulse);
+            _descendHint.style.color   = new StyleColor(air < 15f ? Color.Lerp(ColAmber, ColDanger, pulse) : ColAmber);
 
-            float scale = 1f + 0.18f * _breathePop + 0.04f * pulse;
-            _breatheHint.style.scale = new StyleScale(new Scale(new Vector3(scale, scale, 1f)));
+            float scale = 1f + 0.18f * _descendPop + 0.04f * pulse;
+            _descendHint.style.scale = new StyleScale(new Scale(new Vector3(scale, scale, 1f)));
         }
 
         /// <summary>
-        /// Air fill color. Danger always wins; otherwise it tells the start-buffer story (R6.2):
-        /// pale + shimmer while the clock is stopped, pale→cyan while the drain ramps up, white flash
-        /// the moment it starts, plain cyan once the buffer is over.
+        /// Margin fill color. Danger always wins; otherwise it tells the start-buffer story (R6.2):
+        /// pale + shimmer while the front waits, pale→sand while it ramps up, white flash the moment it
+        /// starts, plain sand once the buffer is over.
         /// </summary>
-        private Color AirColor(float pct)
+        private Color LeadColor(float pct)
         {
             if (pct < 0.25f) return ColDanger;
 
             Color c;
-            if (_air.InStartGrace)
+            if (_ceiling.InStartGrace)
             {
                 // Slow breathing shimmer — scaled time, so it freezes with the game when paused.
                 float s = 0.5f + 0.5f * Mathf.Sin(Time.time * 2.4f);
-                c = Color.Lerp(ColAirIdle, Color.white, 0.35f * s);
+                c = Color.Lerp(ColLeadIdle, Color.white, 0.35f * s);
             }
             else
             {
-                float ramp = Mathf.InverseLerp(AirSystem.StartDrainFactor, 1f, _air.StartBufferFactor);
-                c = Color.Lerp(ColAirIdle, ColCyan, ramp);
+                float ramp = Mathf.InverseLerp(CeilingSystem.StartSpeedFactor, 1f, _ceiling.StartBufferFactor);
+                c = Color.Lerp(ColLeadIdle, ColLead, ramp);
             }
 
-            if (_airFlashTimer > 0f)
-                c = Color.Lerp(c, Color.white, _airFlashTimer / AirFlashSeconds);
+            if (_leadFlashTimer > 0f)
+                c = Color.Lerp(c, Color.white, _leadFlashTimer / LeadFlashSeconds);
             return c;
         }
 
         /// <summary>
-        /// Per-frame part of the R6.2 cue. Polled, not evented: AirChanged deliberately stays silent
-        /// through the grace window (nothing drained), so the countdown and shimmer have to read the
-        /// buffer state themselves.
+        /// Per-frame part of the R6.2 cue. Polled, not evented: LeadChanged stays silent through the grace
+        /// window (the front does not move), so the countdown and shimmer have to read the buffer state.
         /// </summary>
-        private void TickAirBufferCue(float dt)
+        private void TickLeadBufferCue(float dt)
         {
-            if (!_built || _air == null) return;
+            if (!_built || _ceiling == null) return;
 
-            bool inGrace = _air.InStartGrace;
-            if (_wasInGrace && !inGrace && _air.StartBufferFactor < 1f)
-                _airFlashTimer = AirFlashSeconds; // the clock just started (not a Reset mid-grace)
+            bool inGrace = _ceiling.InStartGrace;
+            if (_wasInGrace && !inGrace && _ceiling.StartBufferFactor < 1f)
+                _leadFlashTimer = LeadFlashSeconds; // the clock just started (not a Reset mid-grace)
             _wasInGrace = inGrace;
 
-            if (_airFlashTimer > 0f)
-                _airFlashTimer = Mathf.Max(0f, _airFlashTimer - dt);
+            if (_leadFlashTimer > 0f)
+                _leadFlashTimer = Mathf.Max(0f, _leadFlashTimer - dt);
 
             if (inGrace)
             {
-                float left = _air.StartGraceRemaining;
-                _airCaption.text = $"AIR · {Mathf.CeilToInt(left)}";
+                float left = _ceiling.StartGraceRemaining;
+                _leadCaption.text = $"{LeadCaption} · {Mathf.CeilToInt(left)}";
                 _graceFuse.style.display = DisplayStyle.Flex;
-                float frac = _air.StartGraceDuration > 0f ? left / _air.StartGraceDuration : 0f;
+                float frac = _ceiling.StartGraceDuration > 0f ? left / _ceiling.StartGraceDuration : 0f;
                 _graceFuse.style.width = new StyleLength(new Length(frac * 100f, LengthUnit.Percent));
             }
             else
             {
-                _airCaption.text = "AIR";
+                _leadCaption.text = LeadCaption;
                 _graceFuse.style.display = DisplayStyle.None;
             }
 
-            _airFill.style.backgroundColor = new StyleColor(AirColor(Mathf.Clamp01(_air.Air / AirSystem.MaxAir)));
+            _leadFill.style.backgroundColor = new StyleColor(LeadColor(Mathf.Clamp01(_ceiling.LeadPercent / 100f)));
         }
 
         private void RefreshHearts(int hearts)
@@ -918,7 +919,7 @@ namespace HollowLines.View
             BuildTopBar(root);
             BuildChainLabel(root);
             BuildPopupLabel(root);
-            BuildAirBar(root);
+            BuildLeadBar(root);
             BuildDrillPopups(root);
         }
 
@@ -1126,7 +1127,7 @@ namespace HollowLines.View
             root.Add(_popupLabel);
         }
 
-        private void BuildAirBar(VisualElement root)
+        private void BuildLeadBar(VisualElement root)
         {
             var section = new VisualElement();
             section.style.position = Position.Absolute;
@@ -1135,10 +1136,10 @@ namespace HollowLines.View
             section.style.right    = 16f;
             root.Add(section);
 
-            _airCaption = new Label("AIR");
-            StyleCaption(_airCaption);
-            _airCaption.style.marginBottom = 4f;
-            section.Add(_airCaption);
+            _leadCaption = new Label(LeadCaption);
+            StyleCaption(_leadCaption);
+            _leadCaption.style.marginBottom = 4f;
+            section.Add(_leadCaption);
 
             var bg = new VisualElement();
             bg.style.height                    = 10f;
@@ -1150,16 +1151,16 @@ namespace HollowLines.View
             bg.style.overflow                  = Overflow.Hidden;
             section.Add(bg);
 
-            _airFill = new VisualElement();
-            _airFill.style.position              = Position.Absolute;
-            _airFill.style.top                   = 0f;
-            _airFill.style.bottom                = 0f;
-            _airFill.style.left                  = 0f;
-            _airFill.style.width                 = new StyleLength(new Length(100f, LengthUnit.Percent));
-            _airFill.style.borderTopLeftRadius   = 5f;
-            _airFill.style.borderBottomLeftRadius = 5f;
-            _airFill.style.backgroundColor       = new StyleColor(ColCyan);
-            bg.Add(_airFill);
+            _leadFill = new VisualElement();
+            _leadFill.style.position              = Position.Absolute;
+            _leadFill.style.top                   = 0f;
+            _leadFill.style.bottom                = 0f;
+            _leadFill.style.left                  = 0f;
+            _leadFill.style.width                 = new StyleLength(new Length(100f, LengthUnit.Percent));
+            _leadFill.style.borderTopLeftRadius   = 5f;
+            _leadFill.style.borderBottomLeftRadius = 5f;
+            _leadFill.style.backgroundColor       = new StyleColor(ColLead);
+            bg.Add(_leadFill);
 
             // R6.2 grace fuse: a 4 px gold strip along the top of the bar, burning right-to-left.
             // Gold, not white — white vanished against the pale grace fill (screenshot check).
@@ -1184,28 +1185,28 @@ namespace HollowLines.View
             hintRow.pickingMode      = PickingMode.Ignore;
             root.Add(hintRow);
 
-            _breatheHint = new Label("FORE POUR RESPIRER !");
-            _breatheHint.style.fontSize                = 26f;
-            _breatheHint.style.color                   = new StyleColor(ColAmber);
-            _breatheHint.style.unityFontStyleAndWeight = FontStyle.Bold;
-            _breatheHint.style.unityTextAlign          = TextAnchor.MiddleCenter;
-            _breatheHint.style.unityTextOutlineWidth   = 0.15f;
-            _breatheHint.style.unityTextOutlineColor   = new StyleColor(Color.black);
-            _breatheHint.style.backgroundColor         = new StyleColor(new Color(0f, 0f, 0f, 0.75f));
-            _breatheHint.style.paddingTop              = 6f;
-            _breatheHint.style.paddingBottom           = 6f;
-            _breatheHint.style.paddingLeft             = 18f;
-            _breatheHint.style.paddingRight            = 18f;
-            _breatheHint.style.borderTopLeftRadius     = 8f;
-            _breatheHint.style.borderTopRightRadius    = 8f;
-            _breatheHint.style.borderBottomLeftRadius  = 8f;
-            _breatheHint.style.borderBottomRightRadius = 8f;
-            _breatheHint.style.display                 = DisplayStyle.None;
-            _breatheHint.pickingMode                   = PickingMode.Ignore;
-            hintRow.Add(_breatheHint);
+            _descendHint = new Label("DESCENDS !");
+            _descendHint.style.fontSize                = 26f;
+            _descendHint.style.color                   = new StyleColor(ColAmber);
+            _descendHint.style.unityFontStyleAndWeight = FontStyle.Bold;
+            _descendHint.style.unityTextAlign          = TextAnchor.MiddleCenter;
+            _descendHint.style.unityTextOutlineWidth   = 0.15f;
+            _descendHint.style.unityTextOutlineColor   = new StyleColor(Color.black);
+            _descendHint.style.backgroundColor         = new StyleColor(new Color(0f, 0f, 0f, 0.75f));
+            _descendHint.style.paddingTop              = 6f;
+            _descendHint.style.paddingBottom           = 6f;
+            _descendHint.style.paddingLeft             = 18f;
+            _descendHint.style.paddingRight            = 18f;
+            _descendHint.style.borderTopLeftRadius     = 8f;
+            _descendHint.style.borderTopRightRadius    = 8f;
+            _descendHint.style.borderBottomLeftRadius  = 8f;
+            _descendHint.style.borderBottomRightRadius = 8f;
+            _descendHint.style.display                 = DisplayStyle.None;
+            _descendHint.pickingMode                   = PickingMode.Ignore;
+            hintRow.Add(_descendHint);
 
             // R7.9 Danger Zone badge: right end, just above the bar — the centre belongs to the
-            // breathe hint, and the two show together (danger is < 15 %, the hint < 30 %).
+            // DESCENDS hint, and the two show together (danger is < 15 %, the hint < 30 %).
             _dangerBadge = new Label("×2 DANGER");
             _dangerBadge.style.position                = Position.Absolute;
             _dangerBadge.style.right                   = 16f;

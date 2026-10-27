@@ -1325,3 +1325,25 @@ Full write-up: `balance.md` §15.11. 515/515 unchanged; the harness builds and r
 - **Knobs** `CEIL_SPEED_SCALE` / `CEIL_MAXLEAD` (env vars) so one build compares settings.
 
 **Measured** ×1 / ×1.5 / ×2 front speed and `MaxLead` 12 / 8. **Dev kept ×1** — see §15.11.
+
+### R8.8 — Cave-in visuals + audio — 2026-10-27
+
+View pass, play-mode verified with screenshots (UnityMCP). 1 new NUnit test, **516/516 in Unity**. Full list:
+`cave-in.md` §12. Two player-facing picks asked first: the capsule becomes a **mine timber prop** (étai), the bar is
+labelled **"ÉBOULEMENT"**.
+
+- **Repointed, not bridged:** HUD (`Init(…, CeilingSystem …)`), `VfxManager` vignette and `AudioManager` heartbeat now
+  read `CeilingSystem`. `GameBootstrap` has **no `AirSystem` any more** (field, resets, Tick, Mirror all gone) — only
+  `HelpScreenView` still reads its constants (R8.9). HUD identifiers renamed (`_leadFill`, `RefreshLead`,
+  `_descendHint`…); the R6.2 grace cue needed `CeilingSystem.StartGraceDuration` (+1 test).
+- **`CaveInView`** (git-renamed from `CaveInPreviewView`, OnGUI readout removed): procedural pixel-art teeth per column,
+  a glow strip behind them (sorting 8, teeth 9 — silhouettes), dust band, a 48-pebble pool. It subscribes to the
+  persistent `CeilingSystem` (`RowsSwallowed`, `AvatarReached`) and unsubscribes in `OnDestroy` (rebuilt per board).
+- **Rubble tile**: `BoardView.GetRubbleSprite()` — 16×16 Voronoi cobbles, wrapped so neighbours tile seamlessly.
+- **Capsule tile**: `CapsuleTileGenerator` rewritten (timber prop; square-ended beams after the first render read as
+  a stool; continuous grain after the first one looked blocky). Capsule shine retuned gold.
+- **Audio**: `SfxSynth.Rumble` + a looped `_caveInSource`, level = proximity². **Name clash caught by the compiler**:
+  AudioManager already had a Tier 2 `rumbleVolume` / `_rumbleClip` (R7.11) — the new ones are `caveIn*`.
+
+**Not done here (R8.9):** help pages still describe air; `AirSystem` + its tests + `Mirror` + `DeathCause.Suffocation`
+still exist (unused by the game). **Listen in play mode**: the rumble level was set by reasoning, not by ear.

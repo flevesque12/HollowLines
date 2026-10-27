@@ -1447,6 +1447,18 @@ namespace HollowLines.Tests
     {
         private const float Delta = 0.001f;
 
+        [Test]
+        public void StartGraceDuration_IsTheGraceWindow_ForTheHudFuse()
+        {
+            var c = CeilingAt(20);
+            c.BeginStartBuffer(5f);
+            c.Tick(2f, 20);
+
+            Assert.AreEqual(5f, c.StartGraceDuration, Delta);
+            Assert.AreEqual(3f, c.StartGraceRemaining, Delta);
+            Assert.AreEqual(0.6f, c.StartGraceRemaining / c.StartGraceDuration, Delta, "the fuse's fraction");
+        }
+
         /// <summary>A front at full lead above `avatarRow`, no start buffer, `speed` rows/s.</summary>
         private static CeilingSystem CeilingAt(int avatarRow, float speed = 1f)
         {

@@ -116,7 +116,7 @@ namespace HollowLines.View
         private GravitySystem _gravity;
         private MomentumTracker _momentum;   // persistent — MUST be unsubscribed in OnDestroy (this view is per board)
         private FissureTracker  _fissures;   // per board
-        private AirSystem       _air;        // persistent
+        private CeilingSystem   _ceiling;    // persistent — R8.8: the Danger Zone is the Cave-in margin's
         private AvatarView _avatarView;
 
         private SpriteRenderer _glow;
@@ -199,7 +199,7 @@ namespace HollowLines.View
         public void Init(AvatarModel avatar, CollapseSystem collapse, ChainTracker chain, BombSystem bombs,
                          GridModel grid, GravitySystem gravity = null, MomentumTracker momentum = null,
                          AvatarView avatarView = null, EnemySystem enemies = null,
-                         FissureTracker fissures = null, AirSystem air = null)
+                         FissureTracker fissures = null, CeilingSystem ceiling = null)
         {
             _avatar     = avatar;
             _collapse   = collapse;
@@ -209,7 +209,7 @@ namespace HollowLines.View
             _gravity    = gravity;
             _momentum   = momentum;
             _fissures   = fissures;
-            _air        = air;
+            _ceiling    = ceiling;
             _avatarView = avatarView;
             _enemies    = enemies;
 
@@ -524,10 +524,10 @@ namespace HollowLines.View
         /// </summary>
         private void AnimateVignette()
         {
-            if (_vignette == null || _air == null) return;
+            if (_vignette == null || _ceiling == null) return;
 
             // Unscaled: entering the zone right before a pause still shows it (the pulse itself uses scaled time).
-            _vignetteLevel = Mathf.MoveTowards(_vignetteLevel, _air.IsDangerZone ? 1f : 0f, vignetteFadeSpeed * Time.unscaledDeltaTime);
+            _vignetteLevel = Mathf.MoveTowards(_vignetteLevel, _ceiling.IsDangerZone ? 1f : 0f, vignetteFadeSpeed * Time.unscaledDeltaTime);
             if (_vignetteLevel <= 0f)
             {
                 _vignette.enabled = false;

@@ -25,7 +25,7 @@ namespace HollowLines.View
         [SerializeField] private Color bombColor     = new Color(0.95f, 0.25f, 0.10f); // red-orange
         [SerializeField] private Color diamondColor  = new Color(0.80f, 0.92f, 1.00f); // icy white-blue gem
         [SerializeField] private Color emptyColor    = new Color(0.05f, 0.04f, 0.03f);
-        [SerializeField] private Color rubbleColor   = new Color(0.22f, 0.19f, 0.17f); // R8.2 Cave-in rubble — dull grey-brown, placeholder until R8.8
+        [SerializeField] private Color rubbleColor   = new Color(0.50f, 0.44f, 0.39f); // R8.8 Cave-in rubble — tints the procedural cobble tile
 
         [Header("— Exit Zone —")]
         [Tooltip("Warm light pooled in the EMPTY cells of the exit zone (campaign/tutorial only). Blocks are never tinted.")]
@@ -59,6 +59,7 @@ namespace HollowLines.View
         // AI-generated tileset (flat vector style, fal.ai flux/schnell — session 2026-07-16).
         // Loaded from Assets/_Project/Art/Resources/Tiles/ so it works in both Editor and builds.
         private static Sprite _neutralSprite, _hardSprite, _steelSprite, _capsuleSprite, _bombSprite;
+        private static Sprite _rubbleSprite; // R8.8: procedural pixel-art cobbles (GetRubbleSprite)
         private static bool _tilesetLoaded;
 
         // R4: Diamond tiles get their own material (DiamondShine, §5.10) instead of the default
@@ -468,7 +469,7 @@ namespace HollowLines.View
                 case CellType.AirCapsule:  return (_capsuleSprite, Color.white);
                 case CellType.Bomb:        return (_bombSprite, Color.white);
                 case CellType.Diamond:     return (_neutralSprite, diamondColor);
-                case CellType.Rubble:      return (_neutralSprite, rubbleColor);
+                case CellType.Rubble:      return (GetRubbleSprite(), rubbleColor);
                 default:                   return (_neutralSprite, emptyColor);
             }
         }
@@ -499,7 +500,8 @@ namespace HollowLines.View
                 return null;
 
             _capsuleMaterial = new Material(shader) { name = "CapsuleShine (runtime)" };
-            _capsuleMaterial.SetColor("_ShineColor",    new Color(0.55f, 0.95f, 1f));
+            // R8.8: the capsule is a timber prop now — a warm lamplight gleam, not air cyan.
+            _capsuleMaterial.SetColor("_ShineColor",    new Color(1f, 0.82f, 0.50f));
             _capsuleMaterial.SetFloat("_PulseSpeed",    2.2f);  // a breath, faster than the diamond's 1.6
             _capsuleMaterial.SetFloat("_PulseStrength", 0.18f);
             _capsuleMaterial.SetFloat("_SweepSpeed",    0.35f); // one slow gloss pass every ~3 s
@@ -533,6 +535,55 @@ namespace HollowLines.View
             _steelSprite   = Resources.Load<Sprite>("Tiles/tile_steel")   ?? GetUnitSprite();
             _capsuleSprite = Resources.Load<Sprite>("Tiles/tile_capsule") ?? GetUnitSprite();
             _bombSprite    = Resources.Load<Sprite>("Tiles/tile_bomb")    ?? GetUnitSprite();
+        }
+
+        /// <summary>
+        /// R8.8 Cave-in rubble: 16×16 pixel-art cobbles (point-filtered, 16 PPU = one cell), grey-scale so
+        /// `rubbleColor` tints it. Voronoi stones on a wrapping grid — each stone its own shade, dark mortar
+        /// where two stones meet, a lit top-left edge — so a swallowed row reads as packed rock, not as a
+        /// flat colour block. Deterministic (fixed seed): the same tile every run.
+        /// </summary>
+        private static Sprite GetRubbleSprite()
+        {
+            if (_rubbleSprite != null)
+                return _rubbleSprite;
+
+            const int size = 16;
+            var rng   = new System.Random(8);
+            var seeds = new Vector2[7];
+            var shade = new float[seeds.Length];
+            for (int i = 0; i < seeds.Length; i++)
+            {
+                seeds[i] = new Vector2((float)rng.NextDouble() * size, (float)rng.NextDouble() * size);
+                shade[i] = 0.62f + 0.30f * (float)rng.NextDouble();
+            }
+
+            var px = new Color[size * size];
+            for (int y = 0; y < size; y++)
+            for (int x = 0; x < size; x++)
+            {
+                float best = float.MaxValue, second = float.MaxValue;
+                int owner = 0;
+                for (int i = 0; i < seeds.Length; i++)
+                for (int ox = -1; ox <= 1; ox++)      // wrap, so neighbouring rubble cells tile seamlessly
+                for (int oy = -1; oy <= 1; oy++)
+                {
+                    float d = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), seeds[i] + new Vector2(ox * size, oy * size));
+                    if (d < best) { second = best; best = d; owner = i; }
+                    else if (d < second) second = d;
+                }
+
+                float v = second - best < 1.1f ? 0.30f : shade[owner]; // mortar between stones
+                // Lit from the top-left: a stone's pixel just inside its upper-left border is brighter.
+                if (v > 0.3f && second - best < 2.2f && (x + y) % 3 == 0) v = Mathf.Min(1f, v + 0.12f);
+                px[y * size + x] = new Color(v, v, v, 1f);
+            }
+
+            var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp };
+            tex.SetPixels(px);
+            tex.Apply();
+            _rubbleSprite = Sprite.Create(tex, new Rect(0, 0, size, size), new Vector2(0.5f, 0.5f), size);
+            return _rubbleSprite;
         }
 
         public static Sprite GetUnitSprite()

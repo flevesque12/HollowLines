@@ -42,6 +42,11 @@ namespace HollowLines.View
         [Range(0f, 1.5f)] [SerializeField] private float heartbeatVolume = 1f;
         [SerializeField] private float heartbeatFadeSpeed = 2f;
 
+        [Header("— Cave-in rumble (v3.3, R8.8) —")]
+        [Tooltip("Rumble level at zero margin, relative to the SFX mix. It grows with the square of how close the front is.")]
+        [Range(0f, 1.5f)] [SerializeField] private float caveInRumbleVolume = 0.9f;
+        [SerializeField] private float caveInRumbleFadeSpeed = 1.5f;
+
         [Header("— Burst Shatter (v3) —")]
         [Tooltip("Chunk size at which the shatter reaches its deepest pitch.")]
         [SerializeField] private int burstCellsForLowestPitch = 12;
@@ -76,6 +81,7 @@ namespace HollowLines.View
         private AudioClip _powerCryClip;      // R7.11 Tier 3 rising "yes!"
         private AudioClip _grazeClip;         // R7.11 near miss
         private AudioClip _heartbeatClip;     // R7.11 Danger Zone loop
+        private AudioClip _caveInClip;        // R8.8 Cave-in loop — its volume follows the front's proximity
         private float     _lastEnemyAlertTime = -10f;
         private const float EnemyAlertCooldown = 0.8f;
         private AudioClip _musicLoopClip;
@@ -95,6 +101,9 @@ namespace HollowLines.View
         private AudioSource _uiSource; // R6.9 options preview — its own source, so no drill pitch leaks in
         private AudioSource _momentumSource;  // rumble / Power Drill / graze — never pitched
         private AudioSource _heartbeatSource; // looped; its volume is faded here, not set by ApplyVolumes
+        private AudioSource _caveInSource;    // R8.8 looped, same treatment
+        private CeilingSystem _ceiling;
+        private float _caveInLevel;
         private float _sfxLevel = 1f;         // current Effets-scaled SFX volume (ApplyVolumes)
         private float _heartbeatLevel;        // 0 → 1 eased presence
         private bool  _heartbeatWanted;
@@ -127,6 +136,11 @@ namespace HollowLines.View
             _heartbeatSource.loop   = true;
             _heartbeatSource.volume = 0f;
             _sfxSources.Remove(_heartbeatSource); // faded in Update, scaled by _sfxLevel
+
+            _caveInSource.clip   = _caveInClip;
+            _caveInSource.loop   = true;
+            _caveInSource.volume = 0f;
+            _sfxSources.Remove(_caveInSource);
             ApplyVolumes(VolumeSettings.Load());
             _musicSource.Play();
         }
@@ -160,17 +174,38 @@ namespace HollowLines.View
                 _heartbeatSource.Play();
             else if (_heartbeatLevel <= 0f && _heartbeatSource.isPlaying)
                 _heartbeatSource.Stop(); // restarts on the "lub" next time
+
+            TickCaveInRumble(paused);
+        }
+
+        /// <summary>
+        /// R8.8 Cave-in rumble: a low loop whose level is the square of the front's proximity — silent at
+        /// a full leash, a growl at half, a roar when it is on top of you. Silent while the front waits
+        /// (start buffer grace) and under the pause menu, like the heartbeat.
+        /// </summary>
+        private void TickCaveInRumble(bool paused)
+        {
+            float proximity = _ceiling != null ? 1f - Mathf.Clamp01(_ceiling.LeadPercent / 100f) : 0f;
+            bool  waiting   = _ceiling == null || _ceiling.InStartGrace;
+            float target    = paused || waiting ? 0f : proximity * proximity;
+            _caveInLevel = Mathf.MoveTowards(_caveInLevel, target, caveInRumbleFadeSpeed * Time.unscaledDeltaTime);
+            _caveInSource.volume = _sfxLevel * caveInRumbleVolume * _caveInLevel;
+
+            if (_caveInLevel > 0.001f && !_caveInSource.isPlaying)
+                _caveInSource.Play();
+            else if (_caveInLevel <= 0.001f && _caveInSource.isPlaying)
+                _caveInSource.Stop();
         }
 
         /// <summary>R6.9: a short blip at the current Effets level, so moving the slider is heard.</summary>
         public void PlaySfxPreview() => _uiSource.PlayOneShot(_drillClip);
 
         /// <summary>Hook the systems that live for the whole session (called once from GameBootstrap.Awake).</summary>
-        public void InitPersistent(AirSystem air, HealthSystem health, CampaignManager campaign,
+        public void InitPersistent(CeilingSystem ceiling, HealthSystem health, CampaignManager campaign,
                                    MomentumTracker momentum = null, GrazeSystem graze = null)
         {
-            // R7.11: momentum, graze and the air tank are persistent (Reset per board, never rebuilt),
-            // so — like this manager — they are wired once.
+            // R7.11 / R8.8: momentum, graze and the Cave-in front are persistent (Reset per board, never
+            // rebuilt), so — like this manager — they are wired once.
             _momentum = momentum;
             if (_momentum != null)
             {
@@ -178,9 +213,9 @@ namespace HollowLines.View
                 _momentum.PowerDrillActivated += OnPowerDrill;
             }
             if (graze != null) graze.GrazeTriggered += OnGraze;
-            air.DangerZoneChanged += inDanger => _heartbeatWanted = inDanger;
-            _heartbeatWanted = air.IsDangerZone;
-            air.AirDepleted += PlayGameOver;
+            _ceiling = ceiling;
+            ceiling.DangerZoneChanged += inDanger => _heartbeatWanted = inDanger;
+            _heartbeatWanted = ceiling.IsDangerZone;
             health.HealthDepleted += PlayGameOver;
             campaign.LevelCompleted += _ => PlayLevelComplete();
             campaign.CampaignCompleted += PlayLevelComplete;
@@ -475,6 +510,8 @@ namespace HollowLines.View
             _grazeClip         = SfxSynth.Sweep(2200f, 3000f, 0.07f, 0.22f);
             // Danger Zone: lub-dub at 60 bpm, looped.
             _heartbeatClip     = SfxSynth.Heartbeat(heartbeatBpm, 0.7f);
+            // Cave-in: a seamless 3 s loop of deep, slowly churning rock (R8.8).
+            _caveInClip        = SfxSynth.Rumble(3f, 0.8f);
 
             // Crawler death: a short dry crunch. Higher low-pass than the crush clip so it reads
             // as something small breaking, not as the player getting hit.
@@ -503,6 +540,7 @@ namespace HollowLines.View
             _uiSource        = NewSource();
             _momentumSource  = NewSource();
             _heartbeatSource = NewSource();
+            _caveInSource    = NewSource();
         }
 
         private AudioSource NewSource()

@@ -241,9 +241,9 @@ elle ne demande jamais de détour (règle 6). 0,75 rangée ≈ 1,25 s de front �
 | `EndlessManager` | `DrainRateForDepth`, `DrainRateChanged` | ✅R8.5 `CeilingSpeedForDepth`, `CeilingSpeed`, `CeilingSpeedChanged` (0,6 + 0,06 / 20 rangées, max 1,2) |
 | `GravitySystem`, `BombSystem`, `EnemySystem` | `AirCapsuleLiberated` → air | `AirCapsuleLiberated` → `RestoreCapsule` (§4) |
 | `StrateGenerator` | `airRate` | inchangé (la capsule reste) |
-| HUD | Barre d'air + « Fore pour respirer ! » (R6.3) | **Même barre** = marge ; hint « DESCENDS ! » sous 30 % |
-| VFX | Vignette danger | + rendu des débris, front qui s'effrite (poussière), tuile capsule à redessiner |
-| Audio | Heartbeat danger | + grondement dont le volume suit la proximité |
+| HUD | Barre d'air + « Fore pour respirer ! » (R6.3) | ✅R8.8 **Même barre** = marge, libellée **« ÉBOULEMENT »** (choix dev), couleur pierre ; hint **« DESCENDS ! »** sous 30 % |
+| VFX | Vignette danger | ✅R8.8 vignette sur la marge ; `CaveInView` (dents de roche + lueur, poussière, cailloux) ; débris = tuile pavés procédurale ; capsule = **étai de mine** (choix dev) |
+| Audio | Heartbeat danger | ✅R8.8 heartbeat sur la marge + **grondement** en boucle, volume = proximité² (muet pendant la grâce et en pause) |
 | Debug toggle | `disableAir` | ✅R8.6 `disableCeiling` (`FormerlySerializedAs("disableAir")`) |
 | Aide en jeu | Page air | Page « Le puits s'effondre » |
 | Harness | Ledger d'air | Ledger de marge (vitesse, reculs, rattrapages par la laisse) |
@@ -298,7 +298,7 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 | R8.5 ✅ | `DeathTracker` (marge à la mort) / `CampaignManager` / `EndlessManager` : vitesses + grace ; `ScoreSystem` inchangé | NUnit |
 | R8.6 ✅ | `GameBootstrap` : câblage, ordre du tick, nouvelle règle de respawn, couture Endless, l'air ne tue plus (passerelle `Mirror` jusqu'à R8.8) | Intégration + play mode |
 | R8.7 ✅ | Harness : parité, puis calibrage — mesuré (×1 / ×1,5 / ×2, `MaxLead` 12 / 8), **rien de changé** (`balance.md` §15.11) | Harness |
-| R8.8 | View : débris + front, barre de marge, hint, audio, tuile capsule | Visuel |
+| R8.8 ✅ | View : débris + front, barre de marge, hint, audio, tuile capsule (étai) | Visuel |
 | R8.9 | Pages d'aide, GDD, CLAUDE.md, suppression d'`AirSystem` et des tests d'air | NUnit + play mode |
 
 > L'air reste fonctionnel jusqu'à R8.6 : R8.1-R8.5 ajoutent à côté, R8.6 bascule, R8.9 nettoie
@@ -369,3 +369,28 @@ Unity déconnecté au moment du retrait du gaz) — Core seulement, 503/503 via 
   `Tick` ne fait tourner que l'horloge du start buffer (le décompte de grâce du HUD), et
   **`AirSystem.Mirror(LeadPercent)`** chaque frame — la barre, le hint « Fore pour respirer », la vignette et le
   heartbeat lisent donc la marge sans avoir été touchés. Le libellé « AIR » / le texte du hint changent en R8.8.
+
+---
+
+## 12. Visuels livrés — R8.8 (2026-10-27)
+
+**Plus rien dans le jeu ne lit `AirSystem`** (sauf la page d'aide, R8.9). Le HUD, la vignette (VfxManager) et le
+heartbeat (AudioManager) prennent `CeilingSystem` directement ; la passerelle `AirSystem.Mirror` de R8.6 n'est plus
+appelée — elle part avec `AirSystem` en R8.9. `CeilingSystem.StartGraceDuration` ajouté pour la mèche du HUD.
+
+- **Barre « ÉBOULEMENT »** (choix dev) : même barre en bas, couleur pierre au lieu du cyan de l'air ; pendant la grâce
+  « ÉBOULEMENT · 3 » + la mèche dorée (R6.2) ; rouge sous 25 %. Hint **« DESCENDS ! »** sous 30 %, avec le « pop »
+  à chaque gain de marge (une rangée descendue, une capsule, un burst).
+- **`CaveInView`** (remplace `CaveInPreviewView`, plus de texte OnGUI) : une dent de roche pixel-art par colonne
+  pendue au front (3 profils procéduraux), une lueur orange derrière (rouge pulsé en Danger Zone), la bande de
+  poussière sur la rangée en train de tomber, des cailloux qui tombent du front (pluie fine à pleine laisse, grêle
+  quand il est proche), une bouffée par rangée avalée et une gerbe quand le front frappe l'avatar.
+- **Débris** : tuile pavés 16×16 procédurale (Voronoi, mortier sombre), teintée par `BoardView.rubbleColor`.
+- **Capsule = étai de mine** (choix dev) : `Editor/CapsuleTileGenerator` réécrit (menu *Hollow Lines → Regenerate
+  Capsule Tile (timber prop)*) — deux poteaux, un chapeau boulonné, une croix de contreventement, sur la roche ; même
+  chemin et taille, donc import et `Resources.Load` inchangés. Le reflet du shader passe du cyan au doré.
+- **Grondement** : `SfxSynth.Rumble` (bruit brun + corps à 80 Hz, boucle de 3 s fondue sur elle-même — saut à la
+  jointure mesuré 0,0003, sans clic) ; volume = proximité², muet pendant la grâce et en pause.
+
+**Vérifié en play mode (captures, tutoriel)** : grâce (« ÉBOULEMENT · 2 », mèche, étai lisible dans la grille), marge
+à 25 % (barre rouge, « DESCENDS ! », cailloux), marge à 2 % (rangée 0 en pavés, dents + lueur, vignette, ×2 DANGER).

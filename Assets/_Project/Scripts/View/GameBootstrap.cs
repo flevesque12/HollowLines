@@ -11,12 +11,12 @@ namespace HollowLines.View
     /// Scene entry point — boots all Core systems, wires events, owns the game loop.
     /// One component on one empty GameObject; no FindObjectOfType anywhere.
     ///
-    /// Persistent systems (ScoreSystem, CeilingSystem, AirSystem, HealthSystem, CampaignManager) are
-    /// created once in Awake and survive level transitions.
+    /// Persistent systems (ScoreSystem, CeilingSystem, HealthSystem, CampaignManager) are created once
+    /// in Awake and survive level transitions.
     ///
     /// v3.3 Cave-in (R8.6, cave-in.md): the well collapses behind the player. CeilingSystem works in
-    /// ABSOLUTE rows (board row + _rowOffset), so the front crosses an Endless seam untouched. The air
-    /// no longer drains or kills; until R8.8 it only mirrors the margin for the HUD / VFX / audio.
+    /// ABSOLUTE rows (board row + _rowOffset), so the front crosses an Endless seam untouched. Since R8.8
+    /// the HUD, VFX and audio read it directly — the game no longer uses AirSystem at all (deleted in R8.9).
     ///
     /// Grid-dependent systems (GridModel, AvatarModel, GravitySystem, CollapseSystem,
     /// BombSystem, ChainTracker, EnemySystem) are fully rebuilt by LoadLevel() on each transition.
@@ -99,7 +99,6 @@ namespace HollowLines.View
 
         // ── Persistent systems (survive level transitions) ────────────────────
         private ScoreSystem     _scoreSystem;
-        private AirSystem       _airSystem;
         private HealthSystem    _healthSystem;
         private CampaignManager _campaign;
         private EndlessManager  _endless;
@@ -235,11 +234,6 @@ namespace HollowLines.View
             _deathTracker = new DeathTracker();
             _deathTracker.Died += EndRun;
 
-            // R8.6: the air no longer drains and never kills (no AirDepleted wiring). It survives only as a
-            // bridge until R8.8: Update mirrors the Cave-in margin into it, so the HUD bar, the breathe
-            // hint, the vignette and the heartbeat keep working unchanged. Deleted in R8.9.
-            _airSystem = new AirSystem { DrainRate = 0f };
-
             // ── v3.3 Cave-in (R8.6, cave-in.md) ─────────────────────────────
             // Persistent: an Endless seam must NOT reset the front. LoadLevel resets it on fresh boards.
             _ceiling = new CeilingSystem();
@@ -262,7 +256,7 @@ namespace HollowLines.View
             var hudGo = new GameObject("HUD");
             hudGo.transform.SetParent(transform, false);
             _hud = hudGo.AddComponent<HUDView>();
-            _hud.Init(_scoreSystem, _airSystem, _healthSystem, null,
+            _hud.Init(_scoreSystem, _ceiling, _healthSystem, null,
                       _depthTracker,
                       useCampaign ? _campaign : null, hudPanelSettings,
                       _diamondSystem, _momentumTracker);
@@ -285,7 +279,7 @@ namespace HollowLines.View
             var audioGo = new GameObject("AudioManager");
             audioGo.transform.SetParent(transform, false);
             _audio = audioGo.AddComponent<AudioManager>();
-            _audio.InitPersistent(_airSystem, _healthSystem, _campaign, _momentumTracker, _grazeSystem);
+            _audio.InitPersistent(_ceiling, _healthSystem, _campaign, _momentumTracker, _grazeSystem);
             _screens.SetAudio(_audio); // R6.9: the Options screen drives the volumes
 
             // ── First board load ─────────────────────────────────────────────
@@ -326,8 +320,6 @@ namespace HollowLines.View
                 _ceiling.Tick(dt, _avatar.Position.Y + _rowOffset);             //    the level is won (debug: skippable).
                                                                                 //    Ticks in freefall too: falling IS
                                                                                 //    gaining margin (⚡D4 retired)
-            _airSystem.Tick(dt);                                                // 9b. R8.6 bridge: zero drain — only the
-            _airSystem.Mirror(_ceiling.LeadPercent);                            //     grace clock runs; the bar shows the margin
             _enemySystem.Tick(dt, _avatar.Position);                            // 10. enemy movement + contact
 
             // Endless has no drill/burst event to wake buried enemies ahead of the player, so they
@@ -419,7 +411,6 @@ namespace HollowLines.View
             // R6.2 (F02): every fresh board opens with the front a full leash above the spawn, still for a
             // grace window, then ramping up — so a new player can read the board first. The tutorial reads
             // CurrentLevel = 1 like the speed and wobble. An endless seam keeps the front where it is.
-            // The bridged air starts the same buffer: it only times the HUD's grace cue.
             if (freshBoard)
             {
                 float grace = !_endlessMode && useCampaign
@@ -427,7 +418,6 @@ namespace HollowLines.View
                     : CeilingSystem.DefaultStartGrace;
                 _ceiling.Reset(_spawn.Y + _rowOffset);
                 _ceiling.BeginStartBuffer(grace);
-                _airSystem.BeginStartBuffer(grace);
             }
 
             // Rebuild grid-dependent systems.
@@ -617,7 +607,7 @@ namespace HollowLines.View
             vfxGo.transform.SetParent(_boardViewGo.transform, false);
             vfxGo.AddComponent<VfxManager>().Init(_avatar, _collapse, _chainTracker, _bombSystem, _grid,
                                                   _gravity, _momentumTracker, avatarView, _enemySystem,
-                                                  _fissureTracker, _airSystem);
+                                                  _fissureTracker, _ceiling);
 
             // Enemy sprites live under the board view, so they're torn down with it on the next load.
             var enemyViewGo = new GameObject("EnemyView");
@@ -626,10 +616,10 @@ namespace HollowLines.View
             enemyView.Init(_enemySystem, _avatar);           // R6.4: avatar for the danger "!"
             enemyView.DangerStarted += _ => _audio.PlayEnemyAlert();
 
-            // Placeholder front line + margin readout until the real View pass (R8.8).
-            var caveInGo = new GameObject("CaveInPreviewView");
+            // R8.8: the crumbling front, its falling debris and dust (the rubble itself is a BoardView tile).
+            var caveInGo = new GameObject("CaveInView");
             caveInGo.transform.SetParent(_boardViewGo.transform, false);
-            caveInGo.AddComponent<CaveInPreviewView>().Init(_ceiling, _grid, _rowOffset);
+            caveInGo.AddComponent<CaveInView>().Init(_ceiling, _grid, _rowOffset, _avatar);
 
             // Populate enemies LAST, so everything that renders them off EnemySpawned (EnemyView's
             // sprites, VfxManager's marker cache) is already listening when the spawn events fire.
@@ -684,7 +674,6 @@ namespace HollowLines.View
             _tutorialWon = false;
 
             _scoreSystem.Reset();
-            _airSystem.Reset();
             _healthSystem.Reset();
             _deathTracker.Reset();
             _screens.Hide();
@@ -720,7 +709,6 @@ namespace HollowLines.View
             _pendingSegmentAdvance = false;
             _endless.Reset(NewRunSeed());
             _scoreSystem.Reset();
-            _airSystem.Reset();
             _healthSystem.Reset();
             _deathTracker.Reset();
             LoadLevel();
@@ -768,7 +756,6 @@ namespace HollowLines.View
             _cameraShake.StopShake();
             _campaign.RestartLevel();
             _scoreSystem.Reset();
-            _airSystem.Reset();
             _healthSystem.Reset();
             _deathTracker.Reset();
             _screens.Hide();
@@ -830,8 +817,7 @@ namespace HollowLines.View
                 _inTutorial  = false;
                 _tutorialWon = false;
                 _scoreSystem.Reset();
-                _airSystem.Reset();
-                _healthSystem.Reset();
+                    _healthSystem.Reset();
                 _deathTracker.Reset();
                 _screens.Hide();
                 LoadLevel(); // now builds campaign level 1 (CurrentLevel is still 1)
@@ -840,7 +826,6 @@ namespace HollowLines.View
 
             _campaign.Advance(); // fires CampaignCompleted if last level → ShowCampaignComplete()
             if (_campaign.IsCampaignComplete) return;
-            _airSystem.Reset();
             _healthSystem.Reset();
             _deathTracker.Reset();
             _screens.Hide();
@@ -852,7 +837,6 @@ namespace HollowLines.View
             _cameraShake.StopShake();
             _campaign.Reset();
             _scoreSystem.Reset();
-            _airSystem.Reset();
             _healthSystem.Reset();
             _deathTracker.Reset();
             _screens.Hide();
@@ -1024,7 +1008,7 @@ namespace HollowLines.View
             if (_healthSystem.IsAlive)
                 _avatar.Teleport(RespawnCell()); // decision B: stay in place, the spawn may be rubble by now
             else
-                _deathTracker.NotifyDeath(cause, _avatar.Position, _airSystem.Air, _ceiling.Lead); // R8.5: the recap reads the margin
+                _deathTracker.NotifyDeath(cause, _avatar.Position, 0f, _ceiling.Lead); // R8.5: the recap reads the margin, not air
         }
 
         // ─────────────────────────────────────────────────────────────────────

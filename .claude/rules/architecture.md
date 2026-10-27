@@ -60,6 +60,7 @@ Assets/_Project/Scripts/
                             + diamond wiring + full enemy wiring (§7) + ✅R5.13 enemy spawning.
     AvatarController.cs   — Walk-input repeat; does NOT call AvatarModel.Tick()
     AvatarView.cs         — Sprite + lerp follow for the avatar
+    CaveInView.cs         — 🆕R8.8 Cave-in front: rock teeth + glow, crumbling dust, falling debris (cave-in.md §12)
     EnemyView.cs          — 🆕R5.17 Enemy sprites layered over the cell grid (sortingOrder 8):
                             dim+still when dormant, shuffle/pulse when active (§6.5)
     BoardView.cs          — ✅R4 One SpriteRenderer per cell, event-driven updates + wobble shake;
