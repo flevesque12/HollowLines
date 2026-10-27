@@ -265,6 +265,9 @@ namespace HollowLines.Core
         /// Fixed-point support propagation: a chunk is supported if it touches the well floor,
         /// or rests on a cell of a supported chunk. Chains of stacked chunks resolve in a few passes.
         /// The avatar never supports a block (GDD §4.2 — blocks fall through you, that is the crush).
+        /// R8.2: Rubble is anchored like the floor — the Cave-in's swallowed rows never fall, and
+        /// anything resting on them is supported. It holds nothing up from ABOVE: support only ever
+        /// comes from below, so a chunk hanging under the rubble with a void beneath still falls.
         /// </summary>
         private HashSet<Chunk> ComputeSupport(List<Chunk> chunks)
         {
@@ -277,12 +280,12 @@ namespace HollowLines.Core
 
             var supported = new HashSet<Chunk>();
 
-            // Seed: grounded on the floor.
+            // Seed: grounded on the floor, or rubble (anchored the same way).
             foreach (Chunk chunk in chunks)
             {
                 foreach (GridPos cell in chunk.Cells)
                 {
-                    if (cell.Y == _grid.Height - 1)
+                    if (cell.Y == _grid.Height - 1 || _grid.Get(cell) == CellType.Rubble)
                     {
                         supported.Add(chunk);
                         break;

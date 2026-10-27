@@ -68,6 +68,31 @@ namespace HollowLines.Core
             return true;
         }
 
+        /// <summary>
+        /// Overwrite every cell of rows [fromRow, toRow) with <paramref name="type"/> — the Cave-in turning
+        /// swallowed rows into Rubble (R8.2). Rows outside the board are skipped (the caller maps absolute
+        /// rows onto this board and may overshoot either edge). Goes through Set, so BoardView hears every
+        /// cell. Returns how many cells actually changed.
+        /// </summary>
+        public int FillRows(int fromRow, int toRow, CellType type)
+        {
+            int from = Math.Max(0, fromRow);
+            int to   = Math.Min(Height, toRow);
+            int changed = 0;
+
+            for (int y = from; y < to; y++)
+            {
+                for (int x = 0; x < Width; x++)
+                {
+                    if (_cells[x, y] == type)
+                        continue;
+                    Set(new GridPos(x, y), type);
+                    changed++;
+                }
+            }
+            return changed;
+        }
+
         /// <summary>True when every cell of row <paramref name="y"/> is void (the collapse rule, wired in M2).</summary>
         public bool IsRowVoid(int y)
         {
@@ -81,7 +106,7 @@ namespace HollowLines.Core
 
         /// <summary>
         /// Build a grid from a string map (rows[0] = top row).
-        /// Characters: '.' empty · 'A'/'B'/'C' colors · 'H' Hard · 'S' Steel · 'P' AirCapsule · 'X' Bomb · 'D' Diamond
+        /// Characters: '.' empty · 'A'/'B'/'C' colors · 'H' Hard · 'S' Steel · 'P' AirCapsule · 'X' Bomb · 'D' Diamond · 'R' Rubble
         /// </summary>
         public static GridModel FromStringMap(string[] rows)
         {
@@ -119,6 +144,7 @@ namespace HollowLines.Core
                 case 'P': return CellType.AirCapsule; // P = air Pack / Pill
                 case 'X': return CellType.Bomb;       // X = eXplosive
                 case 'D': return CellType.Diamond;
+                case 'R': return CellType.Rubble;     // R8.2 — the generator never emits it; tests and the Cave-in do
                 default:  throw new ArgumentException($"Unknown map character '{c}'.");
             }
         }

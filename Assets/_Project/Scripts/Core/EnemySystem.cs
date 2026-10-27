@@ -251,6 +251,27 @@ namespace HollowLines.Core
             KillInZone(blastCells, KillMethod.Bomb, chainMult);
         }
 
+        /// <summary>
+        /// R8.2: the Cave-in swallowed board rows [fromRow, toRow). Every living enemy there is buried —
+        /// gone from GetAllAlive, but NOT a kill: no EnemyKilled (no points, no death VFX), and a Boomer
+        /// never detonates in the rubble. Returns how many were buried.
+        /// </summary>
+        public int BuryRows(int fromRow, int toRow)
+        {
+            int buried = 0;
+            foreach (int id in new List<int>(_enemies.Keys))
+            {
+                EnemyEntity enemy = _enemies[id];
+                if (!enemy.IsAlive || enemy.Position.Y < fromRow || enemy.Position.Y >= toRow)
+                    continue;
+
+                _enemies[id] = enemy.Killed();
+                _crawlerState.Remove(id);
+                buried++;
+            }
+            return buried;
+        }
+
         /// <summary>Clears every enemy for a new run/level.</summary>
         public void Reset()
         {

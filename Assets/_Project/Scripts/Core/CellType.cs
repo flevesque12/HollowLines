@@ -14,6 +14,8 @@ namespace HollowLines.Core
     ///   7  AirCapsule  — drill to collect; restores air; does NOT fuse
     ///   8  Bomb        — NOT drillable; armed by adjacent drill or chunk landing; 1.5 s fuse; cross blast radius 2
     ///   9  Diamond     — drill to collect (1 tap); does NOT fuse; streak-neutral (§6.1/§6.4)
+    ///  10  Rubble      — a row the Cave-in swallowed (v3.3, ceiling-gas.md §3.1). NOT drillable, never
+    ///                    falls (anchors like the floor), immune to blasts, does NOT fuse
     /// </summary>
     public enum CellType : byte
     {
@@ -27,6 +29,7 @@ namespace HollowLines.Core
         AirCapsule  = 7,
         Bomb        = 8,
         Diamond     = 9,
+        Rubble      = 10,
     }
 
     public static class CellTypeExtensions

@@ -1080,3 +1080,60 @@ over + run summary, death recap, all **9** help pages — at 1280×720, 1280×80
 **⚠️ Tight spot:** help page 6/9 ("Les blocs qui tombent") is the tallest card — 693 of 720 units at 16:9
 (≈14 units margin top and bottom). One more line on that page will overflow at 16:9; split it across two
 pages instead.
+
+### R8.1 — `CeilingSystem` (Core) — 2026-10-27
+
+New pure-C# `Core/CeilingSystem.cs`, built **alongside** `AirSystem` (nothing wired yet — R8.6 switches over).
+Spec: `ceiling-gas.md` §3.3. 25 new NUnit tests, **485/485** (EditMode).
+
+**Deviation from the first draft of the spec (caught while writing it, before any code): the recoil may climb
+back into the rubble.** The draft bounded every recoil by `SwallowedRows` ("never un-swallow a row"). But when
+the front reaches the avatar, the rubble is necessarily right above it — a bounded `HitRecoil` would always be
+~0, decision C would do nothing, and the player would be struck again the moment the i-frames end. Now:
+- `SwallowedRows` only ever grows — rubble is permanent (the grid changed).
+- `CeilingRow` (the front) can recoil above it: the lead it shows is **time** before the next contact, not
+  distance to the rubble. The rubble itself is harmless (solid, like Steel); only the front strikes.
+- Swallowing resumes only once the front re-crosses the rubble bottom.
+
+**Order inside `Tick` / `NotifyAvatarRow` is load-bearing:** advance → leash → **contact** → swallow
+`< min(floor(CeilingRow), AvatarRow)`. Contact first means the strike recoils before any row goes, so the
+avatar's own row is never turned to rubble under it (`Swallowing_NeverReachesTheAvatarsRow`).
+
+**Other choices:**
+- `Reset(avatarRow)` marks rows above the starting front as already swallowed **silently** — they are spawn
+  air, not play space; firing `RowsSwallowed` for them would make the caller fill the spawn zone with rubble.
+- `Recoil` clamps at the leash (`avatar − MaxLead`): a lead beyond it would be yanked back next tick anyway.
+- `ShiftDown` (Perfect Clear, §5.2) moves the front **and** `SwallowedRows`, with no event — the grid already
+  shifted the rubble.
+- `SpeedForDrainRate(drain)` = `drain × MaxLead / 100` — the §2.2 translation, for R8.5's campaign/endless speeds.
+- The start buffer is a copy of `AirSystem`'s (same integral). Not extracted: `AirSystem` is deleted in R8.9.
+
+**Test-run note:** `run_tests` in PlayMode now finds **0 tests** — the test asmdef gained the `Editor` platform
+in `aee9538`. Use **EditMode**; CLAUDE.md §12/§14 and `tests.md` updated.
+
+### R8.2 — `CellType.Rubble` + swallowed-row conversion (Core) — 2026-10-27
+
+Core only, still not wired (R8.6). 15 new NUnit tests (`RubbleTests`), **500/500** (EditMode); the
+`tools/playtest` harness still builds (0 warnings). Spec: `ceiling-gas.md` §3.1.
+
+**What landed:**
+- `CellType.Rubble = 10`, map char `R` (tests only — the generator never emits it). Solid, not drillable, never fuses.
+- `GridModel.FillRows(from, to, type)` — rows `[from, to)`, clamped to the board (callers map absolute rows and
+  may overshoot), through `Set` so BoardView hears every cell; returns the cells changed.
+- `GravitySystem.ComputeSupport` seeds rubble like the floor row → it never falls, `Settle` included. Support
+  still only comes from below, so a chunk hanging under the rubble over a void drops (pinned).
+- `BombSystem.DisarmRows(from, to)` / `EnemySystem.BuryRows(from, to)` — silent: no blast, no `EnemyKilled`, no
+  Boomer detonation. A buried enemy just leaves `GetAllAlive()`, which EnemyView / VfxManager already poll.
+
+**Nothing needed — and pinned by a test instead:** shockwave / bomb / Boomer blasts already leave an unknown
+type alone (`default:` in their result tables), and `FissureTracker.GetFissures` already reads 0 on a cell
+that is no longer `CanFuse`. No `FissureTracker` API was added.
+
+**⚠️ Found while reading `CollapseSystem` — would have been a free +500 per board:** a Perfect Clear fires on
+any void row with *something solid above it* (`HasSolidAbove`, the guard that stops the empty spawn rows
+"collapsing" every frame). Rubble fills the TOP rows, so every empty spawn row under it would have become a
+Perfect Clear — and shifted the rubble down a row. `HasSolidAbove` now ignores `Rubble`. With real blocks
+above, a collapse still clears and shifts the rubble along with them (§5.2, `CeilingSystem.ShiftDown`).
+
+**Known gap until R8.8:** `BoardView.VisualFor` has no `Rubble` case, so it would render as an empty cell.
+Harmless today — nothing in the game creates rubble before R8.6.

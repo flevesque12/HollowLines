@@ -247,6 +247,24 @@ namespace HollowLines.Core
             ProcessExplosions(toExplode, avatarCell);
         }
 
+        /// <summary>
+        /// R8.2: the Cave-in swallowed board rows [fromRow, toRow). Every fuse burning there is put out
+        /// silently — a bomb buried in the rubble must never go off (no blast, no score, no avatar hit).
+        /// Call it alongside GridModel.FillRows. Returns how many fuses were dropped.
+        /// </summary>
+        public int DisarmRows(int fromRow, int toRow)
+        {
+            var buried = new List<GridPos>();
+            foreach (GridPos pos in _armed.Keys)
+            {
+                if (pos.Y >= fromRow && pos.Y < toRow)
+                    buried.Add(pos);
+            }
+            foreach (GridPos pos in buried)
+                _armed.Remove(pos);
+            return buried.Count;
+        }
+
         // ── Pocket bomb ──────────────────────────────────────────────────
 
         /// <summary>Grant the player a pocket bomb (called by level setup).</summary>

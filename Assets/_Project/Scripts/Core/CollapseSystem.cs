@@ -63,13 +63,17 @@ namespace HollowLines.Core
             return false;
         }
 
+        // R8.2: Rubble doesn't count. The Cave-in fills the TOP rows, so without this every empty
+        // spawn row under the rubble would become a free +500 Perfect Clear (and shift the rubble down
+        // a row). With real blocks above, a collapse still shifts the rubble along with them (§5.2).
         private bool HasSolidAbove(int row)
         {
             for (int y = 0; y < row; y++)
             {
                 for (int x = 0; x < _grid.Width; x++)
                 {
-                    if (_grid.Get(new GridPos(x, y)).IsSolid())
+                    CellType type = _grid.Get(new GridPos(x, y));
+                    if (type.IsSolid() && type != CellType.Rubble)
                         return true;
                 }
             }

@@ -120,7 +120,7 @@ Downwell, Tetris, NecroDancer, Pac-Man CE.
 
 ### Testing
 - Primary: NUnit suite in `Tests/EditMode/CoreTests.cs` — runs via Unity Test Runner
-  in **PlayMode** (not EditMode — see historical note below)
+  in **EditMode** (see historical note below)
 - Behavioral: headless bot harness in `tools/playtest/` (`dotnet run`, .NET 8)
 - Every new Core API ships with NUnit coverage in the same session
 
@@ -134,8 +134,8 @@ Downwell, Tetris, NecroDancer, Pac-Man CE.
 
 ## 14. Historical notes
 
-- **Tests run in PlayMode, not EditMode** — the assembly definition doesn't have `Editor` in
-  its platforms. Not blocking; left as-is.
+- **Tests run in EditMode** — they used to run in PlayMode because the assembly definition lacked
+  the `Editor` platform. Commit `aee9538` added it; a PlayMode run now finds 0 tests.
 - **v2.1 CLAUDE.md** documented the void-line-centric design. This file (v3) supersedes it.
 - **`hollow-lines-gdd-v3.md` was synced to shipped values on 2026-07-23.**
 - **Procedural-first assets, not zero-asset.** All SFX are synthesized (`SfxSynth`), and VFX are
@@ -165,3 +165,4 @@ Downwell, Tetris, NecroDancer, Pac-Man CE.
 | `tests.md` | §13 Test status | `**/Tests/**`, `**/CoreTests*` |
 | `balance.md` | §15 Balance findings (all resolved) | `**/AirSystem*`, `**/ScoreSystem*`, `**/StrateGenerator*` |
 | `controls.md` | §16 Controls & input | `**/GameInput*` |
+| `ceiling-gas.md` | 🆕v3.3 Cave-in + gas blocks design (replaces air) — R8 | `**/CeilingSystem*`, `**/GasSystem*`, `**/AirSystem*`, `**/CellType*`, `**/GameBootstrap*` + 12 more (see frontmatter) |

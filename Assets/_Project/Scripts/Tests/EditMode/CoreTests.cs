@@ -1390,6 +1390,624 @@ namespace HollowLines.Tests
         }
     }
 
+    /// <summary>R8.1 — the Cave-in front (ceiling-gas.md §3.3). Rows are absolute.</summary>
+    [TestFixture]
+    public class CeilingSystemTests
+    {
+        private const float Delta = 0.001f;
+
+        /// <summary>A front at full lead above `avatarRow`, no start buffer, `speed` rows/s.</summary>
+        private static CeilingSystem CeilingAt(int avatarRow, float speed = 1f)
+        {
+            var c = new CeilingSystem { Speed = speed };
+            c.Reset(avatarRow);
+            return c;
+        }
+
+        // ── Lead + speed ────────────────────────────────────────────
+
+        [Test]
+        public void BeforeReset_LeadIsFull()
+        {
+            var c = new CeilingSystem();
+            Assert.AreEqual(CeilingSystem.DefaultMaxLead, c.Lead, Delta);
+            Assert.AreEqual(100f, c.LeadPercent, Delta);
+            Assert.IsFalse(c.IsDangerZone);
+        }
+
+        [Test]
+        public void Reset_PutsTheFrontAFullLeashAboveTheAvatar()
+        {
+            var c = CeilingAt(20);
+
+            Assert.AreEqual(8f, c.CeilingRow, Delta);
+            Assert.AreEqual(8, c.SwallowedRows, "rows above the starting front count as gone — silently");
+            Assert.AreEqual(12f, c.Lead, Delta);
+            Assert.AreEqual(100f, c.LeadPercent, Delta);
+        }
+
+        [Test]
+        public void Tick_AdvancesTheFrontAtSpeed()
+        {
+            var c = CeilingAt(20, speed: 0.6f);
+
+            c.Tick(1f, 20);
+
+            Assert.AreEqual(8.6f, c.CeilingRow, Delta);
+            Assert.AreEqual(11.4f, c.Lead, Delta);
+            Assert.AreEqual(95f, c.LeadPercent, Delta);
+        }
+
+        [Test]
+        public void Tick_NegativeSpeedOrDt_NeverPullsTheFrontBack()
+        {
+            var c = CeilingAt(20, speed: -3f);
+            c.Tick(1f, 20);
+            Assert.AreEqual(8f, c.CeilingRow, Delta, "negative speed clamps to 0");
+
+            c.Speed = 1f;
+            c.Tick(-1f, 20);
+            Assert.AreEqual(8f, c.CeilingRow, Delta, "negative dt is ignored");
+        }
+
+        [Test]
+        public void SpeedForDrainRate_TranslatesTheMeasuredAirBalance()
+        {
+            // §2.2: same standing-still time as the drain it replaces.
+            Assert.AreEqual(0.48f, CeilingSystem.SpeedForDrainRate(4f), Delta);
+            Assert.AreEqual(0.84f, CeilingSystem.SpeedForDrainRate(7f), Delta);
+            Assert.AreEqual(0.60f, CeilingSystem.SpeedForDrainRate(5f), Delta);
+            Assert.AreEqual(1.20f, CeilingSystem.SpeedForDrainRate(10f), Delta);
+            Assert.AreEqual(0f,    CeilingSystem.SpeedForDrainRate(-2f), Delta);
+            Assert.AreEqual(CeilingSystem.DefaultSpeed, CeilingSystem.SpeedForDrainRate(5f), Delta);
+        }
+
+        [Test]
+        public void Constructor_NonPositiveMaxLead_FallsBackToTheDefault()
+        {
+            Assert.AreEqual(CeilingSystem.DefaultMaxLead, new CeilingSystem(0f).MaxLead, Delta);
+            Assert.AreEqual(CeilingSystem.DefaultMaxLead, new CeilingSystem(-5f).MaxLead, Delta);
+            Assert.AreEqual(6f, new CeilingSystem(6f).MaxLead, Delta);
+        }
+
+        // ── Leash + swallowing ──────────────────────────────────────
+
+        [Test]
+        public void Leash_FastDescent_DragsTheFrontAndSwallowsEveryPassedRowInOneEvent()
+        {
+            var c = CeilingAt(2);
+            var events = new List<(int from, int to)>();
+            c.RowsSwallowed += (from, to) => events.Add((from, to));
+
+            c.NotifyAvatarRow(30); // a long freefall — the front did not advance itself
+
+            Assert.AreEqual(18f, c.CeilingRow, Delta);
+            Assert.AreEqual(12f, c.Lead, Delta, "a lead can't be banked past the leash");
+            Assert.AreEqual(1, events.Count);
+            Assert.AreEqual((-10, 18), events[0]);
+            Assert.AreEqual(18, c.SwallowedRows);
+        }
+
+        [Test]
+        public void Swallowing_TakesOnlyWholeRowsAboveTheFront()
+        {
+            var c = CeilingAt(20);
+            var events = new List<(int from, int to)>();
+            c.RowsSwallowed += (from, to) => events.Add((from, to));
+
+            c.Tick(0.5f, 20);  // front 8.5 — row 8 is crumbling, not gone
+            Assert.AreEqual(0, events.Count);
+
+            c.Tick(0.5f, 20);  // front 9.0 — row 8 is gone
+            Assert.AreEqual(1, events.Count);
+            Assert.AreEqual((8, 9), events[0]);
+        }
+
+        [Test]
+        public void Swallowing_NeverReachesTheAvatarsRow()
+        {
+            var c = CeilingAt(20);
+            int maxSwallowed = int.MinValue;
+            c.RowsSwallowed += (from, to) => maxSwallowed = System.Math.Max(maxSwallowed, to);
+
+            c.Tick(11.5f, 20); // front 19.5 — one huge frame
+
+            Assert.AreEqual(19, c.SwallowedRows);
+            Assert.AreEqual(19, maxSwallowed, "rows [.., 19) gone; the avatar's row 20 is never rubble under it");
+            Assert.AreEqual(0.5f, c.Lead, Delta);
+        }
+
+        // ── Contact ─────────────────────────────────────────────────
+
+        [Test]
+        public void Contact_FiresOnce_AndTheFrontHasAlreadyRecoiled()
+        {
+            var c = CeilingAt(20);
+            int hits = 0;
+            float frontAtHit = float.NaN;
+            c.AvatarReached += () => { hits++; frontAtHit = c.CeilingRow; };
+
+            c.Tick(11.5f, 20);
+            Assert.AreEqual(0, hits, "19.5 < 20 — not yet");
+
+            c.Tick(0.5f, 20);  // front 20.0 — touches row 20
+
+            Assert.AreEqual(1, hits);
+            Assert.AreEqual(20f - CeilingSystem.HitRecoil, frontAtHit, Delta, "recoiled BEFORE the event");
+            Assert.AreEqual(CeilingSystem.HitRecoil, c.Lead, Delta);
+        }
+
+        [Test]
+        public void Contact_RecoilClimbsBackIntoTheRubble_WhichStaysRubble()
+        {
+            var c = CeilingAt(20);
+            var events = new List<(int from, int to)>();
+            c.RowsSwallowed += (from, to) => events.Add((from, to));
+
+            c.Tick(11.5f, 20); // swallows [8, 19)
+            c.Tick(0.5f, 20);  // contact → front 16, inside the rubble
+
+            Assert.AreEqual(16f, c.CeilingRow, Delta);
+            Assert.AreEqual(19, c.SwallowedRows, "a recoil buys time, never gives rows back");
+            Assert.AreEqual(1, events.Count, "nothing new swallowed by the strike");
+        }
+
+        [Test]
+        public void Contact_StrikesAgain_OnceTheFrontCatchesUpWithAStillAvatar()
+        {
+            var c = CeilingAt(20);
+            int hits = 0;
+            c.AvatarReached += () => hits++;
+
+            c.Tick(12f, 20);   // first strike → front 16
+            c.Tick(3.5f, 20);  // front 19.5 (exact in float — no 19.9 + 0.1 rounding)
+            Assert.AreEqual(1, hits, "the recoil holds for HitRecoil / speed seconds");
+
+            c.Tick(0.5f, 20);
+            Assert.AreEqual(2, hits, "standing still is a slow death, like air at 0");
+        }
+
+        [Test]
+        public void Contact_DrillingDownEscapes()
+        {
+            var c = CeilingAt(20);
+            int hits = 0;
+            c.AvatarReached += () => hits++;
+
+            c.Tick(11.5f, 20); // front 19.5, lead 0.5
+            c.Tick(0.5f, 21);  // front 20.0 — but the avatar dropped a row
+
+            Assert.AreEqual(0, hits);
+            Assert.AreEqual(1f, c.Lead, Delta);
+        }
+
+        [Test]
+        public void Contact_AvatarMovedUpIntoTheFront_StrikesOnNotify()
+        {
+            var c = CeilingAt(20);
+            int hits = 0;
+            c.AvatarReached += () => hits++;
+            c.Tick(5f, 20); // front 13
+
+            c.NotifyAvatarRow(12);
+
+            Assert.AreEqual(1, hits);
+            Assert.AreEqual(12f - CeilingSystem.HitRecoil, c.CeilingRow, Delta);
+        }
+
+        // ── Recoils (the old air restores) ──────────────────────────
+
+        [Test]
+        public void Recoil_PushesTheFrontBack_ButNeverPastTheLeash()
+        {
+            var c = CeilingAt(20);
+            c.Tick(6f, 20); // front 14, lead 6
+
+            c.Recoil(2f);
+            Assert.AreEqual(12f, c.CeilingRow, Delta);
+
+            c.Recoil(100f);
+            Assert.AreEqual(CeilingSystem.DefaultMaxLead, c.Lead, Delta);
+            Assert.AreEqual(8f, c.CeilingRow, Delta, "clamped at avatar − MaxLead");
+            Assert.AreEqual(14, c.SwallowedRows, "rows already gone stay gone");
+        }
+
+        [Test]
+        public void Recoil_NonPositive_IsIgnored()
+        {
+            var c = CeilingAt(20);
+            c.Tick(6f, 20);
+
+            c.Recoil(0f);
+            c.Recoil(-3f);
+            c.RestoreBombChain(0);
+            c.RestoreBombChain(-2);
+
+            Assert.AreEqual(14f, c.CeilingRow, Delta);
+        }
+
+        [Test]
+        public void Restores_RecoilByTheirConstants()
+        {
+            var c = CeilingAt(20);
+            c.Tick(10f, 20); // front 18
+
+            c.RestoreBurst();
+            Assert.AreEqual(18f - CeilingSystem.BurstRecoil, c.CeilingRow, Delta);
+
+            c.RestoreBombChain(3);
+            Assert.AreEqual(18f - CeilingSystem.BurstRecoil - 3 * CeilingSystem.BombChainRecoilPerBomb,
+                            c.CeilingRow, Delta);
+
+            float before = c.CeilingRow;
+            c.RestorePerfectClear();
+            Assert.AreEqual(before - CeilingSystem.PerfectClearRecoil, c.CeilingRow, Delta);
+
+            before = c.CeilingRow;
+            c.RestorePowerDrill();
+            Assert.AreEqual(before - CeilingSystem.PowerDrillRecoil, c.CeilingRow, Delta);
+        }
+
+        [Test]
+        public void ShiftDown_MovesTheFrontAndTheRubbleTogether_WithoutASwallowEvent()
+        {
+            var c = CeilingAt(20);
+            c.Tick(6f, 20); // front 14, swallowed 14
+            int events = 0;
+            c.RowsSwallowed += (_, __) => events++;
+
+            c.ShiftDown();
+
+            Assert.AreEqual(15f, c.CeilingRow, Delta);
+            Assert.AreEqual(15, c.SwallowedRows);
+            Assert.AreEqual(0, events, "the Perfect Clear already moved the rubble on the grid");
+            Assert.AreEqual(5f, c.Lead, Delta);
+        }
+
+        // ── Danger Zone + HUD ───────────────────────────────────────
+
+        [Test]
+        public void DangerZone_Below15Percent_AndFlipsOnceEachWay()
+        {
+            var c = CeilingAt(20);
+            var flips = new List<bool>();
+            c.DangerZoneChanged += d => flips.Add(d);
+
+            c.Tick(10f, 20);   // lead 2 ≈ 16.7 %
+            Assert.IsFalse(c.IsDangerZone);
+
+            c.Tick(0.5f, 20);  // lead 1.5 = 12.5 %
+            Assert.IsTrue(c.IsDangerZone);
+
+            c.Tick(0.25f, 20); // deeper inside — no second flip
+            c.RestorePerfectClear(); // lead 2 → out
+
+            Assert.IsFalse(c.IsDangerZone);
+            CollectionAssert.AreEqual(new[] { true, false }, flips);
+        }
+
+        [Test]
+        public void LeadChanged_ReportsThePercent_AndStaysSilentWhenNothingMoves()
+        {
+            var c = CeilingAt(20, speed: 0.6f);
+            var log = new List<float>();
+            c.LeadChanged += p => log.Add(p);
+
+            c.Tick(1f, 20);
+            c.Tick(0f, 20);
+
+            Assert.AreEqual(1, log.Count, "a zero-dt tick changes nothing");
+            Assert.AreEqual(95f, log[0], Delta);
+        }
+
+        [Test]
+        public void Endless_AbsoluteRowsFarDown_BehaveTheSame()
+        {
+            var c = CeilingAt(5000, speed: 1.2f);
+            c.Tick(5f, 5003);
+
+            Assert.AreEqual(4994f, c.CeilingRow, Delta);
+            Assert.AreEqual(9f, c.Lead, Delta);
+            Assert.AreEqual(4994, c.SwallowedRows);
+        }
+
+        // ── Start buffer (R6.2 carried over) ────────────────────────
+
+        [Test]
+        public void StartBuffer_NotBegun_FullSpeedFromFrameZero()
+        {
+            var c = CeilingAt(100, speed: 1f);
+            Assert.AreEqual(1f, c.StartBufferFactor, Delta);
+
+            c.Tick(1f, 100);
+            Assert.AreEqual(89f, c.CeilingRow, Delta);
+        }
+
+        [Test]
+        public void StartBuffer_Grace_HoldsTheFrontStill()
+        {
+            var c = CeilingAt(100, speed: 1f);
+            c.BeginStartBuffer(3f);
+
+            c.Tick(2.9f, 100);
+
+            Assert.AreEqual(88f, c.CeilingRow, Delta);
+            Assert.IsTrue(c.InStartGrace);
+            Assert.AreEqual(0.1f, c.StartGraceRemaining, Delta);
+        }
+
+        [Test]
+        public void StartBuffer_WholeWindow_AdvancesExactlyTheRampArea()
+        {
+            var c = CeilingAt(100, speed: 1f);
+            c.BeginStartBuffer(3f);
+
+            c.Tick(3f + CeilingSystem.StartRampDuration, 100); // grace + ramp in one frame
+
+            // ramp area = 0.5 × 12 + ½ × (0.5 / 12) × 12² = 9 full-speed seconds
+            Assert.AreEqual(97f, c.CeilingRow, Delta);
+            Assert.IsFalse(c.InStartGrace);
+            Assert.AreEqual(1f, c.StartBufferFactor, Delta, "the buffer switched itself off");
+        }
+
+        [Test]
+        public void StartBuffer_ResetCancelsIt()
+        {
+            var c = CeilingAt(100, speed: 1f);
+            c.BeginStartBuffer(3f);
+
+            c.Reset(100);
+            c.Tick(1f, 100);
+
+            Assert.AreEqual(89f, c.CeilingRow, Delta);
+        }
+    }
+
+    /// <summary>R8.2 — Rubble: what the Cave-in leaves behind (ceiling-gas.md §3.1), and every system that must ignore it.</summary>
+    [TestFixture]
+    public class RubbleTests
+    {
+        // ── The cell type + grid conversion ─────────────────────────
+
+        [Test]
+        public void Rubble_IsSolid_NotDrillable_NeverFuses_AndParsesFromR()
+        {
+            Assert.AreEqual(10, (int)CellType.Rubble, "enum values are stable — never reuse a number");
+            Assert.IsTrue(CellType.Rubble.IsSolid());
+            Assert.IsFalse(CellType.Rubble.IsDrillable());
+            Assert.IsFalse(CellType.Rubble.CanFuse());
+
+            var grid = GridModel.FromStringMap(new[] { "R" });
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(0, 0)));
+            Assert.IsFalse(grid.Drill(new GridPos(0, 0)));
+        }
+
+        [Test]
+        public void FillRows_ConvertsWholeRows_FiringCellChangedForEachCell()
+        {
+            var grid = GridModel.FromStringMap(new[]
+            {
+                "ADP",
+                "X.H",
+                "CCC",
+            });
+            int events = 0;
+            grid.CellChanged += (_, t) => { if (t == CellType.Rubble) events++; };
+
+            int changed = grid.FillRows(0, 2, CellType.Rubble);
+
+            Assert.AreEqual(6, changed);
+            Assert.AreEqual(6, events, "BoardView hears every converted cell");
+            for (int y = 0; y < 2; y++)
+                for (int x = 0; x < 3; x++)
+                    Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(x, y)));
+            Assert.AreEqual(CellType.ColorC, grid.Get(new GridPos(0, 2)), "toRow is exclusive");
+        }
+
+        [Test]
+        public void FillRows_ClampsToTheBoard_AndSkipsCellsAlreadyRubble()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AA", "..", "BB" });
+
+            Assert.AreEqual(2, grid.FillRows(-5, 1, CellType.Rubble), "rows above the board are skipped");
+            Assert.AreEqual(0, grid.FillRows(0, 1, CellType.Rubble), "already rubble — nothing changes");
+            Assert.AreEqual(2, grid.FillRows(2, 99, CellType.Rubble), "rows below the board are skipped");
+            Assert.AreEqual(CellType.Empty, grid.Get(new GridPos(0, 1)));
+        }
+
+        // ── Gravity: rubble is anchored like the floor ──────────────
+
+        [Test]
+        public void Gravity_Rubble_NeverFalls_EvenOverAVoid()
+        {
+            var grid = GridModel.FromStringMap(new[] { "RRR", "...", "...", "AAA" });
+            var gravity = new GravitySystem(grid) { WobbleDuration = 0.1f, FallStepInterval = 0.02f };
+            bool wobbled = false;
+            gravity.WobbleStarted += _ => wobbled = true;
+
+            TestUtil.TickMany(gravity, 2f, new GridPos(9, 9));
+
+            Assert.IsFalse(wobbled);
+            for (int x = 0; x < 3; x++)
+                Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(x, 0)));
+        }
+
+        [Test]
+        public void Gravity_Rubble_HoldsNothingUpFromAbove()
+        {
+            // A chunk hanging UNDER the rubble with a void beneath still falls — support comes from below.
+            var grid = GridModel.FromStringMap(new[] { "RRR", "A..", "...", "BBB" });
+            var gravity = new GravitySystem(grid) { WobbleDuration = 0.1f, FallStepInterval = 0.02f };
+
+            TestUtil.TickMany(gravity, 2f, new GridPos(9, 9));
+
+            Assert.AreEqual(CellType.Empty,  grid.Get(new GridPos(0, 1)));
+            Assert.AreEqual(CellType.ColorA, grid.Get(new GridPos(0, 2)));
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(0, 0)));
+        }
+
+        [Test]
+        public void Settle_LeavesRubbleWhereItIs()
+        {
+            var grid = GridModel.FromStringMap(new[] { "RRR", "...", "...", "AAA" });
+            new GravitySystem(grid).Settle();
+
+            for (int x = 0; x < 3; x++)
+            {
+                Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(x, 0)));
+                Assert.AreEqual(CellType.Empty,  grid.Get(new GridPos(x, 1)));
+            }
+        }
+
+        // ── Blasts can't dig into it ────────────────────────────────
+
+        [Test]
+        public void Shockwave_LeavesRubbleUntouched()
+        {
+            var grid = GridModel.FromStringMap(new[] { "RRR", "RAR", "RRR" });
+            var gravity = new GravitySystem(grid);
+
+            int destroyed = gravity.ApplyShockwave(new GridPos(1, 1));
+
+            Assert.AreEqual(1, destroyed, "only the centre colour block");
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(1, 0)));
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(0, 1)));
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(2, 1)));
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(1, 2)));
+        }
+
+        [Test]
+        public void BombBlast_LeavesRubbleUntouched_AndDoesNotCountIt()
+        {
+            var grid = GridModel.FromStringMap(new[] { "RXA", "..." });
+            var bombs = new BombSystem(grid, new CollapseSystem(grid));
+            int scoredBlocks = -1;
+            bombs.BombScored += (destroyed, _) => scoredBlocks = destroyed;
+
+            bombs.NotifyDrilled(new GridPos(2, 0)); // arms (1,0), radius 1
+            bombs.Tick(BombSystem.FuseDuration + 0.1f, new GridPos(9, 9));
+
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(0, 0)));
+            Assert.AreEqual(CellType.Empty,  grid.Get(new GridPos(2, 0)));
+            Assert.AreEqual(1, scoredBlocks, "the colour block only");
+        }
+
+        // ── Bombs, enemies, fissures caught in a swallowed row ──────
+
+        [Test]
+        public void DisarmRows_PutsOutBuriedFuses_Silently()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AXA", "...", "AXA" });
+            var bombs = new BombSystem(grid, new CollapseSystem(grid));
+            int blasts = 0;
+            bombs.BlastResolved += (_, __) => blasts++;
+            bombs.NotifyDrilled(new GridPos(0, 0)); // arms (1,0)
+            bombs.NotifyDrilled(new GridPos(0, 2)); // arms (1,2)
+
+            grid.FillRows(0, 1, CellType.Rubble);
+            int disarmed = bombs.DisarmRows(0, 1);
+            bombs.Tick(BombSystem.FuseDuration + 0.1f, new GridPos(9, 9));
+
+            Assert.AreEqual(1, disarmed);
+            Assert.AreEqual(1, blasts, "only the bomb below the rubble goes off");
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(1, 0)));
+            Assert.IsFalse(bombs.HasArmedBombs);
+        }
+
+        [Test]
+        public void DisarmRows_OutsideTheRange_KeepsTheFuse()
+        {
+            var grid = GridModel.FromStringMap(new[] { "...", "AXA" });
+            var bombs = new BombSystem(grid, new CollapseSystem(grid));
+            bombs.NotifyDrilled(new GridPos(0, 1));
+
+            Assert.AreEqual(0, bombs.DisarmRows(0, 1));
+            Assert.IsTrue(bombs.HasArmedBombs);
+        }
+
+        [Test]
+        public void BuryRows_RemovesEnemies_WithoutAKillOrABoomerBlast()
+        {
+            var enemies = new EnemySystem(new GridModel(7, 10));
+            int crawler = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(2, 1));
+            enemies.ActivateEnemy(crawler);
+            enemies.SpawnEnemy(EnemyType.Boomer,  new GridPos(4, 1));
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(2, 5));
+            int kills = 0, booms = 0;
+            enemies.EnemyKilled     += (_, __, ___, ____) => kills++;
+            enemies.BoomerDetonated += (_, __, ___) => booms++;
+
+            int buried = enemies.BuryRows(0, 3);
+
+            Assert.AreEqual(2, buried);
+            Assert.AreEqual(0, kills, "buried is not killed — no points, no death VFX");
+            Assert.AreEqual(0, booms, "a Boomer never goes off in the rubble");
+            Assert.AreEqual(1, enemies.GetAllAlive().Count);
+            Assert.IsNull(enemies.GetEnemyAt(new GridPos(2, 1)));
+        }
+
+        [Test]
+        public void BuryRows_ABuriedCrawler_NeverTouchesTheAvatarAgain()
+        {
+            var enemies = new EnemySystem(new GridModel(7, 10));
+            int id = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(1, 1));
+            enemies.ActivateEnemy(id);
+            int hits = 0;
+            enemies.AvatarHitByEnemy += _ => hits++;
+
+            enemies.BuryRows(1, 2);
+            enemies.Tick(1f, new GridPos(1, 1));
+
+            Assert.AreEqual(0, hits);
+        }
+
+        [Test]
+        public void Fissures_OnASwallowedBlock_ReadZero()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AAA", "A.A", "AAA" });
+            var cracks = new FissureTracker(grid);
+            cracks.NotifyDrill(new GridPos(1, 1), currentTier: 2);
+            Assert.AreEqual(1, cracks.GetFissures(new GridPos(0, 0)));
+
+            grid.FillRows(0, 1, CellType.Rubble);
+
+            Assert.AreEqual(0, cracks.GetFissures(new GridPos(0, 0)), "rubble never cracks — the stale entry reads 0");
+            Assert.AreEqual(1, cracks.GetFissures(new GridPos(0, 2)), "rows below keep theirs");
+        }
+
+        // ── Perfect Clear ───────────────────────────────────────────
+
+        [Test]
+        public void Collapse_EmptyRowsWithOnlyRubbleAbove_AreNotAFreePerfectClear()
+        {
+            var grid = GridModel.FromStringMap(new[] { "RRR", "...", "...", "AAA" });
+            var collapse = new CollapseSystem(grid);
+            int clears = 0;
+            collapse.PerfectClear += _ => clears++;
+
+            collapse.Resolve(new GridPos(9, 9));
+
+            Assert.AreEqual(0, clears);
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(0, 0)), "the rubble did not shift");
+        }
+
+        [Test]
+        public void Collapse_WithRealBlocksAbove_StillClears_AndShiftsTheRubbleDown()
+        {
+            var grid = GridModel.FromStringMap(new[] { "RRR", "A..", "...", "BBB" });
+            var collapse = new CollapseSystem(grid);
+            var cleared = new List<int>();
+            collapse.PerfectClear += row => cleared.Add(row);
+
+            collapse.Resolve(new GridPos(9, 9));
+
+            CollectionAssert.AreEqual(new[] { 2 }, cleared);
+            Assert.AreEqual(CellType.Empty,  grid.Get(new GridPos(0, 0)));
+            Assert.AreEqual(CellType.Rubble, grid.Get(new GridPos(0, 1)), "rubble moved down — CeilingSystem.ShiftDown follows it");
+            Assert.AreEqual(CellType.ColorA, grid.Get(new GridPos(0, 2)));
+        }
+    }
+
     [TestFixture]
     public class HealthSystemTests
     {

@@ -198,3 +198,21 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 > - ⚠️ Between R7.6 and R7.9-R7.11 the streak counter, drill pitch and streak tint are silent (StreakTracker
 >   is no longer fed); the drill popup "×N" is the only momentum feedback until the View sprint.
 > - R7.14–R7.15 require the playtest harness (`tools/playtest/`) to be updated for momentum.
+
+### R8 — The Cave-in + gas blocks (v3.3)  🟡 IN PROGRESS
+
+> **Source:** `ceiling-gas.md` (design accepted 2026-10-27, decisions A-F). Replaces air: the well collapses
+> behind the player (lead in rows = the new air %), air capsules become gas pockets.
+> **Strategy (same as R7):** R8.1-R8.5 build alongside `AirSystem`, R8.6 switches over, R8.9 cleans up.
+
+| Step | Task | Tests |
+|---|---|---|
+| R8.1 ✅ | `CeilingSystem` (Core): front, speed, leash (`MaxLead` 12), start buffer, recoils, contact + `HitRecoil`, Danger Zone, `RowsSwallowed` | 25 new, 485/485 |
+| R8.2 ✅ | `CellType.Rubble` + swallowed-row conversion (grid, bombs, enemies, fissures, diamonds) | 15 new, 500/500 |
+| R8.3 | `CellType.Gas` (replaces AirCapsule, char `P`) + `GasSystem` (0.6 s hiss, 4-cell rising cloud, 3 s life, contact) | NUnit |
+| R8.4 | `GasReleased` events (gravity / bombs / Boomer), Crawlers die in gas, gas as a graze source | NUnit |
+| R8.5 | `ScoreSystem` / `DeathTracker` (`CaveIn`, `Gas`, drop `Suffocation`) / `CampaignManager` / `EndlessManager` speeds | NUnit |
+| R8.6 | `GameBootstrap`: wiring, tick order, stay-in-place respawn (decision B), Endless seam, switch off `AirSystem` | Integration + play mode |
+| R8.7 | Harness parity, then **calibration** (speeds, `MaxLead`, `gasRate`, recoils) — R7.15 method | Harness |
+| R8.8 | View: rubble + crumbling front, gas cloud, lead bar, "DESCENDS !" hint, rumble/hiss audio | Visual |
+| R8.9 | Generator (gas density, none on 1-3, tutorial chamber), help pages, GDD, CLAUDE.md rules 1/4/5/10, delete `AirSystem` + air tests | NUnit + play mode |
