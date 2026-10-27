@@ -1243,3 +1243,30 @@ hiss sprites. Cave-in recap tip now names capsules first among the things that p
 (a scratch net8.0 NUnit project compiling `Core/*.cs` + `CoreTests.cs` — the suite has no Unity dependency):
 503 passed. The `tools/playtest` harness builds. **The View changes (GameBootstrap, CaveInPreviewView,
 DeathRecapView) are not compiled yet** — open Unity and check the console, then try the preview.
+
+**Update (R8.5 session): Unity was back** — the R8.4c View changes compile, and the suite runs 512/512 in Unity.
+
+### R8.5 — Cave-in speeds + margin in the death recap — 2026-10-27
+
+Core, built alongside the air like R8.1-R8.4 (the live game still runs on `AirSystem` until R8.6). 9 new NUnit
+tests, **512/512 in Unity** (EditMode, compiled clean) and with `dotnet test`; the harness builds. Spec: `cave-in.md` §2.2 / §5.
+
+- **`CampaignManager.CeilingSpeedForLevel`** (0.48 r/s levels 1-3, 0.84 after) and **`CeilingStartGraceForLevel`** (5 s / 3 s).
+  Literals, not `SpeedForDrainRate(DrainRateForLevel)`: the air goes in R8.9 and these stay. A test pins that they
+  equal the translated drain today (same 25 s / 14 s to die standing still); R8.7 may move them, R8.9 drops the guard.
+- **`EndlessManager.CeilingSpeedForDepth`** (0.6 + 0.06 per 20 rows, capped 1.2 at depth 200) + live **`CeilingSpeed`**
+  and **`CeilingSpeedChanged`**, updated next to the drain in `NotifyAvatarPosition`, reset in `Reset`. Same
+  pin-to-the-drain-curve test over depths 0-300.
+- **`DeathReport.Lead`** (`float?`, rows of margin at death, clamped ≥ 0; null on the air game) via an optional
+  `NotifyDeath(..., lead)`. **Recap detail line** moved into `DeathRecapView.DetailLine`: a `CaveIn` death reads like
+  suffocation ("Dernier forage il y a 2,4 s · après 1:16" — both mean "you stopped"); any other death reads
+  "Coup fatal à 1:16 · marge 3,5 rangées" when a margin was reported, else the old "air restant N %".
+- **Preview** now uses these: front speed from `CeilingSpeedForLevel` / `_endless.CeilingSpeed` (+ `CeilingSpeedChanged`
+  instead of translating `DrainRateChanged`), grace from `CeilingStartGraceForLevel`, and passes `_ceiling.Lead` to
+  `NotifyDeath` — the recap's last placeholder ("air restant 100 %") is gone.
+
+**Deviations from the plan row:**
+- **`DeathCause.Suffocation` NOT removed** — the air still kills in the shipped game until R8.6, and `AirDepleted` →
+  `NotifyDeath(Suffocation)` is live. It goes with `AirSystem` in R8.9.
+- **`ScoreSystem` untouched** — `DangerZone` has been an input bool since R7.5; R8.6 only rewires its source
+  (`CeilingSystem.DangerZoneChanged`, already done in the preview).

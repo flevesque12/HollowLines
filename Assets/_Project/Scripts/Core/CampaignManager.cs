@@ -55,6 +55,20 @@ namespace HollowLines.Core
         public static float AirStartGraceForLevel(int level) => level <= 3 ? 5f : AirSystem.DefaultStartGrace;
 
         /// <summary>
+        /// R8.5 (cave-in.md §2.2): Cave-in front speed in rows/s — the drain above translated
+        /// (drain × MaxLead / 100), so a still player dies in the same 25 s / 14 s as on the air.
+        /// Literals, not derived from DrainRateForLevel: the air is deleted in R8.9 and this stays.
+        /// Provisional — R8.7 calibrates it with the harness.
+        /// </summary>
+        public static float CeilingSpeedForLevel(int level) => level <= 3 ? 0.48f : 0.84f;
+
+        /// <summary>
+        /// R8.5: seconds the front waits before it moves (CeilingSystem start buffer) — the same
+        /// onboarding split as the air's grace (R6.2): 5 s on levels 1-3, 3 s after.
+        /// </summary>
+        public static float CeilingStartGraceForLevel(int level) => level <= 3 ? 5f : CeilingSystem.DefaultStartGrace;
+
+        /// <summary>
         /// Campaign wobble telegraph in seconds. The longer window on levels 1-3 slows crush
         /// pressure while players learn to read the telegraph.
         /// From level 4 on, the GDD's 0.6 s applies: dodging inside that window is the skill.

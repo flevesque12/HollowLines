@@ -33,16 +33,18 @@ namespace HollowLines.Core
         public readonly float           Time;               // run seconds at death
         public readonly float           TimeSinceLastDrill; // the suffocation diagnostic (§ rule 1/5)
         public readonly float           Air;                // air % at death (0 on suffocation)
+        public readonly float?          Lead;               // R8.5: Cave-in margin in rows at death; null on the air game
         public readonly IReadOnlyList<DamageHit> Hits;      // every heart lost this run, oldest first
 
         public DeathReport(DeathCause cause, GridPos position, float time, float timeSinceLastDrill,
-                           float air, IReadOnlyList<DamageHit> hits)
+                           float air, IReadOnlyList<DamageHit> hits, float? lead = null)
         {
             Cause              = cause;
             Position           = position;
             Time               = time;
             TimeSinceLastDrill = timeSinceLastDrill;
             Air                = air;
+            Lead               = lead.HasValue ? Math.Max(0f, lead.Value) : (float?)null;
             Hits               = hits ?? Array.Empty<DamageHit>();
         }
     }
@@ -114,8 +116,10 @@ namespace HollowLines.Core
         /// Declare the run over and freeze the report. Returns false (no event) if already dead —
         /// so a frame where the last heart and the last breath go together only ends the run once.
         /// None is coerced to the last recorded hit's cause (or Suffocation if no hit was recorded).
+        /// R8.5: `lead` is the Cave-in margin in rows (CeilingSystem.Lead) — pass it once the front is
+        /// what kills; leave it null while the air does. Negative clamps to 0.
         /// </summary>
-        public bool NotifyDeath(DeathCause cause, GridPos position, float air)
+        public bool NotifyDeath(DeathCause cause, GridPos position, float air, float? lead = null)
         {
             if (IsDead)
                 return false;
@@ -125,7 +129,7 @@ namespace HollowLines.Core
 
             IsDead = true;
             var report = new DeathReport(cause, position, RunTime, TimeSinceLastDrill,
-                                         Math.Max(0f, air), _hits.ToArray());
+                                         Math.Max(0f, air), _hits.ToArray(), lead);
             Report = report;
             Died?.Invoke(report);
             return true;

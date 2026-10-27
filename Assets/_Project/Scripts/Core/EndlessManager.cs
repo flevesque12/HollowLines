@@ -44,6 +44,12 @@ namespace HollowLines.Core
         public const float DrainStepAmount = 0.5f;
         public const float MaxDrainRate    = 10f;
 
+        // R8.5 (cave-in.md §2.2): the same ramp for the Cave-in front, in rows/s — the drain curve
+        // × MaxLead / 100: 0.6 r/s at the surface, +0.06 every 20 rows, capped at 1.2 (depth 200).
+        public const float BaseCeilingSpeed   = CeilingSystem.DefaultSpeed; // 0.6 r/s
+        public const float CeilingStepAmount  = 0.06f;
+        public const float MaxCeilingSpeed    = 1.2f;
+
         /// <summary>
         /// Wobble telegraph for endless, in seconds. Matches campaign level 4+ (design rule 4):
         /// endless is unlocked after the campaign, so the player has already learned to read it.
@@ -69,12 +75,18 @@ namespace HollowLines.Core
         /// <summary>Current air drain in % per second, derived from <see cref="Depth"/>.</summary>
         public float DrainRate { get; private set; }
 
+        /// <summary>R8.5: current Cave-in front speed in rows/s, derived from <see cref="Depth"/>.</summary>
+        public float CeilingSpeed { get; private set; } = BaseCeilingSpeed;
+
         // ── Events ───────────────────────────────────────────────────
         /// <summary>Fired when the run reaches a new deepest absolute row. Arg = that depth.</summary>
         public event Action<int> DepthChanged;
 
         /// <summary>Fired when the depth ramp changes the drain. Arg = the new rate in %/s.</summary>
         public event Action<float> DrainRateChanged;
+
+        /// <summary>R8.5: fired when the depth ramp changes the front speed. Arg = rows/s.</summary>
+        public event Action<float> CeilingSpeedChanged;
 
         /// <summary>
         /// Fired once when the avatar reaches the bottom of the current segment.
@@ -108,6 +120,19 @@ namespace HollowLines.Core
 
             float rate = BaseDrainRate + depth / DrainStepRows * DrainStepAmount;
             return Math.Min(MaxDrainRate, rate);
+        }
+
+        /// <summary>
+        /// R8.5: Cave-in front speed in rows/s at the given absolute depth — the drain ramp translated.
+        /// Depth 0 → 0.6, depth 100 → 0.9, capped at 1.2 from depth 200. Provisional (R8.7).
+        /// </summary>
+        public static float CeilingSpeedForDepth(int depth)
+        {
+            if (depth <= 0)
+                return BaseCeilingSpeed;
+
+            float speed = BaseCeilingSpeed + depth / DrainStepRows * CeilingStepAmount;
+            return Math.Min(MaxCeilingSpeed, speed);
         }
 
         /// <summary>
@@ -158,6 +183,13 @@ namespace HollowLines.Core
                     DrainRate = rate;
                     DrainRateChanged?.Invoke(DrainRate);
                 }
+
+                float speed = CeilingSpeedForDepth(Depth);
+                if (speed != CeilingSpeed)
+                {
+                    CeilingSpeed = speed;
+                    CeilingSpeedChanged?.Invoke(CeilingSpeed);
+                }
             }
 
             if (_exhausted) return;
@@ -188,6 +220,7 @@ namespace HollowLines.Core
             SegmentStartDepth = 0;
             Depth             = 0;
             DrainRate         = BaseDrainRate;
+            CeilingSpeed      = BaseCeilingSpeed;
             _exhausted        = false;
         }
     }

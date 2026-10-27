@@ -196,8 +196,8 @@ namespace HollowLines.View
             {
                 if (!_endlessMode) return;
                 _airSystem.DrainRate = rate;
-                if (_ceiling != null) _ceiling.Speed = CeilingSystem.SpeedForDrainRate(rate); // preview: same ramp
             };
+            _endless.CeilingSpeedChanged += speed => { if (_endlessMode && _ceiling != null) _ceiling.Speed = speed; }; // preview (R8.5)
             _endless.SegmentExhausted += _     => _pendingSegmentAdvance = true;
 
             _scoreSystem = new ScoreSystem();
@@ -961,16 +961,16 @@ namespace HollowLines.View
             }
 
             float speed = _endlessMode
-                ? CeilingSystem.SpeedForDrainRate(_endless.DrainRate)
+                ? _endless.CeilingSpeed
                 : useCampaign
-                    ? CeilingSystem.SpeedForDrainRate(CampaignManager.DrainRateForLevel(_campaign.CurrentLevel))
+                    ? CampaignManager.CeilingSpeedForLevel(_campaign.CurrentLevel)
                     : CeilingSystem.DefaultSpeed;
 
             _ceiling = new CeilingSystem { Speed = speed };
             _ceiling.Reset(_spawn.Y);
             if (freshBoard)
                 _ceiling.BeginStartBuffer(!_endlessMode && useCampaign
-                    ? CampaignManager.AirStartGraceForLevel(_campaign.CurrentLevel)
+                    ? CampaignManager.CeilingStartGraceForLevel(_campaign.CurrentLevel)
                     : CeilingSystem.DefaultStartGrace);
 
             // Swallowed rows → rubble, with every buried fuse and enemy dropped silently (R8.2).
@@ -1045,7 +1045,8 @@ namespace HollowLines.View
             if (_healthSystem.IsAlive)
                 _avatar.Teleport(previewCaveIn ? CaveInRespawnCell() : _spawn); // preview: decision B
             else
-                _deathTracker.NotifyDeath(cause, _avatar.Position, _airSystem.Air);
+                _deathTracker.NotifyDeath(cause, _avatar.Position, _airSystem.Air,
+                                          _ceiling != null ? _ceiling.Lead : (float?)null); // R8.5: the recap reads the margin
         }
 
         // ─────────────────────────────────────────────────────────────────────

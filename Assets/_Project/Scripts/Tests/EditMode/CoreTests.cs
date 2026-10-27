@@ -4717,6 +4717,31 @@ namespace HollowLines.Tests
             Assert.AreEqual(AirSystem.DefaultStartGrace, CampaignManager.AirStartGraceForLevel(10));
         }
 
+        // ── R8.5 Cave-in speeds (cave-in.md §2.2) ───────────────────
+
+        [Test]
+        public void CeilingSpeedForLevel_IsTheDrainTranslated()
+        {
+            Assert.AreEqual(0.48f, CampaignManager.CeilingSpeedForLevel(1), 1e-4f);
+            Assert.AreEqual(0.48f, CampaignManager.CeilingSpeedForLevel(3), 1e-4f);
+            Assert.AreEqual(0.84f, CampaignManager.CeilingSpeedForLevel(4), 1e-4f);
+            Assert.AreEqual(0.84f, CampaignManager.CeilingSpeedForLevel(10), 1e-4f);
+
+            // Same 25 s / 14 s to die standing still as the air (until R8.7 recalibrates; R8.9 drops this guard).
+            for (int level = 1; level <= CampaignManager.LevelCount; level++)
+                Assert.AreEqual(CeilingSystem.SpeedForDrainRate(CampaignManager.DrainRateForLevel(level)),
+                                CampaignManager.CeilingSpeedForLevel(level), 1e-4f, $"level {level}");
+        }
+
+        [Test]
+        public void CeilingStartGraceForLevel_LongerOnOnboardingLevels()
+        {
+            Assert.AreEqual(5f, CampaignManager.CeilingStartGraceForLevel(1));
+            Assert.AreEqual(5f, CampaignManager.CeilingStartGraceForLevel(3));
+            Assert.AreEqual(CeilingSystem.DefaultStartGrace, CampaignManager.CeilingStartGraceForLevel(4));
+            Assert.AreEqual(CeilingSystem.DefaultStartGrace, CampaignManager.CeilingStartGraceForLevel(10));
+        }
+
         [Test]
         public void Campaign_RestartLevel_ClearsWinGuard_WithoutChangingLevel()
         {
@@ -6649,6 +6674,56 @@ namespace HollowLines.Tests
             Assert.Greater(endless.DrainRate, EndlessManager.BaseDrainRate);
         }
 
+        // ── R8.5 Cave-in speed ramp (cave-in.md §2.2: the drain curve × 12 / 100) ──
+
+        [Test]
+        public void CeilingSpeedForDepth_IsTheDrainCurveTranslated()
+        {
+            Assert.AreEqual(0.60f, EndlessManager.CeilingSpeedForDepth(0),   1e-4f);
+            Assert.AreEqual(0.66f, EndlessManager.CeilingSpeedForDepth(20),  1e-4f);
+            Assert.AreEqual(0.90f, EndlessManager.CeilingSpeedForDepth(100), 1e-4f);
+
+            for (int depth = 0; depth <= 300; depth += 10)
+                Assert.AreEqual(CeilingSystem.SpeedForDrainRate(EndlessManager.DrainRateForDepth(depth)),
+                                EndlessManager.CeilingSpeedForDepth(depth), 1e-4f, $"depth {depth}");
+        }
+
+        [Test]
+        public void CeilingSpeedForDepth_IsCapped_AndClampsNegativeDepth()
+        {
+            Assert.AreEqual(EndlessManager.MaxCeilingSpeed,  EndlessManager.CeilingSpeedForDepth(200),   1e-4f);
+            Assert.AreEqual(EndlessManager.MaxCeilingSpeed,  EndlessManager.CeilingSpeedForDepth(10000), 1e-4f);
+            Assert.AreEqual(EndlessManager.BaseCeilingSpeed, EndlessManager.CeilingSpeedForDepth(-5),    1e-4f);
+        }
+
+        [Test]
+        public void DescendingRaisesTheCeilingSpeed_AndFiresTheEvent_OnlyOnChange()
+        {
+            var endless = new EndlessManager(seed: 1);
+            var fired = new List<float>();
+            endless.CeilingSpeedChanged += fired.Add;
+            Assert.AreEqual(EndlessManager.BaseCeilingSpeed, endless.CeilingSpeed, 1e-4f);
+
+            int h = BoardHeight(endless);
+            endless.NotifyAvatarPosition(new GridPos(3, StrateGenerator.SpawnRows + 40), h);
+            endless.NotifyAvatarPosition(new GridPos(3, StrateGenerator.SpawnRows + 40), h); // same depth
+
+            Assert.AreEqual(EndlessManager.CeilingSpeedForDepth(40), endless.CeilingSpeed, 1e-4f);
+            Assert.AreEqual(1, fired.Count);
+        }
+
+        [Test]
+        public void Reset_PutsTheCeilingSpeedBackToBase()
+        {
+            var endless = new EndlessManager(seed: 1);
+            endless.NotifyAvatarPosition(new GridPos(3, StrateGenerator.SpawnRows + 50), BoardHeight(endless));
+            Assert.Greater(endless.CeilingSpeed, EndlessManager.BaseCeilingSpeed, "precondition");
+
+            endless.Reset(seed: 2);
+
+            Assert.AreEqual(EndlessManager.BaseCeilingSpeed, endless.CeilingSpeed, 1e-4f);
+        }
+
         // ── Depth accounting ─────────────────────────────────────────────────
 
         [Test]
@@ -7633,6 +7708,38 @@ namespace HollowLines.Tests
             Assert.AreEqual(P, t.Hits[0].Position);
             Assert.AreEqual(2f, t.Hits[0].Time, 1e-5f);
             Assert.AreEqual(2, t.Hits[0].HeartsLeft);
+        }
+
+        // ── R8.5 Cave-in ─────────────────────────────────────────────
+
+        [Test]
+        public void CaveIn_IsAHeartHit()
+        {
+            var t = new DeathTracker();
+            t.NotifyHit(DeathCause.CaveIn, P, 2);
+            Assert.AreEqual(1, t.Hits.Count);
+            Assert.AreEqual(DeathCause.CaveIn, t.Hits[0].Cause);
+        }
+
+        [Test]
+        public void NotifyDeath_WithoutLead_ReportHasNone()
+        {
+            var t = new DeathTracker();
+            t.NotifyDeath(DeathCause.ChunkCrush, P, 40f);
+            Assert.IsFalse(t.Report.Value.Lead.HasValue, "the air game reports air, not a margin");
+        }
+
+        [Test]
+        public void NotifyDeath_WithLead_CarriesIt_AndClampsNegative()
+        {
+            var a = new DeathTracker();
+            a.NotifyDeath(DeathCause.BombBlast, P, 100f, lead: 7.5f);
+            Assert.AreEqual(7.5f, a.Report.Value.Lead.Value, 1e-5f);
+
+            var b = new DeathTracker();
+            b.NotifyDeath(DeathCause.CaveIn, P, 100f, lead: -1f);
+            Assert.AreEqual(0f, b.Report.Value.Lead.Value, 1e-5f);
+            Assert.AreEqual(DeathCause.CaveIn, b.Report.Value.Cause);
         }
 
         [Test]

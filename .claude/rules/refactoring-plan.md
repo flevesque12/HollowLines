@@ -215,8 +215,8 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | ~~R8.4~~ | ~~`GasReleased` events, Crawlers die in gas~~ — shipped (936a8d2), **removed in R8.4c** | — |
 | R8.4b ✅ | **`previewCaveIn` debug toggle** — the real `CeilingSystem` playable before R8.6, placeholder `CaveInPreviewView` (front line, lead readout), rubble tile colour, decision B respawn. Pulled forward from R8.5: `DeathCause.CaveIn` + recap text (`cave-in.md` §10) | Play mode, 523/523 |
 | R8.4c ✅ | **Gas removed, capsule → recoil.** `GasSystem`, `CellType.Gas`, `GasReleased`, `NotifyGas`, `KillMethod.Gas`, `DeathCause.Gas` and their 23 tests deleted; `CeilingSystem.CapsuleRecoil` 0.75 + `RestoreCapsule()`; preview wires drilled / freed capsules to it | 3 new, −23, 503/503 |
-| R8.5 | `ScoreSystem` / `DeathTracker` (drop `Suffocation`; `CaveIn` already exists since R8.4b) / recap detail line (no "air restant") / `CampaignManager` / `EndlessManager` speeds | NUnit |
+| R8.5 ✅ | `CampaignManager.CeilingSpeedForLevel` / `CeilingStartGraceForLevel`, `EndlessManager.CeilingSpeedForDepth` + `CeilingSpeed` / `CeilingSpeedChanged`, `DeathReport.Lead` (margin at death), recap detail line reads the margin. `ScoreSystem` needed nothing (`DangerZone` is already an input). **`Suffocation` kept until R8.9** — the air still kills until R8.6 | 9 new, 512/512 (Unity) |
 | R8.6 | `GameBootstrap`: replace the `previewCaveIn` block with the real wiring (absolute rows), tick order, stay-in-place respawn (decision B), Endless seam, `AirCapsuleLiberated` → `RestoreCapsule`, switch off `AirSystem` | Integration + play mode |
 | R8.7 | Harness parity, then **calibration** (speeds, `MaxLead`, recoils incl. `CapsuleRecoil`) — R7.15 method | Harness |
 | R8.8 | View: rubble + crumbling front, lead bar, "DESCENDS !" hint, rumble audio, capsule tile | Visual |
-| R8.9 | Help pages, GDD, CLAUDE.md rules 1/5/10, delete `AirSystem` + air tests | NUnit + play mode |
+| R8.9 | Help pages, GDD, CLAUDE.md rules 1/5/10, delete `AirSystem` + air tests + `DeathCause.Suffocation` + the drain↔speed translation guards | NUnit + play mode |

@@ -75,9 +75,7 @@ namespace HollowLines.View
         public void Show(DeathReport report)
         {
             _cause.text  = CauseTitle(report.Cause);
-            _detail.text = report.Cause == DeathCause.Suffocation
-                ? $"Dernier forage il y a {Seconds(report.TimeSinceLastDrill)}  ·  après {Clock(report.Time)}"
-                : $"Coup fatal à {Clock(report.Time)}  ·  air restant {Mathf.RoundToInt(report.Air)} %";
+            _detail.text = DetailLine(report);
             _tip.text = "Astuce : " + CauseTip(report.Cause);
 
             BuildTimeline(report);
@@ -171,6 +169,22 @@ namespace HollowLines.View
                 case DeathCause.CaveIn:         return "Rattrapé par l'éboulement";
                 default:                        return "Mort mystérieuse";
             }
+        }
+
+        /// <summary>
+        /// The one diagnostic line under the killer. Suffocation and the Cave-in are both "you stopped
+        /// drilling", so they show the time since the last drill; any other hit shows when it landed and
+        /// what was left of the clock — the Cave-in margin once the front runs the game (R8.5), else the air.
+        /// </summary>
+        public static string DetailLine(DeathReport report)
+        {
+            if (report.Cause == DeathCause.Suffocation || report.Cause == DeathCause.CaveIn)
+                return $"Dernier forage il y a {Seconds(report.TimeSinceLastDrill)}  ·  après {Clock(report.Time)}";
+
+            string left = report.Lead.HasValue
+                ? $"marge {report.Lead.Value.ToString("0.#", Fr)} rangée{(report.Lead.Value >= 2f ? "s" : "")}"
+                : $"air restant {Mathf.RoundToInt(report.Air)} %";
+            return $"Coup fatal à {Clock(report.Time)}  ·  {left}";
         }
 
         /// <summary>

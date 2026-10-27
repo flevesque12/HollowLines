@@ -234,10 +234,10 @@ elle ne demande jamais de détour (règle 6). **À calibrer (R8.7)** : 0,75 rang
 |---|---|---|
 | `AirSystem` | Chronomètre | **Supprimé** → `CeilingSystem` (Core, pur C#) |
 | `ScoreSystem.DangerZone` | air < 15 % | **marge < 15 %** (même ×2, même règle ⚡D3) |
-| `DeathCause.Suffocation` | | **Supprimé** → `CaveIn` |
-| `DeathTracker` | « Dernier forage il y a 6,2 s » | « Le puits t'a rattrapé — marge 0 » |
-| `CampaignManager` | `DrainRateForLevel`, `AirStartGraceForLevel` | `CeilingSpeedForLevel`, `CeilingStartGraceForLevel` |
-| `EndlessManager` | `DrainRateForDepth`, `DrainRateChanged` | `CeilingSpeedForDepth`, `CeilingSpeedChanged` |
+| `DeathCause.Suffocation` | | **Supprimé** → `CaveIn` (R8.9 — gardé tant que l'air tue, jusqu'à R8.6) |
+| `DeathTracker` | « Coup fatal à 1:16 · air restant 40 % » | ✅R8.5 `DeathReport.Lead` → « Coup fatal à 1:16 · marge 3,5 rangées » ; mort `CaveIn` → « Dernier forage il y a 2,4 s » (s'arrêter, comme la suffocation) |
+| `CampaignManager` | `DrainRateForLevel`, `AirStartGraceForLevel` | ✅R8.5 `CeilingSpeedForLevel` (0,48 / 0,84), `CeilingStartGraceForLevel` (5 / 3 s) |
+| `EndlessManager` | `DrainRateForDepth`, `DrainRateChanged` | ✅R8.5 `CeilingSpeedForDepth`, `CeilingSpeed`, `CeilingSpeedChanged` (0,6 + 0,06 / 20 rangées, max 1,2) |
 | `GravitySystem`, `BombSystem`, `EnemySystem` | `AirCapsuleLiberated` → air | `AirCapsuleLiberated` → `RestoreCapsule` (§4) |
 | `StrateGenerator` | `airRate` | inchangé (la capsule reste) |
 | HUD | Barre d'air + « Fore pour respirer ! » (R6.3) | **Même barre** = marge ; hint « DESCENDS ! » sous 30 % |
@@ -294,7 +294,7 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 | R8.2 | `CellType.Rubble` + conversion des rangées avalées (grille, bombes, ennemis, fissures) | NUnit |
 | ~~R8.3~~ | ~~`CellType.Gas` + `GasSystem`~~ — livré puis **retiré** (gaz abandonné) | — |
 | ~~R8.4~~ | ~~`GasReleased`, Crawlers dans le gaz~~ — livré puis **retiré** ; remplacé par R8.4c (capsule → recul) | NUnit |
-| R8.5 | `ScoreSystem` / `DeathTracker` / `CampaignManager` / `EndlessManager` : Danger Zone, causes de mort, vitesses | NUnit |
+| R8.5 ✅ | `DeathTracker` (marge à la mort) / `CampaignManager` / `EndlessManager` : vitesses + grace ; `ScoreSystem` inchangé | NUnit |
 | R8.6 | `GameBootstrap` : câblage, ordre du tick, nouvelle règle de respawn, couture Endless, retrait d'`AirSystem` | Intégration + play mode |
 | R8.7 | Harness : parité, puis **calibrage** (vitesses, `MaxLead`, reculs dont `CapsuleRecoil`) — même méthode que R7.15 | Harness |
 | R8.8 | View : débris + front, barre de marge, hint, audio, tuile capsule | Visuel |
@@ -335,7 +335,7 @@ Ce qu'il branche — le vrai Core, rien de simulé :
 
 Limites assumées (corrigées en R8.6 / R8.8) : rangées **locales au board** (le front repart à pleine laisse à
 chaque couture Endless) ; la barre d'air du HUD est figée (la marge = la ligne orange + le texte en bas à gauche) ;
-le récap affiche encore « air restant 100 % ».
+(R8.5 : le récap lit maintenant la marge).
 
 **Vérifié en play mode (tutoriel, via UnityMCP, version avec gaz)** : le front entre dans le board, la rangée 0
 devient des débris gris, avatar immobile → 3 coups `CaveIn` (≈ 2,5 s d'écart à 3 r/s forcés) → récap « Rattrapé
