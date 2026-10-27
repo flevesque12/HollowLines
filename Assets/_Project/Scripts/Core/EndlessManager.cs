@@ -124,7 +124,7 @@ namespace HollowLines.Core
 
         /// <summary>
         /// R8.5: Cave-in front speed in rows/s at the given absolute depth — the drain ramp translated.
-        /// Depth 0 → 0.6, depth 100 → 0.9, capped at 1.2 from depth 200. Provisional (R8.7).
+        /// Depth 0 → 0.6, depth 100 → 0.9, capped at 1.2 from depth 200. Measured and kept in R8.7 (balance.md §15.11).
         /// </summary>
         public static float CeilingSpeedForDepth(int depth)
         {

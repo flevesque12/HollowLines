@@ -40,12 +40,11 @@ if (args.Length > 0 && args[0] == "dump")
 foreach (float cadence in new[] { 0.15f, 0.30f })
 {
     Console.WriteLine($"=== TUNNEL-RUSH BOT (action every {cadence:0.00} s ≈ {1f / cadence:0.0} inputs/s) ===");
-    Console.WriteLine($"{"lvl",3} {"outcome",-10} {"time",6} {"air@end",7} {"airMin",6} {"hearts-",7} {"score",6} {"depth",5} {"rows",4}");
+    Console.WriteLine($"{"lvl",3} {"outcome",-10} {"time",6} {"lead@end",8} {"leadMin",7} {"hearts-",7} {"score",6} {"depth",5} {"rows",4}");
     for (int level = 1; level <= 10; level++)
     {
         var sim = new Sim(StrateGenerator.CampaignBoard(level));
-        sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
-        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
+        sim.UseCampaignLevel(level); // R8.7: Cave-in speed + start buffer (was the air drain)
         sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
         var bot = new TunnelBot();
         var r = sim.Run(bot, cadence, maxTime: 400f, Dt);
@@ -65,12 +64,11 @@ foreach (var (name, make, cadence) in new (string, Func<IBot>, float)[]
 })
 {
     Console.WriteLine($"=== NEWCOMER — {name}, 4 s idle then 1 action / {cadence:0.00} s ===");
-    Console.WriteLine($"{"lvl",3} {"outcome",-10} {"time",6} {"air@end",7} {"airMin",6} {"hearts-",7} {"score",6} {"depth",5} {"rows",4}");
+    Console.WriteLine($"{"lvl",3} {"outcome",-10} {"time",6} {"lead@end",8} {"leadMin",7} {"hearts-",7} {"score",6} {"depth",5} {"rows",4}");
     for (int level = 1; level <= 10; level++)
     {
         var sim = new Sim(StrateGenerator.CampaignBoard(level));
-        sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
-        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
+        sim.UseCampaignLevel(level); // R8.7: Cave-in speed + start buffer (was the air drain)
         sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
         var r = sim.Run(new HesitantBot(make(), 4f), cadence, maxTime: 400f, Dt);
         Console.WriteLine(r.Row(level));
@@ -91,8 +89,7 @@ foreach (float cadence in new[] { 0.15f, 0.25f })
     for (int level = 1; level <= 10; level++)
     {
         var sim = new Sim(StrateGenerator.CampaignBoard(level));
-        sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
-        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
+        sim.UseCampaignLevel(level); // R8.7: Cave-in speed + start buffer (was the air drain)
         sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
         var bot = new RowClearBot();
         var r = sim.Run(bot, cadence, maxTime: 400f, Dt);
@@ -110,15 +107,14 @@ Console.WriteLine(ActionHeader());
 for (int level = 1; level <= 10; level++)
 {
     var sim = new Sim(StrateGenerator.CampaignBoard(level));
-    sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
-    sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
+    sim.UseCampaignLevel(level); // R8.7: Cave-in speed + start buffer (was the air drain)
     sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
     var r = sim.Run(new TunnelBot(), 0.15f, maxTime: 400f, Dt);
     Console.WriteLine(r.RowWithActions(level));
 }
 
 static string ActionHeader() =>
-    $"{"lvl",3} {"outcome",-10} {"time",6} {"airMin",6} {"hearts-",7} {"score",6} " +
+    $"{"lvl",3} {"outcome",-10} {"time",6} {"leadMin",7} {"hearts-",7} {"score",6} " +
     $"{"peakM",6} {"bursts",6} {"bigst",5} {"chain",5} {"bestC",5} {"PC",3} {"% Mo/B/Bo/D/PC/Bx",-23}";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,8 +132,7 @@ for (int level = 6; level <= 10; level++)
     int bombsOnBoard = board.Sum(row => row.Count(c => c == 'X'));
 
     var sim = new Sim(board);
-    sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
-    sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
+    sim.UseCampaignLevel(level); // R8.7: Cave-in speed + start buffer (was the air drain)
     sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
     var r = sim.Run(new BombBot(), 0.15f, maxTime: 400f, Dt);
     Console.WriteLine(r.RowWithBombs(level, bombsOnBoard));
@@ -229,22 +224,21 @@ string[] keystoneMap =
 //    (v3: it no longer buys line-clear time, it is purely the dodge window.)
 // ─────────────────────────────────────────────────────────────────────────────
 Console.WriteLine();
-Console.WriteLine("=== WOBBLE 0.6 / 0.8 / 0.9 s — niveaux 1-3, drain campagne ===");
+Console.WriteLine("=== WOBBLE 0.6 / 0.8 / 0.9 s — niveaux 1-3, éboulement campagne ===");
 foreach (float cadence in new[] { 0.15f, 0.25f })
 {
     Console.WriteLine();
     Console.WriteLine($"--- ROW-CLEAR ({cadence:0.00} s) ---");
-    Console.WriteLine($"{"lvl",3} {"wobble",6} {"outcome",-10} {"time",6} {"airMin",6} {"hearts-",7} {"score",6} {"bursts",6} {"peakM",6}");
+    Console.WriteLine($"{"lvl",3} {"wobble",6} {"outcome",-10} {"time",6} {"leadMin",7} {"hearts-",7} {"score",6} {"bursts",6} {"peakM",6}");
     for (int level = 1; level <= 3; level++)
     {
         foreach (float wobble in new[] { 0.6f, 0.8f, 0.9f })
         {
             var sim = new Sim(StrateGenerator.CampaignBoard(level));
-            sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
-            sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level)); // R6.2
+            sim.UseCampaignLevel(level); // R8.7: Cave-in speed + start buffer (was the air drain)
             sim.Gravity.WobbleDuration = wobble;
             var r = sim.Run(new RowClearBot(), cadence, 400f, Dt);
-            Console.WriteLine($"{level,3} {wobble,5:0.0}s {r.Outcome,-10} {r.Time,5:0.0}s {r.AirMin,5:0.0}% {r.HeartsLost,7} {r.Score,6} {r.Bursts,6} {r.PeakMomentum,6}");
+            Console.WriteLine($"{level,3} {wobble,5:0.0}s {r.Outcome,-10} {r.Time,5:0.0}s {r.LeadMin,6:0.0}% {r.HeartsLost,7} {r.Score,6} {r.Bursts,6} {r.PeakMomentum,6}");
         }
     }
 }
@@ -271,8 +265,7 @@ foreach (var (name, make, cadence, idle) in new (string, Func<IBot>, float, floa
     for (int level = 1; level <= 10; level++)
     {
         var sim = new Sim(StrateGenerator.CampaignBoard(level));
-        sim.Air.DrainRate = CampaignManager.DrainRateForLevel(level);
-        sim.Air.BeginStartBuffer(CampaignManager.AirStartGraceForLevel(level));
+        sim.UseCampaignLevel(level); // R8.7: Cave-in speed + start buffer (was the air drain)
         sim.Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
         IBot bot = idle > 0f ? new HesitantBot(make(), idle) : make();
         var r = sim.Run(bot, cadence, maxTime: 400f, Dt);
@@ -293,28 +286,29 @@ foreach (var (name, make, cadence, idle) in new (string, Func<IBot>, float, floa
 //       estimate, never measured — that is the open half of R3.1).
 // ─────────────────────────────────────────────────────────────────────────────
 Console.WriteLine();
-Console.WriteLine("=== ENDLESS — DESCENTES (drain rampé par profondeur) ===");
-Console.WriteLine($"{"bot",-10} {"seed",6} {"outcome",-10} {"time",6} {"seg",3} {"depth",5} {"airMin",6} {"hearts-",7} " +
-                  $"{"score",7} {"peakM",6} {"bursts",6} {"bigst",5} {"drain",6} {"% Mo/B/Bo/D/PC/Bx",-23}");
+Console.WriteLine("=== ENDLESS — DESCENTES (front rampé par profondeur) ===");
+Console.WriteLine($"{"bot",-10} {"seed",6} {"outcome",-10} {"time",6} {"seg",3} {"depth",5} {"leadMin",7} {"hearts-",7} " +
+                  $"{"score",7} {"peakM",6} {"bursts",6} {"bigst",5} {"r/s",5} {"% Mo/B/Bo/D/PC/Bx",-23}");
 foreach (int seed in new[] { 101, 202, 303 })
 {
     foreach (var (name, make) in new (string, Func<IBot>)[] { ("tunnel", () => new TunnelBot()), ("row-clear", () => new RowClearBot()) })
     {
-        var (r, segments, drain) = RunEndless(make, seed, 0.15f, maxTime: 400f, dt: Dt);
-        Console.WriteLine($"{name,-10} {seed,6} {r.Outcome,-10} {r.Time,5:0.0}s {segments,3} {r.Depth,5} {r.AirMin,5:0.0}% {r.HeartsLost,7} " +
-                          $"{r.Score,7} {r.PeakMomentum,6} {r.Bursts,6} {r.BiggestBurst,5} {drain,5:0.0}% {r.PointsMix(),-23}");
+        var (r, segments, speed) = RunEndless(make, seed, 0.15f, maxTime: 400f, dt: Dt);
+        Console.WriteLine($"{name,-10} {seed,6} {r.Outcome,-10} {r.Time,5:0.0}s {segments,3} {r.Depth,5} {r.LeadMin,6:0.0}% {r.HeartsLost,7} " +
+                          $"{r.Score,7} {r.PeakMomentum,6} {r.Bursts,6} {r.BiggestBurst,5} {speed,5:0.00} {r.PointsMix(),-23}");
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6b) R7.15 — does the depth drain ramp ever catch a momentum driller? The bots above die to crushes
-//     long before the ramp bites (they don't dodge, §15.5), so this run makes them crush-immune: a
-//     "perfect dodger" whose only way to die is air. Depth at air-death = where the ramp wins.
+// 6b) R7.15 → R8.7 — does the depth ramp of the Cave-in front ever catch a momentum driller? The bots
+//     above die to crushes long before the ramp bites (they don't dodge, §15.5), so this run makes them
+//     crush-immune: a "perfect dodger" whose only way to die is the front. Depth at cave-in death = where
+//     the ramp wins.
 // ─────────────────────────────────────────────────────────────────────────────
 Console.WriteLine();
-Console.WriteLine("=== R7.15 — ENDLESS, ESQUIVE PARFAITE (seul l'air tue) ===");
-Console.WriteLine($"{"bot",-22} {"seed",5} {"outcome",-10} {"time",6} {"depth",5} {"drain",6} {"airMin",6} " +
-                  $"{"drain/s",7} {"gain/s",6} {"idle",5} {"score",7} {"PD",3} {"% Mo/B/Bo/D/PC/Bx",-23}");
+Console.WriteLine("=== R8.7 — ENDLESS, ESQUIVE PARFAITE (seul l'éboulement tue) ===");
+Console.WriteLine($"{"bot",-22} {"seed",5} {"outcome",-10} {"time",6} {"depth",5} {"r/s",5} {"leadMin",7} " +
+                  $"{"desc/s",6} {"recul/s",7} {"hits",4} {"idle",5} {"score",7} {"PD",3} {"% Mo/B/Bo/D/PC/Bx",-23}");
 foreach (var (name, make, cadence) in new (string, Func<IBot>, float)[]
 {
     ("tunnel rapide 0.15 s",   () => new TunnelBot(),   0.15f),
@@ -325,12 +319,11 @@ foreach (var (name, make, cadence) in new (string, Func<IBot>, float)[]
 {
     foreach (int seed in new[] { 101, 202, 303 })
     {
-        var (r, segments, drain) = RunEndless(() => new UnstuckBot(make()), seed, cadence, maxTime: 600f, dt: Dt, crushImmune: true);
-        float time   = Math.Max(0.1f, r.Time);
-        float gained = r.Drills * AirSystem.DrillRestoreAmount + r.Capsules * AirSystem.CapsuleRestoreAmount
-                     + r.Bursts * AirSystem.BurstRestoreAmount;
-        Console.WriteLine($"{name,-22} {seed,5} {r.Outcome,-10} {r.Time,5:0.0}s {r.Depth,5} {drain,5:0.0}% {r.AirMin,5:0.0}% " +
-                          $"{r.AirDrained / time,7:0.00} {gained / time,6:0.00} {r.Time - r.LastDrillAt,4:0.0}s {r.Score,7} {r.PowerDrills,3} {r.PointsMix(),-23}");
+        var (r, segments, speed) = RunEndless(() => new UnstuckBot(make()), seed, cadence, maxTime: 600f, dt: Dt, crushImmune: true);
+        float time = Math.Max(0.1f, r.Time);
+        // desc/s = rows of descent per second (what the front must out-pace); recul/s = recoil rows per second.
+        Console.WriteLine($"{name,-22} {seed,5} {r.Outcome,-10} {r.Time,5:0.0}s {r.Depth,5} {speed,5:0.00} {r.LeadMin,6:0.0}% " +
+                          $"{r.Depth / time,6:0.00} {r.RecoilRows / time,7:0.000} {r.CaveInHits,4} {r.Time - r.LastDrillAt,4:0.0}s {r.Score,7} {r.PowerDrills,3} {r.PointsMix(),-23}");
     }
 }
 
@@ -351,21 +344,22 @@ foreach (int startDepth in new[] { 0, 40, 80, 160, 320 })
 
 /// <summary>
 /// Drives a full endless run: a chain of generated segments sharing one score, one air tank and one
-/// set of hearts — the harness mirror of GameBootstrap's seam (§5.15). Returns the run result, the
-/// number of seams crossed, and the drain rate the descent ended on.
+/// set of hearts and ONE Cave-in front (absolute rows) — the harness mirror of GameBootstrap's seam
+/// (§5.15, R8.6). Returns the run result, the number of seams crossed, and the front speed it ended on.
 /// </summary>
-static (RunResult r, int segments, float drain) RunEndless(Func<IBot> makeBot, int seed, float cadence, float maxTime, float dt,
+static (RunResult r, int segments, float speed) RunEndless(Func<IBot> makeBot, int seed, float cadence, float maxTime, float dt,
                                                            bool crushImmune = false)
 {
     var p = new Persist { Endless = new EndlessManager(seed), CrushImmune = crushImmune };
-    p.Endless.DepthChanged     += d    => p.Score.AwardDepth(d);
-    p.Endless.DrainRateChanged += rate => p.Air.DrainRate = rate;
-    p.Air.DrainRate = p.Endless.DrainRate;
-    p.Air.BeginStartBuffer(); // R6.2: once per run — the seam is the same run continuing
+    p.Endless.DepthChanged        += d     => p.Score.AwardDepth(d);
+    p.Endless.CeilingSpeedChanged += speed => p.Ceiling.Speed = Tuning.Speed(speed); // R8.7: the depth ramp drives the front
+    p.Ceiling.Speed = Tuning.Speed(p.Endless.CeilingSpeed);
 
     while (!p.Dead && p.Elapsed < maxTime)
     {
         var sim = new Sim(p.Endless.BuildCurrentSegment(StrateGenerator.DefaultWidth), spawn: null, persist: p);
+        if (p.Segments == 0)
+            p.Ceiling.BeginStartBuffer(); // R6.2: once per run — the seam is the same run continuing
         var res = sim.Run(makeBot(), cadence, maxTime, dt);
         if (p.Dead) break;
         if (res.Outcome != "WIN") break;   // ran out of clock inside the segment (walled in, or timeout)
@@ -376,7 +370,7 @@ static (RunResult r, int segments, float drain) RunEndless(Func<IBot> makeBot, i
 
     // "WIN" is a per-segment marker here — an endless run that is still alive simply ran out of clock.
     if (!p.Dead) p.Result.Outcome = "timeout";
-    return (p.Result, p.Segments, p.Air.DrainRate);
+    return (p.Result, p.Segments, p.Ceiling.Speed);
 }
 
 /// <summary>Terrain stats for one board's content rows: densities + genuine burst opportunity.</summary>
@@ -421,8 +415,10 @@ sealed class RunResult
 {
     public string Outcome = "timeout";
     public float Time;
-    public float AirEnd, AirMin = 100f;
+    public float LeadEnd, LeadMin = 100f;   // R8.7: Cave-in margin, % of MaxLead (was the air)
     public int HeartsLost, Score, Depth, ContentRows, Drills, Capsules, Bombs;
+    public int CaveInHits;                   // hearts the front took
+    public float RecoilRows, FrontRows;      // R8.7 ledger: rows the front was pushed back / advanced on its own
 
     // v3 action-reward instrumentation (replaces the v2 line-source breakdown).
     public int PerfectClears, Bursts, BurstCells, BombChains;
@@ -447,20 +443,13 @@ sealed class RunResult
                $"{100 * PtsDepth / total,3}/{100 * PtsPerfect / total,3}/{100 * (PtsGraze + PtsFreefall) / total,3}";
     }
 
-    /// <summary>Air economy: what the run spent vs what it earned back, by source.</summary>
-    public float AirDrained;
-
-    public string Row(int level)
-    {
-        float fromCapsules = Capsules * AirSystem.CapsuleRestoreAmount;
-        float fromBursts   = Bursts   * AirSystem.BurstRestoreAmount;
-        float fromDrills   = Drills   * AirSystem.DrillRestoreAmount;
-        return $"{level,3} {Outcome,-10} {Time,5:0.0}s {AirEnd,6:0.0}% {AirMin,5:0.0}% {HeartsLost,7} {Score,6} {Depth,5} {ContentRows,4}" +
-               $" | drain -{AirDrained,5:0.0} drill +{fromDrills,5:0.0} caps +{fromCapsules,5:0.0}({Capsules,2}) burst +{fromBursts,5:0.0}({Bursts,2})";
-    }
+    /// <summary>R8.7 Cave-in ledger: the front's own advance vs the recoils, in rows, plus the hits it landed.</summary>
+    public string Row(int level) =>
+        $"{level,3} {Outcome,-10} {Time,5:0.0}s {LeadEnd,7:0.0}% {LeadMin,6:0.0}% {HeartsLost,7} {Score,6} {Depth,5} {ContentRows,4}" +
+        $" | front +{FrontRows,5:0.0} recul -{RecoilRows,4:0.0} (caps {Capsules,2} burst {Bursts,2}) coups front {CaveInHits}";
 
     public string RowWithActions(int level) =>
-        $"{level,3} {Outcome,-10} {Time,5:0.0}s {AirMin,5:0.0}% {HeartsLost,7} {Score,6} " +
+        $"{level,3} {Outcome,-10} {Time,5:0.0}s {LeadMin,6:0.0}% {HeartsLost,7} {Score,6} " +
         $"{PeakMomentum,6} {Bursts,6} {BiggestBurst,5} {BombChains,5} {BestBombChain,5} {PerfectClears,3} {PointsMix(),-23}";
 
     /// <summary>Bomb-economy view (§15.4 / R2.8e): what the bomb-hunter actually detonated and earned.
@@ -504,7 +493,7 @@ sealed class UnstuckBot : IBot
 /// <summary>
 /// R6.2 (F02): a first-time player. Stands at spawn reading the board for `idle` seconds, then plays
 /// the inner bot at whatever (slow) cadence the caller runs it. The other bots act from frame 0 at
-/// 4-7 inputs/s, which is exactly the player the air clock was never hurting.
+/// 4-7 inputs/s, which is exactly the player the air clock (now the Cave-in front) was never hurting.
 /// </summary>
 sealed class HesitantBot : IBot
 {
@@ -516,14 +505,16 @@ sealed class HesitantBot : IBot
 
 /// <summary>
 /// What survives a board swap. A campaign level is one Sim, but an endless RUN is a chain of Sims
-/// (one per segment) that must share the score, the air tank, the hearts and the clock — exactly
+/// (one per segment) that must share the score, the Cave-in front, the hearts and the clock — exactly
 /// what GameBootstrap carries across the seam (§5.15). Streak and Depth stay per-board, like the
 /// real game's LoadLevel resets.
 /// </summary>
 sealed class Persist
 {
     public readonly ScoreSystem  Score  = new();
-    public readonly AirSystem    Air    = new();
+    public readonly CeilingSystem Ceiling = new(Tuning.MaxLead); // R8.7: replaces the air (absolute rows)
+    public int RowOffset;      // board row + RowOffset = absolute row (Endless: SegmentStartDepth)
+    public bool CeilingReady;  // Reset once per run, never at a seam
     public readonly HealthSystem Health = new();
     public readonly RunResult    Result = new();
     public readonly MomentumTracker Momentum = new(); // v3.2: survives an endless seam (R7.6)
@@ -535,7 +526,7 @@ sealed class Persist
     public bool           Wired;    // persistent-system handlers are subscribed once, not per segment
     public bool           Dead;
     public int            Segments;
-    public bool           CrushImmune; // R7.15: "perfect dodger" — only air can end the run
+    public bool           CrushImmune; // R7.15: "perfect dodger" — only the Cave-in front can end the run
     public Sim            Current;     // the segment being played (persistent handlers run on the first Sim)
 }
 
@@ -552,7 +543,7 @@ sealed class Sim
     public MomentumTracker Momentum => _p.Momentum;
     readonly List<GridPos> _dangerCells = new();
     public readonly DepthTracker Depth = new();
-    public readonly AirSystem Air;
+    public CeilingSystem Ceiling => _p.Ceiling;
     public readonly HealthSystem Health;
 
     public float SimTime;
@@ -568,13 +559,14 @@ sealed class Sim
     {
         _p      = persist ?? new Persist();
         Score   = _p.Score;
-        Air     = _p.Air;
         Health  = _p.Health;
         _r      = _p.Result;
         SimTime = _p.Elapsed;
 
         Grid = GridModel.FromStringMap(map);
-        Avatar = new AvatarModel(Grid, spawn ?? new GridPos(Grid.Width / 2, 0));
+        // R8.7: same spawn row as the game (spawnCell (3,2) = the last spawn row), so the Endless seam lines up:
+        // the old board's exit row and the new board's spawn row are the same absolute row (cave-in.md §11).
+        Avatar = new AvatarModel(Grid, spawn ?? new GridPos(Grid.Width / 2, StrateGenerator.SpawnRows - 1));
         Gravity = new GravitySystem(Grid);
         Collapse = new CollapseSystem(Grid);
         Bombs = new BombSystem(Grid, Collapse);
@@ -590,7 +582,13 @@ sealed class Sim
             _r.MaxCascade = Math.Max(_r.MaxCascade, link);
         };
         Chain.ChainCompleted += _ => Score.CascadeMultiplier = 1;
-        Score.DangerZone = Air.IsDangerZone;
+        _p.RowOffset = _p.Endless?.SegmentStartDepth ?? 0;
+        if (!_p.CeilingReady)
+        {
+            _p.CeilingReady = true;
+            Ceiling.Reset(Avatar.Position.Y + _p.RowOffset); // a full leash above the spawn (UseCampaignLevel adds the buffer)
+        }
+        Score.DangerZone = Ceiling.IsDangerZone;
 
         _r.ContentRows += Grid.Height - StrateGenerator.SpawnRows - StrateGenerator.FloorRows;
 
@@ -619,10 +617,12 @@ sealed class Sim
                 }
             };
 
-            Air.AirDepleted       += () => { _p.Dead = true; _r.Outcome = "air-death"; _p.Current?.DumpSurroundings(); };
+            // R8.7 Cave-in — mirrors GameBootstrap.Awake (R8.6): rows → rubble, contact → a heart.
+            Ceiling.RowsSwallowed     += (from, to) => _p.Current.SwallowRows(from - _p.RowOffset, to - _p.RowOffset);
+            Ceiling.AvatarReached     += () => _p.Current.OnCaveIn();
+            Ceiling.DangerZoneChanged += d => Score.DangerZone = d;
 
             // v3.2 persistent wiring — mirrors GameBootstrap.Awake (R7.6).
-            Air.DangerZoneChanged += d => Score.DangerZone = d;
             _p.Momentum.PowerDrillActivated += _ => _p.PowerDrillPending = true;
             _p.Graze.GrazeTriggered += _ =>
             {
@@ -638,9 +638,8 @@ sealed class Sim
         {
             Momentum.NotifyDrill(oldType);
             Score.AwardDrill(Momentum.Multiplier);
-            Air.RestoreDrill(); // R5.2 — was missing here, so every ledger before R6.2 under-counted air
             _p.Graze.NotifyDrill(cell, DangerCells());
-            if (oldType == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
+            if (oldType == CellType.AirCapsule) { Recoil(CeilingSystem.CapsuleRecoil); _r.Capsules++; }
             Bombs.NotifyDrilled(cell);
             _r.Drills++;
             _r.LastDrillAt = SimTime;
@@ -662,11 +661,11 @@ sealed class Sim
         Gravity.ChunkBurst += (cells, fallDistance, _) =>
         {
             Score.AwardBurst(cells.Count, fallDistance);
-            Air.RestoreBurst();
+            Recoil(CeilingSystem.BurstRecoil);
             _r.Bursts++;
             _r.BurstCells += cells.Count;
         };
-        Gravity.AirCapsuleLiberated += _ => { Air.RestoreCapsule(); _r.Capsules++; };
+        Gravity.AirCapsuleLiberated += _ => { Recoil(CeilingSystem.CapsuleRecoil); _r.Capsules++; };
         Gravity.BombArmedByBurst    += pos => Bombs.ArmBombAt(pos);
         Gravity.AvatarHitByBurst    += OnCrushed;
         Gravity.AvatarCrushed       += _ => OnCrushed();
@@ -675,9 +674,9 @@ sealed class Sim
         Bombs.BombScored += (destroyed, chainMult) =>
         {
             Score.AwardBomb(destroyed, chainMult);
-            if (chainMult > 1) { Air.RestoreBombChain(chainMult); _r.BombChains++; }
+            if (chainMult > 1) { Recoil(CeilingSystem.BombChainRecoilPerBomb * chainMult); _r.BombChains++; }
         };
-        Bombs.AirCapsuleLiberated += _ => { Air.RestoreCapsule(); _r.Capsules++; };
+        Bombs.AirCapsuleLiberated += _ => { Recoil(CeilingSystem.CapsuleRecoil); _r.Capsules++; };
         Bombs.BombExploded        += _ => _r.Bombs++;
         Bombs.AvatarHitByBlast    += _ => OnCrushed();
 
@@ -685,7 +684,8 @@ sealed class Sim
         Collapse.PerfectClear += _ =>
         {
             Score.AwardPerfectClear(Chain.CurrentChain);
-            Air.RestorePerfectClear();
+            Ceiling.ShiftDown();                     // the rubble moved down with everything above (§5.2)
+            Recoil(CeilingSystem.PerfectClearRecoil);
         };
         Collapse.AvatarCrushed += _ => OnCrushed();
 
@@ -699,9 +699,51 @@ sealed class Sim
         // play, silently (no burst, no shockwave). Without this the harness would measure a board
         // that demolishes itself on load — the exact artifact the R2.8d fix removed (§15.1).
         Gravity.Settle();
+
+        // Endless seam (R8.6, cave-in.md §5.1): every row of the new board the front already passed is rubble.
+        if (_p.Endless != null && _p.Segments > 0)
+        {
+            SwallowRows(0, Ceiling.SwallowedRows - _p.RowOffset);
+            Ceiling.NotifyAvatarRow(Avatar.Position.Y + _p.RowOffset);
+        }
     }
 
-    /// <summary>R7.15 diagnostic: the 7-wide band around the avatar when air runs out (stuck vs out-paced).</summary>
+    /// <summary>R8.7: a campaign level's front — speed, a full leash above the spawn, the start buffer, the wobble.</summary>
+    public void UseCampaignLevel(int level)
+    {
+        Ceiling.Speed = Tuning.Speed(CampaignManager.CeilingSpeedForLevel(level));
+        Ceiling.Reset(Avatar.Position.Y + _p.RowOffset);
+        Ceiling.BeginStartBuffer(CampaignManager.CeilingStartGraceForLevel(level));
+        Gravity.WobbleDuration = CampaignManager.WobbleDurationForLevel(level);
+    }
+
+    /// <summary>Mirror of GameBootstrap.SwallowBoardRows: board rows → rubble, buried fuses out, never the avatar's row.</summary>
+    public void SwallowRows(int fromRow, int toRow)
+    {
+        fromRow = Math.Max(0, fromRow);
+        toRow   = Math.Min(toRow, Avatar.Position.Y);
+        if (toRow <= fromRow) return;
+        Grid.FillRows(fromRow, toRow, CellType.Rubble);
+        Bombs.DisarmRows(fromRow, toRow);
+    }
+
+    /// <summary>The front reached the avatar. Never dodged — CrushImmune only covers falling blocks.</summary>
+    public void OnCaveIn()
+    {
+        if (!Health.TryTakeDamage()) return;
+        _r.HeartsLost++;
+        _r.CaveInHits++;
+        if (!Health.IsAlive) { _r.Outcome = "cave-in"; DumpSurroundings(); }
+    }
+
+    void Recoil(float rows)
+    {
+        float before = Ceiling.CeilingRow;
+        Ceiling.Recoil(rows);
+        _r.RecoilRows += before - Ceiling.CeilingRow; // what it actually bought (the leash caps it)
+    }
+
+    /// <summary>R7.15 diagnostic: the 7-wide band around the avatar when the front kills it (stuck vs out-paced).</summary>
     public void DumpSurroundings()
     {
         if (Environment.GetEnvironmentVariable("DUMP_STUCK") != "1") return;
@@ -718,7 +760,7 @@ sealed class Sim
                 {
                     CellType.Empty => '.', CellType.ColorA => 'A', CellType.ColorB => 'B', CellType.ColorC => 'C',
                     CellType.Hard => 'H', CellType.HardCracked => 'h', CellType.Steel => 'S',
-                    CellType.AirCapsule => 'P', CellType.Bomb => 'X', CellType.Diamond => 'D', _ => '?',
+                    CellType.AirCapsule => 'P', CellType.Bomb => 'X', CellType.Diamond => 'D', CellType.Rubble => 'R', _ => '?',
                 });
             }
             Console.WriteLine(row);
@@ -749,12 +791,12 @@ sealed class Sim
         if (t.IsDrillable() && Grid.Drill(second))
         {
             Score.AwardDrill(mult);
-            Air.RestoreDrill();
-            if (t == CellType.AirCapsule) { Air.RestoreCapsule(); _r.Capsules++; }
+            if (t == CellType.AirCapsule) { Recoil(CeilingSystem.CapsuleRecoil); _r.Capsules++; }
             Bombs.NotifyDrilled(second);
         }
         int destroyed = Gravity.ApplyShockwave(second, 1);
         Score.AwardPowerShockwave(destroyed, mult);
+        Recoil(CeilingSystem.PowerDrillRecoil); // the ×6 pushes the well back (cave-in.md §2.3)
         if (t.IsDrillable())
             Fissures.NotifyDrill(second, Momentum.CurrentTier);
     }
@@ -800,13 +842,11 @@ sealed class Sim
             if (!freefall) Momentum.Tick(dt); // §M3.3: the window is frozen in freefall
             _p.Graze.Tick(dt);
             Health.Tick(dt);
-            if (!freefall) // ⚡D4: no drain in freefall
-            {
-                _r.AirDrained += Air.EffectiveDrainRate * dt; // sampled before the tick (R6.2 buffer)
-                Air.Tick(dt);
-            }
+            // R8.6: the front ticks in freefall too (falling IS gaining margin — ⚡D4 retired).
+            _r.FrontRows += Ceiling.Speed * Ceiling.StartBufferFactor * dt; // sampled before the tick (R6.2 buffer)
+            Ceiling.Tick(dt, Avatar.Position.Y + _p.RowOffset);
 
-            _r.AirMin = Math.Min(_r.AirMin, Air.Air);
+            _r.LeadMin = Math.Min(_r.LeadMin, Ceiling.LeadPercent);
 
             if (checkWin && Avatar.Position.Y >= winRow)
             {
@@ -817,7 +857,7 @@ sealed class Sim
 
         _p.Elapsed       = SimTime;
         _r.Time          = SimTime;
-        _r.AirEnd        = Air.Air;
+        _r.LeadEnd       = Ceiling.LeadPercent;
         _r.Depth         = _p.Endless?.Depth ?? Depth.MaxDepth;
         _r.Score         = Score.Score;
         _r.PerfectClears = Score.PerfectClears;
@@ -1045,4 +1085,21 @@ sealed class BombBot : IBot
             }
         }
     }
+}
+
+/// <summary>
+/// R8.7 calibration knobs, read from the environment so one build can compare settings:
+/// CEIL_SPEED_SCALE multiplies every front speed (campaign + endless ramp), CEIL_MAXLEAD sets the leash.
+/// Defaults = the shipped values.
+/// </summary>
+static class Tuning
+{
+    public static readonly float SpeedScale = Env("CEIL_SPEED_SCALE", 1f);
+    public static readonly float MaxLead    = Env("CEIL_MAXLEAD", CeilingSystem.DefaultMaxLead);
+
+    public static float Speed(float shipped) => shipped * SpeedScale;
+
+    static float Env(string name, float fallback) =>
+        float.TryParse(Environment.GetEnvironmentVariable(name), System.Globalization.NumberStyles.Float,
+                       System.Globalization.CultureInfo.InvariantCulture, out float v) && v > 0f ? v : fallback;
 }

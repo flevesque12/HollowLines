@@ -23,7 +23,10 @@ dotnet run        # .NET 8+
 
 ## Reading the output
 
-Per run: outcome (WIN / air-death / crushed / timeout), sim time, air at end + minimum,
+Per run: outcome (WIN / cave-in / crushed / timeout), sim time, Cave-in margin at end + minimum
+(`lead@end` / `leadMin`, % of `MaxLead`) and the front ledger (rows advanced vs recoiled, hits) — R8.7.
+Calibration knobs (env vars): `CEIL_SPEED_SCALE` (×every front speed) and `CEIL_MAXLEAD` (the leash).
+Older columns:
 lines cleared, hearts lost, score, best chain, and line sources as Drill/Keystone/Demolition/Chain.
 
 ## Caveats

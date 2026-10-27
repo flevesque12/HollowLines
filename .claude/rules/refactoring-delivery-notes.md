@@ -1309,3 +1309,19 @@ Known wording leftovers until R8.8: the bar is labelled "AIR", the hint says "Fo
 
 **Not exercised live:** a capsule recoil and a Perfect Clear `ShiftDown` (unit-tested in R8.1/R8.4c; wiring is one
 line each). The harness still plays on the air — parity is R8.7.
+
+### R8.7 — Harness parity + Cave-in calibration — 2026-10-27
+
+Harness only (`tools/playtest`), no Unity code touched except two doc comments ("Provisional" → "measured, kept").
+Full write-up: `balance.md` §15.11. 515/515 unchanged; the harness builds and runs (~55 s).
+
+- **Parity with R8.6:** `Persist.Ceiling` (one front per run, absolute rows, `RowOffset`), `Sim.UseCampaignLevel(level)`
+  replaces the 7 copies of the air drain + buffer set-up, `SwallowRows` mirrors `GameBootstrap.SwallowBoardRows`,
+  `OnCaveIn` counts front hits (never covered by `CrushImmune`), every air restore became a `Recoil` that records the
+  rows it actually bought (the leash caps it), the Endless seam pre-fills passed rows. Air removed from the harness.
+- **Spawn row 0 → 2** (the game's `spawnCell`): with row 0 the Endless seam would hand out 2 free rows of margin.
+- **Reports** now speak margin: `lead@end` / `leadMin`, the front ledger, `cave-in` outcomes; 6b's columns are
+  descent rows/s, recoil rows/s and front hits.
+- **Knobs** `CEIL_SPEED_SCALE` / `CEIL_MAXLEAD` (env vars) so one build compares settings.
+
+**Measured** ×1 / ×1.5 / ×2 front speed and `MaxLead` 12 / 8. **Dev kept ×1** — see §15.11.

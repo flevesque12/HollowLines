@@ -429,3 +429,39 @@ leaderboard (R3.5) needs. Nothing to retune.
 
 **Known harness limits:** no EnemySystem; `UnstuckBot` still loops in a few edge pockets (e.g. pinned at the
 wall between steel and a bomb, where a human walks along the row above) — those rows are the `idle 10 s+` ones.
+
+
+### 15.11 Cave-in calibration (R8.7, 2026-10-27) — ✅ measured, no change
+
+**Harness first:** `tools/playtest` is at Cave-in parity with R8.6 — one persistent `CeilingSystem` per run in
+absolute rows (`RowOffset` = `SegmentStartDepth`), seam pre-fill, every recoil (capsules drilled / pierced / freed,
+burst, bomb chain, Perfect Clear + `ShiftDown`, Power Drill), the front ticking in freefall, `cave-in` as an outcome
+(crush immunity never covers the front). Columns `lead@end` / `leadMin` replace the air; the ledger reads
+`front +X recul -Y … coups front N`. **Spawn moved to row 2** (the game's `spawnCell`), so the seam lines up.
+Knobs: `CEIL_SPEED_SCALE`, `CEIL_MAXLEAD`.
+
+**Shipped values (×1, `MaxLead` 12) — the front taxes hesitation, never descent:**
+
+| profile | air (§15.8-15.10) | Cave-in ×1 |
+|---|---|---|
+| newcomer tunnel (4 s idle, 0.6 s) | wins 1-6, then crush | wins **1-8**, then crush; `leadMin` ≥ 88 % |
+| newcomer row-clear (0.5 s) | air-death on 1, 6, 10 | **cave-in on 6, 10**, crushes elsewhere |
+| realistic / fast tunnel | 73-100 % air | 85-100 % margin; crushes on 7-10 (non-dodging, §15.5) |
+| endless perfect dodger | ramp caught slow ~160, fast 166 | every death `idle` 6-25 s = **trapped**, none out-paced |
+
+Why it is softer for descenders than the air: drilling one row down buys 1/12 of the margin (8.3 %), where a drill
+gave +0.5 % air. Anyone averaging more than the front's speed (0.48-1.2 r/s) over a ~10 s window is never caught.
+
+**Variants measured** (same seeds): front speed **×1.5** and **×2**, `MaxLead` **8**, and ×1.5 + `MaxLead` 8.
+- Campaign descenders: **no outcome changed** in any variant (newcomer tunnel still wins 1-8; `leadMin` drops to 56-74 %).
+- Farmers pay: newcomer row-clear takes 3 → 7 (×1.5) → 10 (×2) → 11 (×1.5 + L8) front hits.
+- Endless ×1.5: the first "honest" catches (idle ≤ 1.5 s) — fast tunnel at depth 166 / 617, row-clear 219 / 298.
+- `MaxLead` 8 alone: almost no measurable effect — the front just sits closer on screen.
+
+**Decision (dev): keep everything at ×1.** Same pressure as the air it replaces — rule 5 (passive = buried) holds for
+farmers and the hesitant, rule 6 never punishes descending. `CeilingSpeedForLevel` / `CeilingSpeedForDepth`,
+`MaxLead`, `HitRecoil` and every recoil constant stay as R8.1-R8.5 set them.
+
+**Known harness limits (unchanged):** no EnemySystem; `UnstuckBot` still loops in some pockets — every endless death
+here is one of those (`idle` 6-25 s), so the Endless verdict rests on "nobody drilling was caught", not on a depth spread.
+If playtests find Endless too soft, the measured lever is the Endless ramp alone (×1.5), not the campaign.

@@ -83,8 +83,9 @@ et toute la balance §15 se transpose sans repartir de zéro :
 | Endless départ | 5 %/s | **0,60 rangée/s** | 20 s |
 | Endless plafond (prof. 200+) | 10 %/s | **1,20 rangée/s** | 10 s |
 
-Formule Endless : `CeilingSpeedForDepth(d) = (5 + d/20 × 0,5) × 0,12`, plafonnée à 1,2. Valeurs **provisoires** —
-le harness les mesure en R8.7 (§8), comme R7.15 l'a fait pour le drain.
+Formule Endless : `CeilingSpeedForDepth(d) = (5 + d/20 × 0,5) × 0,12`, plafonnée à 1,2. ✅ **R8.7 : mesurées au
+harness et gardées telles quelles** (dev, 2026-10-27 — `balance.md` §15.11) : même pression que l'air, le front taxe
+l'hésitation et le farming, jamais la descente.
 
 ### 2.3 Ce qui fait reculer le front (règle 5 : l'agression récompense)
 
@@ -218,8 +219,8 @@ qu'elle donnait en air, elle le donne en marge : **`CeilingSystem.RestoreCapsule
 
 **Pourquoi c'est conforme aux règles.** Règles 3 (« bombs liberate air ») et 5 (« capsules restore air »)
 gardent leur sens tel quel avec « marge » au lieu d'« air ». Une capsule reste un bonus qu'on prend en passant :
-elle ne demande jamais de détour (règle 6). **À calibrer (R8.7)** : 0,75 rangée ≈ 1,25 s de front à 0,6 r/s
-(l'ancienne capsule valait 1,2 s de drain à 5 %/s) — même poids qu'avant.
+elle ne demande jamais de détour (règle 6). 0,75 rangée ≈ 1,25 s de front à 0,6 r/s (l'ancienne capsule valait
+1,2 s de drain à 5 %/s) — même poids qu'avant. ✅ Gardé en R8.7.
 
 > **Retiré avec le gaz** : `Core/GasSystem.cs`, l'alias `CellType.Gas`, les events `GasReleased`
 > (Gravity / Bomb / Enemy), `EnemySystem.NotifyGas`, `KillMethod.Gas`, `DeathCause.Gas` et son texte de récap,
@@ -296,7 +297,7 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 | ~~R8.4~~ | ~~`GasReleased`, Crawlers dans le gaz~~ — livré puis **retiré** ; remplacé par R8.4c (capsule → recul) | NUnit |
 | R8.5 ✅ | `DeathTracker` (marge à la mort) / `CampaignManager` / `EndlessManager` : vitesses + grace ; `ScoreSystem` inchangé | NUnit |
 | R8.6 ✅ | `GameBootstrap` : câblage, ordre du tick, nouvelle règle de respawn, couture Endless, l'air ne tue plus (passerelle `Mirror` jusqu'à R8.8) | Intégration + play mode |
-| R8.7 | Harness : parité, puis **calibrage** (vitesses, `MaxLead`, reculs dont `CapsuleRecoil`) — même méthode que R7.15 | Harness |
+| R8.7 ✅ | Harness : parité, puis calibrage — mesuré (×1 / ×1,5 / ×2, `MaxLead` 12 / 8), **rien de changé** (`balance.md` §15.11) | Harness |
 | R8.8 | View : débris + front, barre de marge, hint, audio, tuile capsule | Visuel |
 | R8.9 | Pages d'aide, GDD, CLAUDE.md, suppression d'`AirSystem` et des tests d'air | NUnit + play mode |
 

@@ -58,7 +58,7 @@ namespace HollowLines.Core
         /// R8.5 (cave-in.md §2.2): Cave-in front speed in rows/s — the drain above translated
         /// (drain × MaxLead / 100), so a still player dies in the same 25 s / 14 s as on the air.
         /// Literals, not derived from DrainRateForLevel: the air is deleted in R8.9 and this stays.
-        /// Provisional — R8.7 calibrates it with the harness.
+        /// R8.7: measured with the harness and kept as is (balance.md §15.11).
         /// </summary>
         public static float CeilingSpeedForLevel(int level) => level <= 3 ? 0.48f : 0.84f;
 
