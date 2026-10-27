@@ -210,9 +210,10 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R8.1 ✅ | `CeilingSystem` (Core): front, speed, leash (`MaxLead` 12), start buffer, recoils, contact + `HitRecoil`, Danger Zone, `RowsSwallowed` | 25 new, 485/485 |
 | R8.2 ✅ | `CellType.Rubble` + swallowed-row conversion (grid, bombs, enemies, fissures, diamonds) | 15 new, 500/500 |
 | R8.3 ✅ | `CellType.Gas` (alias of AirCapsule = 7, char `P`) + `GasSystem` (0.6 s hiss, 4-cell rising cloud, 3 s life, contact) | 15 new, 515/515 |
-| R8.4 | `GasReleased` events (gravity / bombs / Boomer), Crawlers die in gas, gas as a graze source | NUnit |
-| R8.5 | `ScoreSystem` / `DeathTracker` (`CaveIn`, `Gas`, drop `Suffocation`) / `CampaignManager` / `EndlessManager` speeds | NUnit |
-| R8.6 | `GameBootstrap`: wiring, tick order, stay-in-place respawn (decision B), Endless seam, switch off `AirSystem` | Integration + play mode |
+| R8.4 ✅ | `GasReleased` events (gravity / bombs / Boomer), Crawlers die in gas (`KillMethod.Gas`). Graze on gas = one line in `CollectDangerCells`, moved to R8.6 | 8 new, 523/523 |
+| R8.4b ✅ | **`previewCaveIn` debug toggle** — the real `CeilingSystem` + `GasSystem` playable before R8.6, placeholder `CaveInPreviewView` (front line, puffs, hiss, lead readout), rubble tile colour, decision B respawn. Pulled forward from R8.5: `DeathCause.CaveIn` / `Gas` + recap texts (`ceiling-gas.md` §10) | Play mode, 523/523 |
+| R8.5 | `ScoreSystem` / `DeathTracker` (drop `Suffocation`; `CaveIn` / `Gas` already exist since R8.4b) / recap detail line (no "air restant") / `CampaignManager` / `EndlessManager` speeds | NUnit |
+| R8.6 | `GameBootstrap`: replace the `previewCaveIn` block with the real wiring (absolute rows), tick order, stay-in-place respawn (decision B), Endless seam, `GasReleased` → `GasSystem.Release`, `NotifyGas` each frame, gas puffs in `CollectDangerCells` (graze), switch off `AirSystem` | Integration + play mode |
 | R8.7 | Harness parity, then **calibration** (speeds, `MaxLead`, `gasRate`, recoils) — R7.15 method | Harness |
 | R8.8 | View: rubble + crumbling front, gas cloud, lead bar, "DESCENDS !" hint, rumble/hiss audio | Visual |
 | R8.9 | Generator (gas density, none on 1-3, tutorial chamber), help pages, GDD, CLAUDE.md rules 1/4/5/10, delete `AirSystem` + air tests | NUnit + play mode |

@@ -1165,3 +1165,55 @@ Standing on the pocket is a hit the instant it vents.
 
 **Two tests had to dodge float traps** (`0.6f − 0.5f − 0.1f` > 0): ticks are chosen so the hiss end never
 lands on a subtraction residue.
+
+### R8.4 — Gas in the rest of Core: release points + Crawler kills — 2026-10-27
+
+Core only, still not wired (R8.6). 8 new NUnit tests (`GasInteractionTests`), **523/523** (EditMode); the
+`tools/playtest` harness still builds. Spec: `ceiling-gas.md` §4.3.
+
+- **`GasReleased(GridPos)`** on `GravitySystem` (burst ring + Power Drill shockwave — both go through
+  `ApplyShockwaveCell`), `BombSystem` (blast) and `EnemySystem` (Boomer blast). Fired **right after**
+  `AirCapsuleLiberated`, at the same cell — the old event keeps feeding the air until the R8.6 switch, R8.9
+  deletes it. Added alongside rather than renamed, same build-alongside rule as `CellType.Gas`.
+- **`KillMethod.Gas`** + **`EnemySystem.NotifyGas(ICollection<GridPos> gasCells)`** — the caller passes
+  `GasSystem.CopyGasCells` each frame (Core systems don't reference each other). Every living **Crawler**
+  in a puff dies, dormant or active (like every physics kill, §6.5), at ×1 through the shared `KillOne`, so
+  `EnemyKilled` → `AwardEnemyKill` pays 100 with no new scoring code.
+
+**Decision (mine, flagged in the spec): Boomers are immune to gas.** The spec only named the Crawler. A gas
+kill has no parent bonus, so going through `KillOne` a Boomer would die *without* detonating — the amplifier
+(rule 9) silently wasted, the opposite of what a Boomer is for. Easy to flip later if playtests want it.
+
+**Moved to R8.6: gas as a graze source.** It is one line in `GameBootstrap.CollectDangerCells()` (the
+`GrazeSystem` takes any cells), which is View wiring — and `GameBootstrap` has no `GasSystem` until R8.6.
+Decided now: **puffs only, never the hissing pocket** — the player drills the pocket themselves, so the
+very next drill would be adjacent to it and every pocket would hand out a free +50.
+
+**No View change needed for `KillMethod.Gas`:** `AudioManager` / `VfxManager` only special-case `Crush`
+(the Boomer fallback), so a gas kill plays the normal Crawler death.
+
+### R8.4b — `previewCaveIn`: the Cave-in + gas playable in Unity (debug toggle) — 2026-10-27
+
+Dev request after R8.4: something visual to try the mechanic before the R8.6 switch. A **temporary**
+`GameBootstrap` toggle that wires the real `CeilingSystem` + `GasSystem` in place of the air, with placeholder
+visuals. Spec + limits: `ceiling-gas.md` §10. 523/523, harness builds, **verified in play mode** (UnityMCP).
+
+**Files:**
+- `GameBootstrap` — `previewCaveIn` field; `SetUpCaveInPreview(freshBoard)` called from `LoadLevel` (nulls
+  `_ceiling` / `_gas` when off, so nothing stale survives a toggle change), `TickCaveInPreview(dt)` at tick
+  step 10c, `CaveInRespawnCell()` (decision B) used by `OnAvatarCrushed`; three one-line hooks: a drilled /
+  Power-Drill-pierced pocket → `_gas.Release`, Power Drill → `RestorePowerDrill`, puffs in `CollectDangerCells`.
+  The air tick is skipped while the preview is on; the Endless drain ramp also drives the ceiling speed.
+- `CaveInPreviewView` (new, to delete in R8.8) — front line, dust band over the crumbling row, pooled puff /
+  hiss sprites, `OnGUI` lead readout.
+- `BoardView` — `rubbleColor` + a `Rubble` case in `VisualFor` (closes the R8.2 "renders as empty" gap).
+- **Pulled forward from R8.5:** `DeathCause.CaveIn` / `DeathCause.Gas` (appended — existing values unchanged)
+  + their `DeathRecapView` title / tip. Without them a cave-in hit would have been logged under a wrong cause.
+
+**Play-mode check (tutorial board):** the front enters the board on time (5 s grace, 0.48 r/s), row 0 turns to
+rubble, a still avatar takes 3 `CaveIn` hits and the recap names the cave-in; a straight dig where the Power
+Drill pierced the (3,12) pocket → hiss → cloud rising behind the descending avatar → absorbed by the rubble.
+The one heart lost came from the tutorial bomb (`BombBlast`, accepted in §5.14). No exceptions.
+
+**Known placeholder limits:** board-local rows (full leash again at each Endless seam), frozen HUD air bar, the
+pocket still drawn as the "AIR" pill, recap still prints "air restant 100 %" (R8.5 fixes that line).

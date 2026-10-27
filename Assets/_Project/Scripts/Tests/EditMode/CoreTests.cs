@@ -2267,6 +2267,147 @@ namespace HollowLines.Tests
         }
     }
 
+    /// <summary>R8.4 — gas wired into the rest of Core: release points (burst / bomb / Boomer) and Crawler kills.</summary>
+    [TestFixture]
+    public class GasInteractionTests
+    {
+        private static readonly GridPos Far = new GridPos(-5, -5);
+
+        // ── Release points ──────────────────────────────────────────
+
+        [Test]
+        public void Shockwave_CracksAPocket_GasReleasedRightAfterAirCapsuleLiberated()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AP." });
+            var gravity = new GravitySystem(grid);
+            var log = new List<string>();
+            gravity.AirCapsuleLiberated += p => log.Add("air " + p);
+            gravity.GasReleased         += p => log.Add("gas " + p);
+
+            gravity.ApplyShockwave(new GridPos(0, 0));
+
+            var cell = new GridPos(1, 0);
+            CollectionAssert.AreEqual(new[] { "air " + cell, "gas " + cell }, log);
+            Assert.AreEqual(CellType.Empty, grid.Get(cell), "the vent is an empty cell the gas can fill");
+        }
+
+        [Test]
+        public void BombBlast_CracksAPocket_FiresGasReleased()
+        {
+            var grid = GridModel.FromStringMap(new[] { "AXP" });
+            var bombs = new BombSystem(grid, new CollapseSystem(grid));
+            var released = new List<GridPos>();
+            bombs.GasReleased += p => released.Add(p);
+
+            bombs.NotifyDrilled(new GridPos(0, 0)); // arms (1,0), radius 1
+            bombs.Tick(BombSystem.FuseDuration + 0.1f, Far);
+
+            CollectionAssert.AreEqual(new[] { new GridPos(2, 0) }, released);
+        }
+
+        [Test]
+        public void BoomerBlast_CracksAPocket_FiresGasReleased()
+        {
+            var grid = GridModel.FromStringMap(new[] { ".P.", "..." });
+            var enemies = new EnemySystem(grid);
+            enemies.SpawnEnemy(EnemyType.Boomer, new GridPos(0, 0));
+            var released = new List<GridPos>();
+            enemies.GasReleased += p => released.Add(p);
+
+            enemies.NotifyBombBlast(new List<GridPos> { new GridPos(0, 0) }, chainMult: 1);
+
+            CollectionAssert.AreEqual(new[] { new GridPos(1, 0) }, released);
+        }
+
+        [Test]
+        public void ShockwaveRelease_WiredToGasSystem_VentsACloudAfterTheHiss()
+        {
+            var grid = GridModel.FromStringMap(new[] { "...", "...", "AP." });
+            var gravity = new GravitySystem(grid);
+            var gas = new GasSystem(grid);
+            gravity.GasReleased += p => gas.Release(p); // the R8.6 wiring, in miniature
+
+            gravity.ApplyShockwave(new GridPos(0, 2));
+            Assert.IsTrue(gas.IsHissing(new GridPos(1, 2)));
+
+            gas.Tick(GasSystem.HissDuration, Far);
+            Assert.IsTrue(gas.IsGas(new GridPos(1, 2)));
+        }
+
+        // ── Crawlers die in gas ─────────────────────────────────────
+
+        [Test]
+        public void NotifyGas_KillsACrawlerInAPuff_AsGasAtX1_DormantOrActive()
+        {
+            var enemies = new EnemySystem(new GridModel(3, 10));
+            int dormant = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(0, 4));
+            int active  = enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(2, 4));
+            enemies.ActivateEnemy(active);
+            var kills = new List<(int id, EnemyType type, KillMethod method, int bonus)>();
+            enemies.EnemyKilled += (id, type, method, bonus) => kills.Add((id, type, method, bonus));
+
+            int killed = enemies.NotifyGas(new List<GridPos> { new GridPos(0, 4), new GridPos(2, 4) });
+
+            Assert.AreEqual(2, killed);
+            CollectionAssert.AreEquivalent(new[]
+            {
+                (dormant, EnemyType.Crawler, KillMethod.Gas, 1),
+                (active,  EnemyType.Crawler, KillMethod.Gas, 1),
+            }, kills);
+            Assert.AreEqual(0, enemies.GetAllAlive().Count);
+        }
+
+        [Test]
+        public void NotifyGas_LeavesBoomersAlone_AndNeverDetonates()
+        {
+            var enemies = new EnemySystem(new GridModel(3, 10));
+            enemies.SpawnEnemy(EnemyType.Boomer, new GridPos(1, 4));
+            int kills = 0, booms = 0;
+            enemies.EnemyKilled     += (_, __, ___, ____) => kills++;
+            enemies.BoomerDetonated += (_, __, ___) => booms++;
+
+            Assert.AreEqual(0, enemies.NotifyGas(new List<GridPos> { new GridPos(1, 4) }));
+            Assert.AreEqual(0, kills);
+            Assert.AreEqual(0, booms);
+            Assert.AreEqual(1, enemies.GetAllAlive().Count);
+        }
+
+        [Test]
+        public void NotifyGas_NoGas_OrGasElsewhere_KillsNothing()
+        {
+            var enemies = new EnemySystem(new GridModel(3, 10));
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(1, 4));
+
+            Assert.AreEqual(0, enemies.NotifyGas(null));
+            Assert.AreEqual(0, enemies.NotifyGas(new List<GridPos>()));
+            Assert.AreEqual(0, enemies.NotifyGas(new List<GridPos> { new GridPos(1, 5) }));
+            Assert.AreEqual(1, enemies.GetAllAlive().Count);
+        }
+
+        [Test]
+        public void ARisingCloud_KillsTheCrawlerItPassesThrough()
+        {
+            var grid = new GridModel(3, 10);
+            var gas = new GasSystem(grid);
+            var enemies = new EnemySystem(grid);
+            enemies.SpawnEnemy(EnemyType.Crawler, new GridPos(1, 6)); // dormant, two rows above the vent
+            var puffs = new List<GridPos>();
+            int killed = 0;
+
+            gas.Release(new GridPos(1, 8));
+            gas.Tick(GasSystem.HissDuration, Far);
+            for (int step = 0; step < 3 && killed == 0; step++)
+            {
+                gas.Tick(GasSystem.StepInterval, Far);
+                puffs.Clear();
+                gas.CopyGasCells(puffs);
+                killed += enemies.NotifyGas(puffs);
+            }
+
+            Assert.AreEqual(1, killed, "the first puff reaches row 6 on the second step");
+        }
+    }
+
     [TestFixture]
     public class HealthSystemTests
     {

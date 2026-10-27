@@ -251,8 +251,9 @@ comme la capsule l'était comme récompense.
 
 | Avec | Effet | Statut |
 |---|---|---|
-| **Graze** | Forer adjacent à un nuage actif = graze (+50, +0,3 s) — une ligne dans `CollectDangerCells()` | ✅ proposé |
-| **Crawler** | Un Crawler qui entre dans le gaz meurt (`KillMethod.Gas`, 100 pts) — règle 9, les ennemis meurent à la physique | ✅ proposé |
+| **Graze** | Forer adjacent à une **bouffée** = graze (+50, +0,3 s) — une ligne dans `CollectDangerCells()`. **Pas** la poche qui siffle : on la fore soi-même, le forage suivant serait un graze automatique à chaque poche | 🟡 R8.6 (câblage View) |
+| **Crawler** | Un Crawler (dormant ou actif) dans une bouffée meurt : `EnemySystem.NotifyGas(cells)`, `KillMethod.Gas`, ×1 (100 pts). **Les Boomers sont épargnés** : un kill au gaz n'a pas de bonus parent, donc pas d'explosion — un Boomer qui s'éteindrait sans exploser gaspillerait l'amplificateur (règle 9) | ✅ R8.4 |
+| **Libération** | Burst / bombe / Boomer qui touche une poche → `GasReleased(pos)` (`GravitySystem`, `BombSystem`, `EnemySystem`), tiré juste après `AirCapsuleLiberated` (même cellule) | ✅ R8.4 |
 | **Effondrement** | Le front absorbe le gaz | ✅ |
 | **Bombe** | Une explosion qui touche un nuage l'**enflamme** : rayon 1, points de bombe | 🅿️ parqué (après playtests) |
 | **Fissures** | Le gaz ne se fissure pas (comme la capsule aujourd'hui : `CanFuse` seulement) | ✅ inchangé |
@@ -353,3 +354,29 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 | D | `MaxLead` = 12 rangées (front toujours visible) ? | **Oui** pour commencer ; le harness ajuste |
 | E | Gaz absent des niveaux 1-3 ? | **Oui** — l'onboarding a déjà assez à apprendre |
 | F | Nom de la cause de mort : `Collapse` existe déjà (Perfect Clear qui écrase) | Garder `Collapse` tel quel, ajouter **`DeathCause.CaveIn`** (le front) + **`DeathCause.Gas`**, retirer `Suffocation` |
+
+---
+
+## 10. Aperçu jouable — `previewCaveIn` (temporaire, 2026-10-27)
+
+Toggle debug sur `GameBootstrap` (section « Debug / Testing ») pour jouer la mécanique **avant** R8.6.
+**Coche-le avant Play** (il est lu à chaque `LoadLevel`). R8.6 le remplace par le vrai câblage, R8.8 par les
+vrais visuels (`CaveInPreviewView` sera supprimé).
+
+Ce qu'il branche — le vrai Core, rien de simulé :
+- L'air ne draine plus ; `CeilingSystem` tourne à la vitesse traduite du niveau (`SpeedForDrainRate`) avec le
+  même start buffer ; `RowsSwallowed` → `FillRows(Rubble)` + `DisarmRows` + `BuryRows` ; contact → `CaveIn`.
+- Les reculs : burst, chaîne de bombes, Perfect Clear (+ `ShiftDown`), Power Drill.
+- Le gaz : forer un bloc **AIR** (= poche de gaz, même cellule) ou le libérer (burst / bombe / Boomer / Power
+  Drill) → `GasSystem.Release` ; contact → `Gas` ; `NotifyGas` chaque frame ; les bouffées comptent pour le graze.
+- Respawn décision B (`CaveInRespawnCell`) : on reste sur place, on remonte seulement si on est dans du solide.
+- Danger Zone = celle de la marge.
+
+Limites assumées (corrigées en R8.6 / R8.8) : rangées **locales au board** (le front repart à pleine laisse à
+chaque couture Endless) ; la barre d'air du HUD est figée (la marge = la ligne orange + le texte en bas à gauche) ;
+le bloc garde son visuel « AIR » ; le récap affiche encore « air restant 100 % ».
+
+**Vérifié en play mode (tutoriel, via UnityMCP)** : le front entre dans le board, la rangée 0 devient des débris
+gris, avatar immobile → 3 coups `CaveIn` (≈ 2,5 s d'écart à 3 r/s forcés) → récap « Rattrapé par l'éboulement » ;
+descente forée : Power Drill perce la poche (3,12) → sifflement → nuage qui monte pendant que l'avatar descend →
+absorbé par les débris ; aucune exception. Le seul cœur perdu venait de la bombe du tutoriel (§5.14, accepté).

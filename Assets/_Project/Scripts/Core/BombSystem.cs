@@ -142,6 +142,12 @@ namespace HollowLines.Core
         public event Action<GridPos> AirCapsuleLiberated;
 
         /// <summary>
+        /// R8.4: the same freeing, read as v3.3 gas — a blast cracked a gas pocket open. Fires right after
+        /// AirCapsuleLiberated (same cell). Wire to GasSystem.Release at R8.6; R8.9 drops the old event.
+        /// </summary>
+        public event Action<GridPos> GasReleased;
+
+        /// <summary>
         /// R4: a blast freed a diamond instead of wasting it (same principle as AirCapsuleLiberated).
         /// Caller wires this to DiamondSystem.NotifyCollected().
         /// </summary>
@@ -374,7 +380,10 @@ namespace HollowLines.Core
 
                         // The capsule is freed, not wasted: the caller banks the air.
                         if (hit == CellType.AirCapsule)
+                        {
                             AirCapsuleLiberated?.Invoke(target);
+                            GasReleased?.Invoke(target);
+                        }
 
                         // The diamond is freed, not wasted: the caller banks the collection.
                         if (hit == CellType.Diamond)
