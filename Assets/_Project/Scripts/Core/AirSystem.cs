@@ -177,6 +177,23 @@ namespace HollowLines.Core
             Restore(BombChainRestorePerBomb * bombCount);
         }
 
+        /// <summary>
+        /// R8.6 bridge (cave-in.md): since the switch to the Cave-in the air no longer drains — the caller
+        /// sets DrainRate 0 and mirrors CeilingSystem.LeadPercent here each frame, so the HUD bar, the
+        /// breathe hint, the Danger Zone vignette and the heartbeat keep reading AirSystem until R8.8 gives
+        /// them the margin directly. Clamped to [0, MaxAir]; fires AirChanged / DangerZoneChanged on a
+        /// change only. Never fires AirDepleted — the front, not the air, does the killing now.
+        /// Deleted with the rest of AirSystem in R8.9.
+        /// </summary>
+        public void Mirror(float percent)
+        {
+            float air = Math.Max(0f, Math.Min(MaxAir, percent));
+            if (air == Air)
+                return;
+            Air = air;
+            NotifyAirChanged();
+        }
+
         /// <summary>Reset to full air for a new run. Also cancels any running start buffer.</summary>
         public void Reset()
         {

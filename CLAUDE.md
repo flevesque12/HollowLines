@@ -144,10 +144,9 @@ Downwell, Tetris, NecroDancer, Pac-Man CE.
   `Resources/Tiles/` by `BoardView`, with a procedural white-square fallback.
 - **Bot playtest harness** — `tools/playtest/` compiles real Core sources. Fully v3-wired (R2.7).
 - **`spawnCell` must be the middle column** — `(3,2)` for 7-wide. Scene serialized value beats code default.
-- **Debug/testing toggles on GameBootstrap:** `disableAir` (gates air tick) and `invincible`
-  (early-returns in `OnAvatarCrushed`). Both off by default. Pure View flags — Core untouched.
-  🆕 `previewCaveIn` (temporary, until R8.6): plays the v3.3 Cave-in instead of the air (capsules push the
-  front back) — tick it **before** Play. See `cave-in.md` §10.
+- **Debug/testing toggles on GameBootstrap:** `disableCeiling` (freezes the Cave-in front — was `disableAir`
+  until R8.6, renamed with `FormerlySerializedAs`) and `invincible` (early-returns in `OnAvatarCrushed`).
+  Both off by default. Pure View flags — Core untouched. (`previewCaveIn` is gone since R8.6: the Cave-in IS the game.)
 - **Endless serialized fields** (`endlessMode` / `endlessSeed` / `endlessSegmentRows`) have the
   same serialized-beats-default caveat. Untick `endlessMode` before shipping.
 

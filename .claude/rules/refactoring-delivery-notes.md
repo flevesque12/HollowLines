@@ -1270,3 +1270,42 @@ tests, **512/512 in Unity** (EditMode, compiled clean) and with `dotnet test`; t
   `NotifyDeath(Suffocation)` is live. It goes with `AirSystem` in R8.9.
 - **`ScoreSystem` untouched** — `DangerZone` has been an input bool since R7.5; R8.6 only rewires its source
   (`CeilingSystem.DangerZoneChanged`, already done in the preview).
+
+### R8.6 — The switch: the Cave-in runs the game — 2026-10-27
+
+**The air no longer kills.** `GameBootstrap` now plays on a persistent `CeilingSystem`; the `previewCaveIn`
+toggle and its `SetUpCaveInPreview` / `TickCaveInPreview` are gone. Full wiring list: `cave-in.md` §11.
+3 new NUnit tests (`AirSystem.Mirror`), **515/515 in Unity**, harness builds, **verified in play mode** (UnityMCP).
+
+- **Absolute rows via `_rowOffset`** (Endless: `SegmentStartDepth`, else 0). Worked out before coding: an Endless
+  board is `SpawnRows + SegmentRows + FloorRows` = 64 rows and the seam fires at the exit row 62; the next board's
+  spawn row 2 maps to `S + 60 + 2` — the same absolute row. So the front survives the seam with no special case,
+  which is why `CeilingSystem` lives in `Awake` and is only `Reset` on a fresh board.
+- **Seam pre-fill** (`cave-in.md` §5.1): after the new board, its views and its enemies are built,
+  `SwallowBoardRows(0, SwallowedRows − offset)` turns every row the front already passed into rubble, then
+  `NotifyAvatarRow`. `SwallowBoardRows` clamps to the board and **never reaches the avatar's row**.
+- **Every former air restore is now a recoil** on the existing handlers (drill capsule, Power Drill 2nd block,
+  `AirCapsuleLiberated` ×3, burst, bomb chain, Perfect Clear with `ShiftDown`, Power Drill). The drill itself
+  restores nothing (§2.3). No `AirSystem.Restore*` call remains in the View.
+- **Respawn decision B for every hit** (`RespawnCell`, the preview's `CaveInRespawnCell` with absolute→board rows).
+- **⚡D4 retired:** the front ticks in freefall (falling IS gaining margin). Frozen during the R6.14 level-end settle.
+- **`disableAir` → `disableCeiling`** with `[FormerlySerializedAs("disableAir")]`, so a scene that had it ticked keeps it.
+
+**The bridge (deviation — not in the plan row): `AirSystem.Mirror(float percent)`.** The plan said "switch off
+`AirSystem`", but the HUD bar + grace cue + breathe hint (R6.2/R6.3), the Danger Zone vignette (R7.10) and the
+heartbeat (R7.11) all read `AirSystem`, and rewriting them is R8.8. Switching the air off outright would have left
+the player with a frozen 100 % bar and no danger feedback for two steps. Instead: `DrainRate = 0`, no `AirDepleted`
+wiring, its `Tick` only runs the start-buffer clock (same grace as the front, so the HUD countdown matches), and
+`Mirror(_ceiling.LeadPercent)` every frame. Everything downstream works unchanged; R8.8 repoints it, R8.9 deletes it.
+Known wording leftovers until R8.8: the bar is labelled "AIR", the hint says "Fore pour respirer !".
+
+**Play-mode check (UnityMCP, reflection probes):**
+- Tutorial, still avatar, front sped to 3 r/s: 5 s grace held, row 0 → rubble, the HUD air bar tracked the margin
+  (3 % → DANGER ×2), 3 `CaveIn` hits → game over, recap "Rattrapé par l'éboulement · Dernier forage il y a 14,5 s".
+- Endless, forced seam with the front 0.6 rows behind: segment 1 loaded with offset 60, front speed 0.84 r/s
+  (depth ramp), the new board's top rows rubble, no exception, console clean.
+- **Fixed on the screenshot:** the placeholder margin readout (`OnGUI`) drew over the game-over card → hidden while
+  `Time.timeScale == 0`.
+
+**Not exercised live:** a capsule recoil and a Perfect Clear `ShiftDown` (unit-tested in R8.1/R8.4c; wiring is one
+line each). The harness still plays on the air — parity is R8.7.

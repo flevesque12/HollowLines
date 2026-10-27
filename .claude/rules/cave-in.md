@@ -243,7 +243,7 @@ elle ne demande jamais de détour (règle 6). **À calibrer (R8.7)** : 0,75 rang
 | HUD | Barre d'air + « Fore pour respirer ! » (R6.3) | **Même barre** = marge ; hint « DESCENDS ! » sous 30 % |
 | VFX | Vignette danger | + rendu des débris, front qui s'effrite (poussière), tuile capsule à redessiner |
 | Audio | Heartbeat danger | + grondement dont le volume suit la proximité |
-| Debug toggle | `disableAir` | `disableCeiling` |
+| Debug toggle | `disableAir` | ✅R8.6 `disableCeiling` (`FormerlySerializedAs("disableAir")`) |
 | Aide en jeu | Page air | Page « Le puits s'effondre » |
 | Harness | Ledger d'air | Ledger de marge (vitesse, reculs, rattrapages par la laisse) |
 | CLAUDE.md | Règles 1, 5, 10 parlent d'air | Réécrites (§7) |
@@ -295,7 +295,7 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 | ~~R8.3~~ | ~~`CellType.Gas` + `GasSystem`~~ — livré puis **retiré** (gaz abandonné) | — |
 | ~~R8.4~~ | ~~`GasReleased`, Crawlers dans le gaz~~ — livré puis **retiré** ; remplacé par R8.4c (capsule → recul) | NUnit |
 | R8.5 ✅ | `DeathTracker` (marge à la mort) / `CampaignManager` / `EndlessManager` : vitesses + grace ; `ScoreSystem` inchangé | NUnit |
-| R8.6 | `GameBootstrap` : câblage, ordre du tick, nouvelle règle de respawn, couture Endless, retrait d'`AirSystem` | Intégration + play mode |
+| R8.6 ✅ | `GameBootstrap` : câblage, ordre du tick, nouvelle règle de respawn, couture Endless, l'air ne tue plus (passerelle `Mirror` jusqu'à R8.8) | Intégration + play mode |
 | R8.7 | Harness : parité, puis **calibrage** (vitesses, `MaxLead`, reculs dont `CapsuleRecoil`) — même méthode que R7.15 | Harness |
 | R8.8 | View : débris + front, barre de marge, hint, audio, tuile capsule | Visuel |
 | R8.9 | Pages d'aide, GDD, CLAUDE.md, suppression d'`AirSystem` et des tests d'air | NUnit + play mode |
@@ -318,11 +318,14 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 
 ---
 
-## 10. Aperçu jouable — `previewCaveIn` (temporaire, 2026-10-27)
+## 10. Aperçu jouable — `previewCaveIn` (2026-10-27) → **retiré en R8.6**
+
+> **✅ R8.6 : l'éboulement EST le jeu.** Le toggle `previewCaveIn` est supprimé ; tout ce qui suit est
+> maintenant câblé pour de vrai dans `GameBootstrap` (§11). `CaveInPreviewView` reste affiché en
+> permanence (ligne du front + texte de marge, masqué quand le jeu est figé) jusqu'aux vrais visuels de R8.8.
+> Historique de l'aperçu ci-dessous.
 
 Toggle debug sur `GameBootstrap` (section « Debug / Testing ») pour jouer la mécanique **avant** R8.6.
-**Coche-le avant Play** (il est lu à chaque `LoadLevel`). R8.6 le remplace par le vrai câblage, R8.8 par les
-vrais visuels (`CaveInPreviewView` sera supprimé).
 
 Ce qu'il branche — le vrai Core, rien de simulé :
 - L'air ne draine plus ; `CeilingSystem` tourne à la vitesse traduite du niveau (`SpeedForDrainRate`) avec le
@@ -341,3 +344,27 @@ chaque couture Endless) ; la barre d'air du HUD est figée (la marge = la ligne 
 devient des débris gris, avatar immobile → 3 coups `CaveIn` (≈ 2,5 s d'écart à 3 r/s forcés) → récap « Rattrapé
 par l'éboulement » ; aucune exception. **La version capsule → recul n'est pas encore revue en play mode** (MCP
 Unity déconnecté au moment du retrait du gaz) — Core seulement, 503/503 via `dotnet test`.
+
+---
+
+## 11. Câblage livré — R8.6 (2026-10-27)
+
+- **`CeilingSystem` persistant**, créé dans `Awake` comme l'air l'était. Ses events sont branchés une seule fois :
+  `RowsSwallowed` → `SwallowBoardRows` (rubble + `DisarmRows` + `BuryRows`, jamais la rangée de l'avatar),
+  `AvatarReached` → `OnAvatarCrushed(CaveIn)`, `DangerZoneChanged` → `ScoreSystem.DangerZone`.
+- **Rangées absolues** : rangée du board + `_rowOffset` (Endless : `SegmentStartDepth` ; sinon 0). Le spawn du
+  nouveau segment tombe pile sur la rangée absolue de la sortie de l'ancien (62 + S dans les deux cas), donc
+  l'avatar et le front ne bougent pas à la couture.
+- **Board neuf** (`freshBoard`) : `Reset(spawn + offset)` + start buffer (`CeilingStartGraceForLevel`). **Couture** :
+  rien n'est remis à zéro ; après la construction du board, les rangées que le front a déjà passées sont
+  converties d'office (§5.1 — vérifié en play mode), puis `NotifyAvatarRow`.
+- **Vitesse** : `CeilingSpeedForLevel` / `_endless.CeilingSpeed` au chargement, `CeilingSpeedChanged` en Endless.
+- **Reculs** : capsule forée / percée par le Power Drill / libérée (gravité, bombe, Boomer), burst, chaîne de
+  bombes, Perfect Clear (`ShiftDown` + recul), Power Drill. Aucun appel `AirSystem.Restore*` ne reste.
+- **Tick** : étape 9 = `_ceiling.Tick(dt, avatar + offset)`, figé pendant la fin de niveau (R6.14), **pas** figé en
+  chute libre (⚡D4 retiré). `disableCeiling` remplace `disableAir`.
+- **Respawn décision B** pour tous les dégâts (`RespawnCell`) — plus de téléport au spawn.
+- **L'air ne tue plus** (plus de `AirDepleted` → `Suffocation`). Passerelle jusqu'à R8.8 : `DrainRate` 0, son
+  `Tick` ne fait tourner que l'horloge du start buffer (le décompte de grâce du HUD), et
+  **`AirSystem.Mirror(LeadPercent)`** chaque frame — la barre, le hint « Fore pour respirer », la vignette et le
+  heartbeat lisent donc la marge sans avoir été touchés. Le libellé « AIR » / le texte du hint changent en R8.8.

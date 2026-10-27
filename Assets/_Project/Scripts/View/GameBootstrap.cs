@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using HollowLines.Core;
 using UnityEngine;
+using UnityEngine.Serialization;
 using UnityEngine.UIElements;
 
 namespace HollowLines.View
@@ -10,14 +11,18 @@ namespace HollowLines.View
     /// Scene entry point — boots all Core systems, wires events, owns the game loop.
     /// One component on one empty GameObject; no FindObjectOfType anywhere.
     ///
-    /// Persistent systems (ScoreSystem, AirSystem, HealthSystem, CampaignManager) are created
-    /// once in Awake and survive level transitions.
+    /// Persistent systems (ScoreSystem, CeilingSystem, AirSystem, HealthSystem, CampaignManager) are
+    /// created once in Awake and survive level transitions.
+    ///
+    /// v3.3 Cave-in (R8.6, cave-in.md): the well collapses behind the player. CeilingSystem works in
+    /// ABSOLUTE rows (board row + _rowOffset), so the front crosses an Endless seam untouched. The air
+    /// no longer drains or kills; until R8.8 it only mirrors the margin for the HUD / VFX / audio.
     ///
     /// Grid-dependent systems (GridModel, AvatarModel, GravitySystem, CollapseSystem,
     /// BombSystem, ChainTracker, EnemySystem) are fully rebuilt by LoadLevel() on each transition.
     ///
     /// Tick order (CLAUDE.md §7): avatar → depth → campaign → bombs → collapse → gravity
-    /// → chain → health → air → enemies.
+    /// → chain → health → Cave-in front → enemies.
     /// </summary>
     public sealed class GameBootstrap : MonoBehaviour
     {
@@ -26,15 +31,12 @@ namespace HollowLines.View
         [SerializeField] private PanelSettings hudPanelSettings;
 
         [Header("— Debug / Testing —")]
-        [Tooltip("Disable air drain — the air bar stays full so you can test a board without suffocating. Restores still fire; they just don't matter.")]
-        [SerializeField] private bool disableAir = false;
+        [Tooltip("Freeze the Cave-in front — it never advances, so you can test a board without being buried. Recoils still fire; they just don't matter.")]
+        [FormerlySerializedAs("disableAir")]
+        [SerializeField] private bool disableCeiling = false;
 
         [Tooltip("Invincibility — the avatar ignores every crush and blast (hearts never drop). No teleport-to-spawn, no shake: you just pass through.")]
         [SerializeField] private bool invincible = false;
-
-        [Tooltip("APERÇU v3.3 (cave-in.md) : l'air est remplacé par l'éboulement ; les capsules AIR le font reculer. " +
-                 "Vrai CeilingSystem, visuels temporaires, respawn sur place. Coche AVANT Play. Temporaire — R8.6 le remplace.")]
-        [SerializeField] private bool previewCaveIn = false;
 
         [Header("— Campaign —")]
         [Tooltip("Use Campaign mode (procedural boards per level). Uncheck to use the debug map below.")]
@@ -106,6 +108,12 @@ namespace HollowLines.View
         private DepthTracker    _depthTracker;
         private DiamondSystem   _diamondSystem;
         private DeathTracker    _deathTracker;
+        private CeilingSystem   _ceiling;         // v3.3 Cave-in (cave-in.md) — persistent, ABSOLUTE rows
+
+        // Board row + _rowOffset = absolute row for the Cave-in. Endless: the segment's start depth, so
+        // the front keeps its place across a seam (the new board's spawn rows overlap the old board's last
+        // content rows, exactly like EndlessManager's depth). Campaign / tutorial / debug: 0.
+        private int _rowOffset;
 
         // Intro tutorial state. While _inTutorial the board is the authored showcase, not a campaign
         // level; the campaign win check is bypassed and a depth-only tutorial win takes over.
@@ -155,9 +163,6 @@ namespace HollowLines.View
         private FissureTracker _fissureTracker; // v3.2 Tier 2 fissures (§M2, ⚡D5) — per board, grid-dependent
         private EnemySystem   _enemySystem;
 
-        // `previewCaveIn` only (temporary, cave-in.md): rebuilt per board like the systems above.
-        private CeilingSystem _ceiling;
-
         // ── Persistent views ──────────────────────────────────────────────────
         private GameInput        _input;
         private HUDView          _hud;
@@ -192,12 +197,8 @@ namespace HollowLines.View
             // Depth is ABSOLUTE across segments here (§6.3) — a per-board DepthTracker would restart
             // the counter at every seam, so in endless it is EndlessManager that scores depth.
             _endless.DepthChanged     += depth => { if (_endlessMode) _scoreSystem.AwardDepth(depth); };
-            _endless.DrainRateChanged += rate  =>
-            {
-                if (!_endlessMode) return;
-                _airSystem.DrainRate = rate;
-            };
-            _endless.CeilingSpeedChanged += speed => { if (_endlessMode && _ceiling != null) _ceiling.Speed = speed; }; // preview (R8.5)
+            // R8.6: the depth ramp drives the Cave-in front (the air drain ramp is no longer read).
+            _endless.CeilingSpeedChanged += speed => { if (_endlessMode) _ceiling.Speed = speed; };
             _endless.SegmentExhausted += _     => _pendingSegmentAdvance = true;
 
             _scoreSystem = new ScoreSystem();
@@ -234,11 +235,19 @@ namespace HollowLines.View
             _deathTracker = new DeathTracker();
             _deathTracker.Died += EndRun;
 
-            _airSystem = new AirSystem();
-            _airSystem.AirDepleted += () =>
-                _deathTracker.NotifyDeath(DeathCause.Suffocation, _avatar.Position, 0f);
-            // v3.2 Danger Zone (§M3.4): ScoreSystem mirrors the flag and doubles base points.
-            _airSystem.DangerZoneChanged += inDanger => _scoreSystem.DangerZone = inDanger;
+            // R8.6: the air no longer drains and never kills (no AirDepleted wiring). It survives only as a
+            // bridge until R8.8: Update mirrors the Cave-in margin into it, so the HUD bar, the breathe
+            // hint, the vignette and the heartbeat keep working unchanged. Deleted in R8.9.
+            _airSystem = new AirSystem { DrainRate = 0f };
+
+            // ── v3.3 Cave-in (R8.6, cave-in.md) ─────────────────────────────
+            // Persistent: an Endless seam must NOT reset the front. LoadLevel resets it on fresh boards.
+            _ceiling = new CeilingSystem();
+            // Swallowed rows (absolute) → rubble on this board, every buried fuse and enemy dropped silently (R8.2).
+            _ceiling.RowsSwallowed += (from, to) => SwallowBoardRows(from - _rowOffset, to - _rowOffset);
+            _ceiling.AvatarReached += () => OnAvatarCrushed(DeathCause.CaveIn);
+            // v3.2 Danger Zone (§M3.4), now the margin's: ScoreSystem mirrors the flag and doubles base points.
+            _ceiling.DangerZoneChanged += inDanger => _scoreSystem.DangerZone = inDanger;
 
             // No HealthDepleted -> EndRun here: it fires INSIDE TryTakeDamage, before the hit's cause
             // is recorded. OnAvatarCrushed declares the death itself, right after logging the hit.
@@ -313,13 +322,13 @@ namespace HollowLines.View
             _grazeSystem.Tick(dt);                                              // 7c. graze cooldown
             _healthSystem.Tick(dt);                                             // 8. health i-frames
             _deathTracker.Tick(dt);                                             // 8b. run clock (death recap)
-            if (!disableAir && !previewCaveIn && !_levelEnding && !freefall)    // 9. air drain (debug: skippable;
-                _airSystem.Tick(dt);                                            //    frozen once the level is won,
-                                                                                //    and in freefall — ⚡D4)
+            if (!disableCeiling && !_levelEnding)                               // 9. Cave-in front (R8.6) — frozen once
+                _ceiling.Tick(dt, _avatar.Position.Y + _rowOffset);             //    the level is won (debug: skippable).
+                                                                                //    Ticks in freefall too: falling IS
+                                                                                //    gaining margin (⚡D4 retired)
+            _airSystem.Tick(dt);                                                // 9b. R8.6 bridge: zero drain — only the
+            _airSystem.Mirror(_ceiling.LeadPercent);                            //     grace clock runs; the bar shows the margin
             _enemySystem.Tick(dt, _avatar.Position);                            // 10. enemy movement + contact
-
-            if (previewCaveIn)                                                  // 10c. preview: Cave-in + gas
-                TickCaveInPreview(dt);
 
             // Endless has no drill/burst event to wake buried enemies ahead of the player, so they
             // activate as the camera scrolls them into view (§6.5). Campaign boards don't need it —
@@ -343,8 +352,8 @@ namespace HollowLines.View
         // ─────────────────────────────────────────────────────────────────────
 
         /// <param name="freshBoard">
-        /// False only for an endless seam: the run continues, so the air start buffer (R6.2) is not
-        /// re-opened — otherwise every 60 rows would hand out a free breather.
+        /// False only for an endless seam: the run continues, so the Cave-in front is NOT reset and its
+        /// start buffer (R6.2) is not re-opened — otherwise every 60 rows would hand out a free breather.
         /// </param>
         private void LoadLevel(bool freshBoard = true)
         {
@@ -397,20 +406,29 @@ namespace HollowLines.View
                     if (c == 'D') totalDiamonds++;
             _diamondSystem.Init(totalDiamonds);
 
-            // Campaign levels drain air slower than the endless default. In endless the rate is
-            // owned by the depth ramp, so a new segment inherits whatever the descent earned.
-            _airSystem.DrainRate = _endlessMode
-                ? _endless.DrainRate
+            // ── v3.3 Cave-in (R8.6) ──────────────────────────────────────────
+            // Campaign levels move the front slower than the endless default (cave-in.md §2.2). In endless
+            // the speed is owned by the depth ramp, so a new segment inherits whatever the descent earned.
+            _rowOffset     = _endlessMode ? _endless.SegmentStartDepth : 0;
+            _ceiling.Speed = _endlessMode
+                ? _endless.CeilingSpeed
                 : useCampaign
-                    ? CampaignManager.DrainRateForLevel(_campaign.CurrentLevel)
-                    : AirSystem.DefaultDrainRate;
+                    ? CampaignManager.CeilingSpeedForLevel(_campaign.CurrentLevel)
+                    : CeilingSystem.DefaultSpeed;
 
-            // R6.2 (F02): open every fresh board with a grace window + drain ramp, so a new player can
-            // read the board before the clock bites. The tutorial reads CurrentLevel = 1 like drain/wobble.
+            // R6.2 (F02): every fresh board opens with the front a full leash above the spawn, still for a
+            // grace window, then ramping up — so a new player can read the board first. The tutorial reads
+            // CurrentLevel = 1 like the speed and wobble. An endless seam keeps the front where it is.
+            // The bridged air starts the same buffer: it only times the HUD's grace cue.
             if (freshBoard)
-                _airSystem.BeginStartBuffer(!_endlessMode && useCampaign
-                    ? CampaignManager.AirStartGraceForLevel(_campaign.CurrentLevel)
-                    : AirSystem.DefaultStartGrace);
+            {
+                float grace = !_endlessMode && useCampaign
+                    ? CampaignManager.CeilingStartGraceForLevel(_campaign.CurrentLevel)
+                    : CeilingSystem.DefaultStartGrace;
+                _ceiling.Reset(_spawn.Y + _rowOffset);
+                _ceiling.BeginStartBuffer(grace);
+                _airSystem.BeginStartBuffer(grace);
+            }
 
             // Rebuild grid-dependent systems.
             _avatar       = new AvatarModel(_grid, _spawn);
@@ -432,7 +450,7 @@ namespace HollowLines.View
             _scoreSystem.CascadeMultiplier = 1; // a new board never inherits the previous board's chain
             _chainTracker.LinkAdded      += link => _scoreSystem.CascadeMultiplier = link;
             _chainTracker.ChainCompleted += _    => _scoreSystem.CascadeMultiplier = 1;
-            _scoreSystem.DangerZone = _airSystem.IsDangerZone; // re-sync after any Reset on this path
+            _scoreSystem.DangerZone = _ceiling.IsDangerZone; // re-sync after any Reset on this path
             _enemySystem  = new EnemySystem(_grid); // grid-dependent: the Boomer blast writes cells (§6.5)
             _fissureTracker = new FissureTracker(_grid); // fresh per board: fissures are keyed by cell
             // R7.7b: a broken block is worth one drill at the momentum it broke at, with its own popup.
@@ -458,16 +476,14 @@ namespace HollowLines.View
                 int scoreBefore = _scoreSystem.Score; // R6.6: the popup shows what THIS drill earned
                 _momentumTracker.NotifyDrill(oldType);
                 _scoreSystem.AwardDrill(_momentumTracker.Multiplier); // × cascade × danger inside ScoreSystem
-                _airSystem.RestoreDrill();
-                _deathTracker.NotifyDrill(); // R6.1: suffocation recap's "last drill N s ago"
+                _deathTracker.NotifyDrill(); // R6.1: the cave-in recap's "last drill N s ago"
 
                 // Graze AFTER momentum (its +0.3 s must extend the window this drill just refreshed, not be
                 // overwritten by it) and BEFORE bombs/enemies (the bomb this drill lights, or the enemy it
                 // wakes, must not count as a near miss).
                 bool grazed = _grazeSystem.NotifyDrill(drilledCell, CollectDangerCells());
 
-                if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
-                if (previewCaveIn && oldType == CellType.AirCapsule) _ceiling.RestoreCapsule(); // preview: pushes the front back
+                if (oldType == CellType.AirCapsule) _ceiling.RestoreCapsule(); // R8.6: pushes the front back (cave-in.md §4)
                 if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(drilledCell); // R4
                 _bombSystem.NotifyDrilled(drilledCell);
                 _enemySystem.NotifyAdjacentDrill(drilledCell); // R5.9: wakes a dormant neighbor
@@ -516,7 +532,7 @@ namespace HollowLines.View
             _gravity.ChunkBurst += (cells, fallDistance, _) =>
             {
                 _scoreSystem.AwardBurst(cells.Count, fallDistance);
-                _airSystem.RestoreBurst();
+                _ceiling.RestoreBurst();
                 _cameraShake.Shake(0.10f + 0.02f * cells.Count, 0.25f);
 
                 // Footprint + shockwave ring are one kill zone. LastShockwaveCells is only valid
@@ -525,7 +541,7 @@ namespace HollowLines.View
             };
 
             // Shockwave side effects: capsules freed, diamonds freed, bombs lit, avatar caught in the blast.
-            _gravity.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();
+            _gravity.AirCapsuleLiberated += _ => _ceiling.RestoreCapsule();
             _gravity.DiamondLiberated    += pos => _diamondSystem.NotifyCollected(pos); // R4
             _gravity.BombArmedByBurst    += pos => _bombSystem.ArmBombAt(pos);
             _gravity.AvatarHitByBurst    += () => OnAvatarCrushed(DeathCause.BurstShockwave);
@@ -535,9 +551,9 @@ namespace HollowLines.View
             _bombSystem.BombScored += (destroyed, chainMult) =>
             {
                 _scoreSystem.AwardBomb(destroyed, chainMult);
-                if (chainMult > 1) _airSystem.RestoreBombChain(chainMult);
+                if (chainMult > 1) _ceiling.RestoreBombChain(chainMult);
             };
-            _bombSystem.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();
+            _bombSystem.AirCapsuleLiberated += _ => _ceiling.RestoreCapsule();
             _bombSystem.DiamondLiberated    += pos => _diamondSystem.NotifyCollected(pos); // R4
             _bombSystem.AvatarHitByBlast    += _ => OnAvatarCrushed(DeathCause.BombBlast);
             _bombSystem.BombArmed           += pos => Debug.Log($"[Bomb] Armée en {pos}");
@@ -563,19 +579,18 @@ namespace HollowLines.View
                 _scoreSystem.AwardBoomerBlast(blocksDestroyed, parentBonus);
                 _cameraShake.Shake(0.25f, 0.28f);
             };
-            _enemySystem.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();
+            _enemySystem.AirCapsuleLiberated += _ => _ceiling.RestoreCapsule();
             _enemySystem.DiamondLiberated    += pos => _diamondSystem.NotifyCollected(pos);
 
             // ── Perfect Clear (rare jackpot, no longer the core loop) ─────────
             _collapse.PerfectClear  += _ =>
             {
                 _scoreSystem.AwardPerfectClear(_chainTracker.CurrentChain);
-                _airSystem.RestorePerfectClear();
+                _ceiling.ShiftDown();           // the rubble moved down with everything above (cave-in.md §5.2)
+                _ceiling.RestorePerfectClear();
                 _cameraShake.Shake(0.12f, 0.2f);
             };
             _collapse.AvatarCrushed += _ => OnAvatarCrushed(DeathCause.Collapse);
-
-            SetUpCaveInPreview(freshBoard); // no-op unless the `previewCaveIn` debug toggle is on
 
             // Point HUD and audio at the new grid-dependent systems.
             _hud.RewireChain(_chainTracker);
@@ -611,16 +626,23 @@ namespace HollowLines.View
             enemyView.Init(_enemySystem, _avatar);           // R6.4: avatar for the danger "!"
             enemyView.DangerStarted += _ => _audio.PlayEnemyAlert();
 
-            if (previewCaveIn)
-            {
-                var previewGo = new GameObject("CaveInPreviewView");
-                previewGo.transform.SetParent(_boardViewGo.transform, false);
-                previewGo.AddComponent<CaveInPreviewView>().Init(_ceiling, _grid);
-            }
+            // Placeholder front line + margin readout until the real View pass (R8.8).
+            var caveInGo = new GameObject("CaveInPreviewView");
+            caveInGo.transform.SetParent(_boardViewGo.transform, false);
+            caveInGo.AddComponent<CaveInPreviewView>().Init(_ceiling, _grid, _rowOffset);
 
             // Populate enemies LAST, so everything that renders them off EnemySpawned (EnemyView's
             // sprites, VfxManager's marker cache) is already listening when the spawn events fire.
             SpawnEnemiesForBoard(rows);
+
+            // Endless seam: the new board starts where the old one ended, and every row of it the front
+            // has already passed is rubble from the start (cave-in.md §5.1). After the views and enemies,
+            // so the BoardView shows it and nothing buried survives.
+            if (!freshBoard)
+            {
+                SwallowBoardRows(0, _ceiling.SwallowedRows - _rowOffset);
+                _ceiling.NotifyAvatarRow(_avatar.Position.Y + _rowOffset);
+            }
 
             FrameCamera();
         }
@@ -706,7 +728,7 @@ namespace HollowLines.View
 
         /// <summary>
         /// The seam. The avatar reached the bottom of the segment, so the next one is loaded with
-        /// score, air and hearts CARRIED OVER — this is one continuous run, not a level transition.
+        /// score, the Cave-in front and hearts CARRIED OVER — this is one continuous run, not a level transition.
         /// The cut lands in open air (board floor → spawn zone of the next board); the fade-in is
         /// what keeps it from reading as a teleport.
         /// </summary>
@@ -714,9 +736,9 @@ namespace HollowLines.View
         {
             _cameraShake.StopShake();
             _endless.AdvanceSegment();
-            LoadLevel(freshBoard: false); // same run — no new air start buffer
+            LoadLevel(freshBoard: false); // same run — the front keeps its place, no new start buffer
             _screens.PlayFadeIn(SegmentFadeSeconds);
-            Debug.Log($"[Endless] Segment {_endless.SegmentIndex} — profondeur {_endless.Depth} m, drain {_endless.DrainRate:0.0} %/s");
+            Debug.Log($"[Endless] Segment {_endless.SegmentIndex} — profondeur {_endless.Depth} m, front {_endless.CeilingSpeed:0.00} r/s, marge {_ceiling.Lead:0.0}");
         }
 
         private const float SegmentFadeSeconds = 0.4f;
@@ -851,7 +873,7 @@ namespace HollowLines.View
         // ─────────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// The run is over (suffocated or out of hearts) — DeathTracker.Died, fired once per run.
+        /// The run is over (out of hearts) — DeathTracker.Died, fired once per run.
         /// The recap names the killer (R6.1), so the body line only carries the Daily Dig result,
         /// banked before the screen goes up so the card can show today's best next to this attempt.
         /// </summary>
@@ -902,9 +924,7 @@ namespace HollowLines.View
             if (secondType.IsDrillable() && _grid.Drill(second))
             {
                 _scoreSystem.AwardDrill(mult);
-                _airSystem.RestoreDrill();
-                if (secondType == CellType.AirCapsule) _airSystem.RestoreCapsule();
-                if (previewCaveIn && secondType == CellType.AirCapsule) _ceiling.RestoreCapsule();
+                if (secondType == CellType.AirCapsule) _ceiling.RestoreCapsule();
                 if (secondType == CellType.Diamond) _diamondSystem.NotifyCollected(second);
                 _bombSystem.NotifyDrilled(second);
                 _enemySystem.NotifyAdjacentDrill(second);
@@ -917,7 +937,7 @@ namespace HollowLines.View
             _scoreSystem.AwardPowerShockwave(destroyed, mult);
             _enemySystem.NotifyBombBlast(waveCells, 1); // enemies caught in it die to physics (rule 9)
 
-            if (previewCaveIn) _ceiling.RestorePowerDrill(); // the ×6 pushes the well back (cave-in.md §2.3)
+            _ceiling.RestorePowerDrill(); // the ×6 pushes the well back (cave-in.md §2.3)
             _cameraShake.Shake(0.22f, 0.25f); // placeholder until the R7.10 Tier 3 flash
             _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(second)),
                                 _scoreSystem.Score - scoreBefore, Mathf.RoundToInt(mult), showMultiplier: true,
@@ -945,65 +965,24 @@ namespace HollowLines.View
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // `previewCaveIn` — TEMPORARY v3.3 preview (cave-in.md). The real wiring is R8.6; this is
-        // the smallest honest version of it, so the dev can play the mechanic before the switch:
-        //   • rows are BOARD-LOCAL (the front resets to a full leash at each Endless seam),
-        //   • the HUD air bar is frozen (no air) — the lead is the orange front + the corner readout,
-        //   • the air keeps its own Danger Zone wiring; here the ceiling's overrides ScoreSystem's.
+        // v3.3 Cave-in (R8.6, cave-in.md)
         // ─────────────────────────────────────────────────────────────────────
 
-        private void SetUpCaveInPreview(bool freshBoard)
+        /// <summary>
+        /// Board rows [fromRow, toRow) were swallowed by the front: rubble, every buried fuse put out and
+        /// every buried enemy removed — silently (R8.2). Never the avatar's own row (CeilingSystem already
+        /// stops short of it; clamped here too for the seam). Rows outside the board are skipped.
+        /// </summary>
+        private void SwallowBoardRows(int fromRow, int toRow)
         {
-            if (!previewCaveIn)
-            {
-                _ceiling = null;
+            fromRow = Mathf.Max(0, fromRow);
+            toRow   = Mathf.Min(toRow, _avatar.Position.Y);
+            if (toRow <= fromRow)
                 return;
-            }
 
-            float speed = _endlessMode
-                ? _endless.CeilingSpeed
-                : useCampaign
-                    ? CampaignManager.CeilingSpeedForLevel(_campaign.CurrentLevel)
-                    : CeilingSystem.DefaultSpeed;
-
-            _ceiling = new CeilingSystem { Speed = speed };
-            _ceiling.Reset(_spawn.Y);
-            if (freshBoard)
-                _ceiling.BeginStartBuffer(!_endlessMode && useCampaign
-                    ? CampaignManager.CeilingStartGraceForLevel(_campaign.CurrentLevel)
-                    : CeilingSystem.DefaultStartGrace);
-
-            // Swallowed rows → rubble, with every buried fuse and enemy dropped silently (R8.2).
-            _ceiling.RowsSwallowed += (from, to) =>
-            {
-                _grid.FillRows(from, to, CellType.Rubble);
-                _bombSystem.DisarmRows(from, to);
-                _enemySystem.BuryRows(from, to);
-            };
-            _ceiling.AvatarReached     += () => OnAvatarCrushed(DeathCause.CaveIn);
-            _ceiling.DangerZoneChanged += d  => _scoreSystem.DangerZone = d;
-            _scoreSystem.DangerZone = _ceiling.IsDangerZone;
-
-            // Recoils — the old air restores (§2.3). The Power Drill one is in PowerDrillFollowThrough.
-            _gravity.ChunkBurst     += (_, __, ___) => _ceiling.RestoreBurst();
-            _bombSystem.BombScored  += (_, chainMult) => { if (chainMult > 1) _ceiling.RestoreBombChain(chainMult); };
-            _collapse.PerfectClear  += _ =>
-            {
-                _ceiling.ShiftDown();          // the rubble moved down with everything above (§5.2)
-                _ceiling.RestorePerfectClear();
-            };
-
-            // Capsules freed by a burst / Power Drill wave, a bomb or a Boomer push the front back like a
-            // drilled one (the drilled ones are in the Drilled handler and PowerDrillFollowThrough).
-            _gravity.AirCapsuleLiberated     += _ => _ceiling.RestoreCapsule();
-            _bombSystem.AirCapsuleLiberated  += _ => _ceiling.RestoreCapsule();
-            _enemySystem.AirCapsuleLiberated += _ => _ceiling.RestoreCapsule();
-        }
-
-        private void TickCaveInPreview(float dt)
-        {
-            if (!_levelEnding)
-                _ceiling.Tick(dt, _avatar.Position.Y);
+            _grid.FillRows(fromRow, toRow, CellType.Rubble);
+            _bombSystem.DisarmRows(fromRow, toRow);
+            _enemySystem.BuryRows(fromRow, toRow);
         }
 
         /// <summary>
@@ -1011,13 +990,13 @@ namespace HollowLines.View
         /// its cell is solid (a chunk landed on it) does it climb to the first open cell above, never above
         /// the front + 2; failing that it looks below.
         /// </summary>
-        private GridPos CaveInRespawnCell()
+        private GridPos RespawnCell()
         {
             GridPos here = _avatar.Position;
             if (!_grid.IsSolid(here))
                 return here;
 
-            int highest = Mathf.Max(0, Mathf.CeilToInt(_ceiling.CeilingRow) + 2);
+            int highest = Mathf.Max(0, Mathf.CeilToInt(_ceiling.CeilingRow) - _rowOffset + 2);
             for (int y = here.Y - 1; y >= highest; y--)
             {
                 var cell = new GridPos(here.X, y);
@@ -1043,10 +1022,9 @@ namespace HollowLines.View
             _audio.PlayCrush();
             Debug.Log($"[Health] {cause} — {_healthSystem.Hearts} cœur(s) restant(s).");
             if (_healthSystem.IsAlive)
-                _avatar.Teleport(previewCaveIn ? CaveInRespawnCell() : _spawn); // preview: decision B
+                _avatar.Teleport(RespawnCell()); // decision B: stay in place, the spawn may be rubble by now
             else
-                _deathTracker.NotifyDeath(cause, _avatar.Position, _airSystem.Air,
-                                          _ceiling != null ? _ceiling.Lead : (float?)null); // R8.5: the recap reads the margin
+                _deathTracker.NotifyDeath(cause, _avatar.Position, _airSystem.Air, _ceiling.Lead); // R8.5: the recap reads the margin
         }
 
         // ─────────────────────────────────────────────────────────────────────

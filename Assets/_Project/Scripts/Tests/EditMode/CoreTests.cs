@@ -851,6 +851,57 @@ namespace HollowLines.Tests
     [TestFixture]
     public class AirSystemTests
     {
+        // ── R8.6 bridge: Mirror (the HUD air bar shows the Cave-in margin) ──
+
+        [Test]
+        public void Mirror_SetsAir_Clamped_AndFiresOnlyOnChange()
+        {
+            var air = new AirSystem();
+            var seen = new List<float>();
+            air.AirChanged += seen.Add;
+
+            air.Mirror(40f);
+            air.Mirror(40f);   // no change → no event
+            air.Mirror(150f);  // clamps to MaxAir
+            air.Mirror(-5f);   // clamps to 0
+
+            CollectionAssert.AreEqual(new[] { 40f, AirSystem.MaxAir, 0f }, seen);
+            Assert.AreEqual(0f, air.Air);
+        }
+
+        [Test]
+        public void Mirror_DrivesTheDangerZone_ButNeverDepletes()
+        {
+            var air = new AirSystem { DrainRate = 0f };
+            var flips = new List<bool>();
+            bool depleted = false;
+            air.DangerZoneChanged += flips.Add;
+            air.AirDepleted       += () => depleted = true;
+
+            air.Mirror(10f);
+            air.Mirror(0f);
+            air.Tick(1f);      // the bridge ticks the air for its start-buffer clock only
+            air.Mirror(50f);
+
+            CollectionAssert.AreEqual(new[] { true, false }, flips);
+            Assert.IsFalse(depleted, "the Cave-in front does the killing, never the mirrored air");
+        }
+
+        [Test]
+        public void ZeroDrain_StartBuffer_StillTimesTheGraceCue()
+        {
+            var air = new AirSystem { DrainRate = 0f };
+            air.BeginStartBuffer(5f);
+
+            air.Tick(2f);
+            Assert.IsTrue(air.InStartGrace);
+            Assert.AreEqual(3f, air.StartGraceRemaining, 1e-4f);
+
+            air.Tick(4f);
+            Assert.IsFalse(air.InStartGrace);
+            Assert.AreEqual(AirSystem.MaxAir, air.Air, "zero drain never moves the air");
+        }
+
         private const float Delta = 0.001f;
 
         [Test]

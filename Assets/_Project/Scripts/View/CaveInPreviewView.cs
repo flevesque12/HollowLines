@@ -4,8 +4,9 @@ using UnityEngine;
 namespace HollowLines.View
 {
     /// <summary>
-    /// TEMPORARY placeholder visuals for the `previewCaveIn` debug toggle (cave-in.md) — lets the dev
-    /// play the Cave-in before the real View pass (R8.8) replaces this file.
+    /// TEMPORARY placeholder visuals for the Cave-in (cave-in.md) — born as the `previewCaveIn` debug view,
+    /// always on since the R8.6 switch, until the real View pass (R8.8) replaces this file.
+    /// The front lives in ABSOLUTE rows; `rowOffset` maps them back onto this board (Endless segments).
     ///
     /// Draws, in board-local space (parented under the BoardView, torn down with it):
     ///   • the front — a hot orange line across the well at CeilingRow, plus a dark band over the row
@@ -20,16 +21,18 @@ namespace HollowLines.View
 
         private CeilingSystem _ceiling;
         private GridModel     _grid;
+        private int           _rowOffset;
 
         private Sprite         _unit;
         private SpriteRenderer _front;
         private SpriteRenderer _dust;
         private GUIStyle _style;
 
-        public void Init(CeilingSystem ceiling, GridModel grid)
+        public void Init(CeilingSystem ceiling, GridModel grid, int rowOffset)
         {
-            _ceiling = ceiling;
-            _grid    = grid;
+            _ceiling   = ceiling;
+            _grid      = grid;
+            _rowOffset = rowOffset;
 
             var tex = new Texture2D(1, 1) { filterMode = FilterMode.Point };
             tex.SetPixel(0, 0, Color.white);
@@ -49,17 +52,19 @@ namespace HollowLines.View
             float width   = _grid.Width + 0.4f;
 
             // The front: world y = -row, a row's top edge is +0.5 above its centre.
-            float frontY = -_ceiling.CeilingRow + 0.5f;
+            float frontRow = _ceiling.CeilingRow - _rowOffset;
+            float frontY   = -frontRow + 0.5f;
             _front.transform.localPosition = new Vector3(centerX, frontY, 0f);
             _front.transform.localScale    = new Vector3(width, 0.12f, 1f);
             _front.color = Color.Lerp(FrontColor, Color.white, 0.25f + 0.25f * Mathf.Sin(Time.time * 9f));
 
             // Dust over the row being eaten: from the rubble's bottom edge down to the front.
-            float crumble = _ceiling.CeilingRow - _ceiling.SwallowedRows;
+            float swallowed = _ceiling.SwallowedRows - _rowOffset;
+            float crumble   = frontRow - swallowed;
             _dust.enabled = crumble > 0.01f;
             if (_dust.enabled)
             {
-                float top = -_ceiling.SwallowedRows + 0.5f;
+                float top = -swallowed + 0.5f;
                 _dust.transform.localPosition = new Vector3(centerX, top - crumble / 2f, 0f);
                 _dust.transform.localScale    = new Vector3(_grid.Width, crumble, 1f);
             }
@@ -67,7 +72,8 @@ namespace HollowLines.View
 
         private void OnGUI()
         {
-            if (_ceiling == null)
+            // Menus, pause and game over freeze time — keep the debug readout off their cards.
+            if (_ceiling == null || Time.timeScale == 0f)
                 return;
 
             if (_style == null)

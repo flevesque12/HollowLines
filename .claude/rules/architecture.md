@@ -284,10 +284,17 @@ _grazeSystem.Tick(dt);
 // 8. Health i-frames
 _healthSystem.Tick(dt);
 
-// 9. Air drain  (gated by the `disableAir` debug toggle — see §14)
-//    ⚡D4: ALSO skipped during freefall — reward for finding void space
-if (!disableAir && !_avatar.IsFalling)
-    _airSystem.Tick(dt);
+// 9. ✅R8.6 Cave-in front (cave-in.md) — ABSOLUTE rows (board row + _rowOffset; Endless offset =
+//    SegmentStartDepth). Frozen once the level is won; gated by `disableCeiling`. Ticks in freefall
+//    too: falling IS gaining margin (⚡D4 retired with the air drain).
+if (!disableCeiling && !_levelEnding)
+    _ceiling.Tick(dt, _avatar.Position.Y + _rowOffset);
+
+// 9b. ✅R8.6 bridge until R8.8: the air never drains (DrainRate 0, no AirDepleted wiring). Its Tick
+//     only runs the start-buffer clock for the HUD grace cue; Mirror makes the air bar / breathe hint /
+//     vignette / heartbeat read the margin. Deleted with AirSystem in R8.9.
+_airSystem.Tick(dt);
+_airSystem.Mirror(_ceiling.LeadPercent);
 
 // 10. ✅R5.12 Enemy movement + avatar collision (grid comes from the constructor since R5.8)
 _enemySystem.Tick(dt, _avatar.Position);
@@ -300,9 +307,9 @@ if (_endlessMode)
 
 > **Debug/testing toggles (serialized on GameBootstrap, §14).** Two Inspector checkboxes,
 > both off by default, both live-togglable in play mode:
-> - `disableAir` — skips step 9 entirely, so air never drains and `AirDepleted` can't fire.
+> - `disableCeiling` (was `disableAir`) — skips step 9, so the Cave-in front never advances.
 > - `invincible` — early-returns in `OnAvatarCrushed()`, so hearts never drop (and no shake / crush
 >   SFX / teleport-to-spawn). `HealthDepleted` can't fire.
 >
-> Both are pure View flags — Core (`AirSystem`, `HealthSystem`) is untouched, and no test depends
+> Both are pure View flags — Core (`CeilingSystem`, `HealthSystem`) is untouched, and no test depends
 > on them.
