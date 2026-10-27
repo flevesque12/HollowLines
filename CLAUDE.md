@@ -146,6 +146,8 @@ Downwell, Tetris, NecroDancer, Pac-Man CE.
 - **`spawnCell` must be the middle column** — `(3,2)` for 7-wide. Scene serialized value beats code default.
 - **Debug/testing toggles on GameBootstrap:** `disableAir` (gates air tick) and `invincible`
   (early-returns in `OnAvatarCrushed`). Both off by default. Pure View flags — Core untouched.
+  🆕 `previewCaveIn` (temporary, until R8.6): plays the v3.3 Cave-in + gas instead of the air — tick it
+  **before** Play. See `ceiling-gas.md` §10.
 - **Endless serialized fields** (`endlessMode` / `endlessSeed` / `endlessSegmentRows`) have the
   same serialized-beats-default caveat. Untick `endlessMode` before shipping.
 

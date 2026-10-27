@@ -25,6 +25,7 @@ namespace HollowLines.View
         [SerializeField] private Color bombColor     = new Color(0.95f, 0.25f, 0.10f); // red-orange
         [SerializeField] private Color diamondColor  = new Color(0.80f, 0.92f, 1.00f); // icy white-blue gem
         [SerializeField] private Color emptyColor    = new Color(0.05f, 0.04f, 0.03f);
+        [SerializeField] private Color rubbleColor   = new Color(0.22f, 0.19f, 0.17f); // R8.2 Cave-in rubble — dull grey-brown, placeholder until R8.8
 
         [Header("— Exit Zone —")]
         [Tooltip("Warm light pooled in the EMPTY cells of the exit zone (campaign/tutorial only). Blocks are never tinted.")]
@@ -467,6 +468,7 @@ namespace HollowLines.View
                 case CellType.AirCapsule:  return (_capsuleSprite, Color.white);
                 case CellType.Bomb:        return (_bombSprite, Color.white);
                 case CellType.Diamond:     return (_neutralSprite, diamondColor);
+                case CellType.Rubble:      return (_neutralSprite, rubbleColor);
                 default:                   return (_neutralSprite, emptyColor);
             }
         }
