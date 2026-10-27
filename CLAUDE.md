@@ -146,8 +146,8 @@ Downwell, Tetris, NecroDancer, Pac-Man CE.
 - **`spawnCell` must be the middle column** — `(3,2)` for 7-wide. Scene serialized value beats code default.
 - **Debug/testing toggles on GameBootstrap:** `disableAir` (gates air tick) and `invincible`
   (early-returns in `OnAvatarCrushed`). Both off by default. Pure View flags — Core untouched.
-  🆕 `previewCaveIn` (temporary, until R8.6): plays the v3.3 Cave-in + gas instead of the air — tick it
-  **before** Play. See `ceiling-gas.md` §10.
+  🆕 `previewCaveIn` (temporary, until R8.6): plays the v3.3 Cave-in instead of the air (capsules push the
+  front back) — tick it **before** Play. See `cave-in.md` §10.
 - **Endless serialized fields** (`endlessMode` / `endlessSeed` / `endlessSegmentRows`) have the
   same serialized-beats-default caveat. Untick `endlessMode` before shipping.
 
@@ -167,4 +167,4 @@ Downwell, Tetris, NecroDancer, Pac-Man CE.
 | `tests.md` | §13 Test status | `**/Tests/**`, `**/CoreTests*` |
 | `balance.md` | §15 Balance findings (all resolved) | `**/AirSystem*`, `**/ScoreSystem*`, `**/StrateGenerator*` |
 | `controls.md` | §16 Controls & input | `**/GameInput*` |
-| `ceiling-gas.md` | 🆕v3.3 Cave-in + gas blocks design (replaces air) — R8 | `**/CeilingSystem*`, `**/GasSystem*`, `**/AirSystem*`, `**/CellType*`, `**/GameBootstrap*` + 12 more (see frontmatter) |
+| `cave-in.md` | 🆕v3.3 Cave-in design (replaces air; gas dropped) — R8 | `**/CeilingSystem*`, `**/AirSystem*`, `**/CellType*`, `**/GameBootstrap*` + 12 more (see frontmatter) |

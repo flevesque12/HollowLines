@@ -1084,7 +1084,7 @@ pages instead.
 ### R8.1 — `CeilingSystem` (Core) — 2026-10-27
 
 New pure-C# `Core/CeilingSystem.cs`, built **alongside** `AirSystem` (nothing wired yet — R8.6 switches over).
-Spec: `ceiling-gas.md` §3.3. 25 new NUnit tests, **485/485** (EditMode).
+Spec: `cave-in.md` §3.3. 25 new NUnit tests, **485/485** (EditMode).
 
 **Deviation from the first draft of the spec (caught while writing it, before any code): the recoil may climb
 back into the rubble.** The draft bounded every recoil by `SwallowedRows` ("never un-swallow a row"). But when
@@ -1114,7 +1114,7 @@ in `aee9538`. Use **EditMode**; CLAUDE.md §12/§14 and `tests.md` updated.
 ### R8.2 — `CellType.Rubble` + swallowed-row conversion (Core) — 2026-10-27
 
 Core only, still not wired (R8.6). 15 new NUnit tests (`RubbleTests`), **500/500** (EditMode); the
-`tools/playtest` harness still builds (0 warnings). Spec: `ceiling-gas.md` §3.1.
+`tools/playtest` harness still builds (0 warnings). Spec: `cave-in.md` §3.1.
 
 **What landed:**
 - `CellType.Rubble = 10`, map char `R` (tests only — the generator never emits it). Solid, not drillable, never fuses.
@@ -1141,7 +1141,7 @@ Harmless today — nothing in the game creates rubble before R8.6.
 ### R8.3 — `CellType.Gas` + `GasSystem` (Core) — 2026-10-27
 
 Core only, still not wired (R8.6). 15 new NUnit tests (`GasSystemTests`), **515/515** (EditMode); the
-`tools/playtest` harness still builds. Spec: `ceiling-gas.md` §4.
+`tools/playtest` harness still builds. Spec: `cave-in.md` §4.
 
 **`CellType.Gas = AirCapsule` — an alias, not a new value.** Renaming the enum member now would have dragged
 every air-capsule site (12 in Core/View, plus the tests) into this step while the air must keep working
@@ -1169,7 +1169,7 @@ lands on a subtraction residue.
 ### R8.4 — Gas in the rest of Core: release points + Crawler kills — 2026-10-27
 
 Core only, still not wired (R8.6). 8 new NUnit tests (`GasInteractionTests`), **523/523** (EditMode); the
-`tools/playtest` harness still builds. Spec: `ceiling-gas.md` §4.3.
+`tools/playtest` harness still builds. Spec: `cave-in.md` §4.3.
 
 - **`GasReleased(GridPos)`** on `GravitySystem` (burst ring + Power Drill shockwave — both go through
   `ApplyShockwaveCell`), `BombSystem` (blast) and `EnemySystem` (Boomer blast). Fired **right after**
@@ -1196,7 +1196,7 @@ very next drill would be adjacent to it and every pocket would hand out a free +
 
 Dev request after R8.4: something visual to try the mechanic before the R8.6 switch. A **temporary**
 `GameBootstrap` toggle that wires the real `CeilingSystem` + `GasSystem` in place of the air, with placeholder
-visuals. Spec + limits: `ceiling-gas.md` §10. 523/523, harness builds, **verified in play mode** (UnityMCP).
+visuals. Spec + limits: `cave-in.md` §10. 523/523, harness builds, **verified in play mode** (UnityMCP).
 
 **Files:**
 - `GameBootstrap` — `previewCaveIn` field; `SetUpCaveInPreview(freshBoard)` called from `LoadLevel` (nulls
@@ -1217,3 +1217,29 @@ The one heart lost came from the tutorial bomb (`BombBlast`, accepted in §5.14)
 
 **Known placeholder limits:** board-local rows (full leash again at each Endless seam), frozen HUD air bar, the
 pocket still drawn as the "AIR" pill, recap still prints "air restant 100 %" (R8.5 fixes that line).
+
+### R8.4c — Gas dropped, the capsule pushes the front back — 2026-10-27
+
+Dev call after playing the preview: "la mécanique de gaz ne m'intéresse pas mais je veux garder le ceiling
+system". Asked what the capsule becomes without gas or air → **it pushes the front back** (recommended option).
+Spec renamed `ceiling-gas.md` → **`cave-in.md`**; §4 rewritten. **503/503** (`dotnet test`, see below).
+
+**Removed** (R8.3 + R8.4 undone): `Core/GasSystem.cs`, the `CellType.Gas` alias, `GasReleased` on
+Gravity / Bomb / Enemy systems, `EnemySystem.NotifyGas`, `KillMethod.Gas`, `DeathCause.Gas` + its recap title / tip,
+`GasSystemTests` (15) and `GasInteractionTests` (8). `BombSystem` / `GravitySystem` / `EnemySystem` / `KillMethod` /
+`CellType` are back to their pre-gas versions (checked out from b041c16 / dd0da14 — R8.3/R8.4 had only
+added gas to them; spec refs then renamed to `cave-in.md`). `DeathCause.Gas` was the last enum value, so no other value moved.
+
+**Added:** `CeilingSystem.CapsuleRecoil = 0.75f` + `RestoreCapsule()` — the old +6 % × 12 / 100 = 0.72, rounded
+like the Perfect Clear. 3 tests: the restore recoils by its constant (folded into `Restores_RecoilByTheirConstants`),
+nothing extra at the leash, worth the old capsule (and < 3 s of front, like the air guard), a shockwave-freed
+capsule wired to it recoils the front.
+
+**Preview (`previewCaveIn`):** a drilled capsule (and the Power Drill's pierced 2nd block) → `RestoreCapsule`;
+`AirCapsuleLiberated` from Gravity / Bomb / Enemy systems → `RestoreCapsule`. `CaveInPreviewView` lost its puff /
+hiss sprites. Cave-in recap tip now names capsules first among the things that push the front back.
+
+**⚠️ Not verified in Unity:** the UnityMCP server was down. Core + tests were compiled and run outside Unity
+(a scratch net8.0 NUnit project compiling `Core/*.cs` + `CoreTests.cs` — the suite has no Unity dependency):
+503 passed. The `tools/playtest` harness builds. **The View changes (GameBootstrap, CaveInPreviewView,
+DeathRecapView) are not compiled yet** — open Unity and check the console, then try the preview.

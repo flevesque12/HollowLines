@@ -76,12 +76,6 @@ namespace HollowLines.Core
         /// </summary>
         public event Action<GridPos> AirCapsuleLiberated;
 
-        /// <summary>
-        /// R8.4: the same freeing, read as v3.3 gas — a Boomer's blast cracked a gas pocket open. Fires
-        /// right after AirCapsuleLiberated. Wire to GasSystem.Release at R8.6.
-        /// </summary>
-        public event Action<GridPos> GasReleased;
-
         /// <summary>A Boomer's blast freed a diamond instead of destroying it.</summary>
         public event Action<GridPos> DiamondLiberated;
 
@@ -258,31 +252,6 @@ namespace HollowLines.Core
         }
 
         /// <summary>
-        /// R8.4: the cells holding gas right now (GasSystem.CopyGasCells — Core systems don't reference
-        /// each other, so the caller passes them in every frame). Every living Crawler in one dies —
-        /// dormant or active, like every other physics kill (§6.5) — as KillMethod.Gas at ×1. Boomers
-        /// are left alone: a gas kill has no parent bonus, so it could never detonate, and a Boomer
-        /// fizzling out silently would waste the amplifier (rule 9). Returns how many died.
-        /// </summary>
-        public int NotifyGas(ICollection<GridPos> gasCells)
-        {
-            if (gasCells == null || gasCells.Count == 0)
-                return 0;
-
-            int killed = 0;
-            foreach (int id in new List<int>(_enemies.Keys))
-            {
-                EnemyEntity enemy = _enemies[id];
-                if (!enemy.IsAlive || enemy.Type != EnemyType.Crawler || !gasCells.Contains(enemy.Position))
-                    continue;
-
-                KillOne(enemy, KillMethod.Gas, boomerBonus: null, chainDepth: 1);
-                killed++;
-            }
-            return killed;
-        }
-
-        /// <summary>
         /// R8.2: the Cave-in swallowed board rows [fromRow, toRow). Every living enemy there is buried —
         /// gone from GetAllAlive, but NOT a kill: no EnemyKilled (no points, no death VFX), and a Boomer
         /// never detonates in the rubble. Returns how many were buried.
@@ -412,10 +381,7 @@ namespace HollowLines.Core
                         destroyed++;
 
                     if (hit == CellType.AirCapsule)
-                    {
                         AirCapsuleLiberated?.Invoke(target);
-                        GasReleased?.Invoke(target);
-                    }
                     if (hit == CellType.Diamond)
                         DiamondLiberated?.Invoke(target);
                 }

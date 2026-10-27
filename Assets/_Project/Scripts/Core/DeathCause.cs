@@ -26,10 +26,7 @@ namespace HollowLines.Core
         /// <summary>Air reached 0 (AirSystem.AirDepleted). Never a heart hit — always fatal.</summary>
         Suffocation,
 
-        /// <summary>v3.3: the Cave-in front reached the avatar (CeilingSystem.AvatarReached) — ceiling-gas.md §3.2.</summary>
+        /// <summary>v3.3: the Cave-in front reached the avatar (CeilingSystem.AvatarReached) — cave-in.md §3.2.</summary>
         CaveIn,
-
-        /// <summary>v3.3: standing in a gas puff (GasSystem.AvatarHitByGas) — ceiling-gas.md §4.</summary>
-        Gas,
     }
 }

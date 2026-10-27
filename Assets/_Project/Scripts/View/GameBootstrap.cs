@@ -32,8 +32,8 @@ namespace HollowLines.View
         [Tooltip("Invincibility — the avatar ignores every crush and blast (hearts never drop). No teleport-to-spawn, no shake: you just pass through.")]
         [SerializeField] private bool invincible = false;
 
-        [Tooltip("APERÇU v3.3 (ceiling-gas.md) : l'air est remplacé par l'éboulement + les poches de gaz (les blocs AIR). " +
-                 "Vrai CeilingSystem / GasSystem, visuels temporaires, respawn sur place. Coche AVANT Play. Temporaire — R8.6 le remplace.")]
+        [Tooltip("APERÇU v3.3 (cave-in.md) : l'air est remplacé par l'éboulement ; les capsules AIR le font reculer. " +
+                 "Vrai CeilingSystem, visuels temporaires, respawn sur place. Coche AVANT Play. Temporaire — R8.6 le remplace.")]
         [SerializeField] private bool previewCaveIn = false;
 
         [Header("— Campaign —")]
@@ -155,10 +155,8 @@ namespace HollowLines.View
         private FissureTracker _fissureTracker; // v3.2 Tier 2 fissures (§M2, ⚡D5) — per board, grid-dependent
         private EnemySystem   _enemySystem;
 
-        // `previewCaveIn` only (temporary, ceiling-gas.md): rebuilt per board like the systems above.
+        // `previewCaveIn` only (temporary, cave-in.md): rebuilt per board like the systems above.
         private CeilingSystem _ceiling;
-        private GasSystem     _gas;
-        private readonly List<GridPos> _gasCells = new List<GridPos>();
 
         // ── Persistent views ──────────────────────────────────────────────────
         private GameInput        _input;
@@ -469,7 +467,7 @@ namespace HollowLines.View
                 bool grazed = _grazeSystem.NotifyDrill(drilledCell, CollectDangerCells());
 
                 if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
-                if (previewCaveIn && oldType == CellType.Gas) _gas.Release(drilledCell); // preview: the pocket hisses
+                if (previewCaveIn && oldType == CellType.AirCapsule) _ceiling.RestoreCapsule(); // preview: pushes the front back
                 if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(drilledCell); // R4
                 _bombSystem.NotifyDrilled(drilledCell);
                 _enemySystem.NotifyAdjacentDrill(drilledCell); // R5.9: wakes a dormant neighbor
@@ -617,7 +615,7 @@ namespace HollowLines.View
             {
                 var previewGo = new GameObject("CaveInPreviewView");
                 previewGo.transform.SetParent(_boardViewGo.transform, false);
-                previewGo.AddComponent<CaveInPreviewView>().Init(_ceiling, _gas, _grid);
+                previewGo.AddComponent<CaveInPreviewView>().Init(_ceiling, _grid);
             }
 
             // Populate enemies LAST, so everything that renders them off EnemySpawned (EnemyView's
@@ -906,7 +904,7 @@ namespace HollowLines.View
                 _scoreSystem.AwardDrill(mult);
                 _airSystem.RestoreDrill();
                 if (secondType == CellType.AirCapsule) _airSystem.RestoreCapsule();
-                if (previewCaveIn && secondType == CellType.Gas) _gas.Release(second);
+                if (previewCaveIn && secondType == CellType.AirCapsule) _ceiling.RestoreCapsule();
                 if (secondType == CellType.Diamond) _diamondSystem.NotifyCollected(second);
                 _bombSystem.NotifyDrilled(second);
                 _enemySystem.NotifyAdjacentDrill(second);
@@ -919,7 +917,7 @@ namespace HollowLines.View
             _scoreSystem.AwardPowerShockwave(destroyed, mult);
             _enemySystem.NotifyBombBlast(waveCells, 1); // enemies caught in it die to physics (rule 9)
 
-            if (previewCaveIn) _ceiling.RestorePowerDrill(); // the ×6 pushes the well back (ceiling-gas.md §2.3)
+            if (previewCaveIn) _ceiling.RestorePowerDrill(); // the ×6 pushes the well back (cave-in.md §2.3)
             _cameraShake.Shake(0.22f, 0.25f); // placeholder until the R7.10 Tier 3 flash
             _hud.ShowDrillPopup(_boardViewGo.transform.TransformPoint(BoardView.ToLocal(second)),
                                 _scoreSystem.Score - scoreBefore, Mathf.RoundToInt(mult), showMultiplier: true,
@@ -943,12 +941,11 @@ namespace HollowLines.View
                 if (enemy.IsActive)
                     _dangerCells.Add(enemy.Position);
             _bombSystem.CopyArmedCells(_dangerCells);
-            if (previewCaveIn) _gas.CopyGasCells(_dangerCells); // puffs only, never a hissing pocket (§4.3)
             return _dangerCells;
         }
 
         // ─────────────────────────────────────────────────────────────────────
-        // `previewCaveIn` — TEMPORARY v3.3 preview (ceiling-gas.md). The real wiring is R8.6; this is
+        // `previewCaveIn` — TEMPORARY v3.3 preview (cave-in.md). The real wiring is R8.6; this is
         // the smallest honest version of it, so the dev can play the mechanic before the switch:
         //   • rows are BOARD-LOCAL (the front resets to a full leash at each Endless seam),
         //   • the HUD air bar is frozen (no air) — the lead is the orange front + the corner readout,
@@ -960,7 +957,6 @@ namespace HollowLines.View
             if (!previewCaveIn)
             {
                 _ceiling = null;
-                _gas     = null;
                 return;
             }
 
@@ -997,23 +993,17 @@ namespace HollowLines.View
                 _ceiling.RestorePerfectClear();
             };
 
-            _gas = new GasSystem(_grid);
-            _gravity.GasReleased     += pos => _gas.Release(pos);
-            _bombSystem.GasReleased  += pos => _gas.Release(pos);
-            _enemySystem.GasReleased += pos => _gas.Release(pos);
-            _gas.AvatarHitByGas      += _   => OnAvatarCrushed(DeathCause.Gas);
-            _gas.PocketHissing       += pos => Debug.Log($"[Gas] Poche ouverte en {pos} — ça siffle");
+            // Capsules freed by a burst / Power Drill wave, a bomb or a Boomer push the front back like a
+            // drilled one (the drilled ones are in the Drilled handler and PowerDrillFollowThrough).
+            _gravity.AirCapsuleLiberated     += _ => _ceiling.RestoreCapsule();
+            _bombSystem.AirCapsuleLiberated  += _ => _ceiling.RestoreCapsule();
+            _enemySystem.AirCapsuleLiberated += _ => _ceiling.RestoreCapsule();
         }
 
         private void TickCaveInPreview(float dt)
         {
             if (!_levelEnding)
                 _ceiling.Tick(dt, _avatar.Position.Y);
-
-            _gas.Tick(dt, _avatar.Position);
-            _gasCells.Clear();
-            _gas.CopyGasCells(_gasCells);
-            _enemySystem.NotifyGas(_gasCells); // Crawlers die in gas (R8.4)
         }
 
         /// <summary>

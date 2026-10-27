@@ -169,7 +169,6 @@ namespace HollowLines.View
                 case DeathCause.Enemy:          return "Mordu par un Crawler";
                 case DeathCause.Suffocation:    return "À court d'air";
                 case DeathCause.CaveIn:         return "Rattrapé par l'éboulement";
-                case DeathCause.Gas:            return "Pris dans le gaz";
                 default:                        return "Mort mystérieuse";
             }
         }
@@ -195,9 +194,7 @@ namespace HollowLines.View
                 case DeathCause.Suffocation:
                     return "chaque forage redonne de l'air. Continue de forer vers le bas et ramasse les capsules.";
                 case DeathCause.CaveIn:
-                    return "le puits s'effondre derrière toi. Fore vers le bas sans t'arrêter — les éclatements et les bombes le font reculer.";
-                case DeathCause.Gas:
-                    return "une poche de gaz siffle avant de s'ouvrir, et le gaz monte. Continue de forer vers le bas pour le laisser au-dessus.";
+                    return "le puits s'effondre derrière toi. Fore vers le bas sans t'arrêter — les capsules, les éclatements et les bombes le font reculer.";
                 default:
                     return "continue de descendre !";
             }

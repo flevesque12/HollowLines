@@ -199,21 +199,24 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 >   is no longer fed); the drill popup "×N" is the only momentum feedback until the View sprint.
 > - R7.14–R7.15 require the playtest harness (`tools/playtest/`) to be updated for momentum.
 
-### R8 — The Cave-in + gas blocks (v3.3)  🟡 IN PROGRESS
+### R8 — The Cave-in (v3.3)  🟡 IN PROGRESS
 
-> **Source:** `ceiling-gas.md` (design accepted 2026-10-27, decisions A-F). Replaces air: the well collapses
-> behind the player (lead in rows = the new air %), air capsules become gas pockets.
+> **Source:** `cave-in.md` (design accepted 2026-10-27, decisions A-F). Replaces air: the well collapses
+> behind the player (lead in rows = the new air %); air capsules push the front back.
+> **🔄 2026-10-27 — gas dropped** (dev: not interested). R8.3/R8.4 were shipped then removed (R8.4c);
+> the capsule stays and becomes a recoil (`cave-in.md` §4).
 > **Strategy (same as R7):** R8.1-R8.5 build alongside `AirSystem`, R8.6 switches over, R8.9 cleans up.
 
 | Step | Task | Tests |
 |---|---|---|
 | R8.1 ✅ | `CeilingSystem` (Core): front, speed, leash (`MaxLead` 12), start buffer, recoils, contact + `HitRecoil`, Danger Zone, `RowsSwallowed` | 25 new, 485/485 |
 | R8.2 ✅ | `CellType.Rubble` + swallowed-row conversion (grid, bombs, enemies, fissures, diamonds) | 15 new, 500/500 |
-| R8.3 ✅ | `CellType.Gas` (alias of AirCapsule = 7, char `P`) + `GasSystem` (0.6 s hiss, 4-cell rising cloud, 3 s life, contact) | 15 new, 515/515 |
-| R8.4 ✅ | `GasReleased` events (gravity / bombs / Boomer), Crawlers die in gas (`KillMethod.Gas`). Graze on gas = one line in `CollectDangerCells`, moved to R8.6 | 8 new, 523/523 |
-| R8.4b ✅ | **`previewCaveIn` debug toggle** — the real `CeilingSystem` + `GasSystem` playable before R8.6, placeholder `CaveInPreviewView` (front line, puffs, hiss, lead readout), rubble tile colour, decision B respawn. Pulled forward from R8.5: `DeathCause.CaveIn` / `Gas` + recap texts (`ceiling-gas.md` §10) | Play mode, 523/523 |
-| R8.5 | `ScoreSystem` / `DeathTracker` (drop `Suffocation`; `CaveIn` / `Gas` already exist since R8.4b) / recap detail line (no "air restant") / `CampaignManager` / `EndlessManager` speeds | NUnit |
-| R8.6 | `GameBootstrap`: replace the `previewCaveIn` block with the real wiring (absolute rows), tick order, stay-in-place respawn (decision B), Endless seam, `GasReleased` → `GasSystem.Release`, `NotifyGas` each frame, gas puffs in `CollectDangerCells` (graze), switch off `AirSystem` | Integration + play mode |
-| R8.7 | Harness parity, then **calibration** (speeds, `MaxLead`, `gasRate`, recoils) — R7.15 method | Harness |
-| R8.8 | View: rubble + crumbling front, gas cloud, lead bar, "DESCENDS !" hint, rumble/hiss audio | Visual |
-| R8.9 | Generator (gas density, none on 1-3, tutorial chamber), help pages, GDD, CLAUDE.md rules 1/4/5/10, delete `AirSystem` + air tests | NUnit + play mode |
+| ~~R8.3~~ | ~~`CellType.Gas` + `GasSystem`~~ — shipped (b041c16), **removed in R8.4c** | — |
+| ~~R8.4~~ | ~~`GasReleased` events, Crawlers die in gas~~ — shipped (936a8d2), **removed in R8.4c** | — |
+| R8.4b ✅ | **`previewCaveIn` debug toggle** — the real `CeilingSystem` playable before R8.6, placeholder `CaveInPreviewView` (front line, lead readout), rubble tile colour, decision B respawn. Pulled forward from R8.5: `DeathCause.CaveIn` + recap text (`cave-in.md` §10) | Play mode, 523/523 |
+| R8.4c ✅ | **Gas removed, capsule → recoil.** `GasSystem`, `CellType.Gas`, `GasReleased`, `NotifyGas`, `KillMethod.Gas`, `DeathCause.Gas` and their 23 tests deleted; `CeilingSystem.CapsuleRecoil` 0.75 + `RestoreCapsule()`; preview wires drilled / freed capsules to it | 3 new, −23, 503/503 |
+| R8.5 | `ScoreSystem` / `DeathTracker` (drop `Suffocation`; `CaveIn` already exists since R8.4b) / recap detail line (no "air restant") / `CampaignManager` / `EndlessManager` speeds | NUnit |
+| R8.6 | `GameBootstrap`: replace the `previewCaveIn` block with the real wiring (absolute rows), tick order, stay-in-place respawn (decision B), Endless seam, `AirCapsuleLiberated` → `RestoreCapsule`, switch off `AirSystem` | Integration + play mode |
+| R8.7 | Harness parity, then **calibration** (speeds, `MaxLead`, recoils incl. `CapsuleRecoil`) — R7.15 method | Harness |
+| R8.8 | View: rubble + crumbling front, lead bar, "DESCENDS !" hint, rumble audio, capsule tile | Visual |
+| R8.9 | Help pages, GDD, CLAUDE.md rules 1/5/10, delete `AirSystem` + air tests | NUnit + play mode |

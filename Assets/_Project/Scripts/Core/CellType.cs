@@ -14,7 +14,7 @@ namespace HollowLines.Core
     ///   7  AirCapsule  — drill to collect; restores air; does NOT fuse
     ///   8  Bomb        — NOT drillable; armed by adjacent drill or chunk landing; 1.5 s fuse; cross blast radius 2
     ///   9  Diamond     — drill to collect (1 tap); does NOT fuse; streak-neutral (§6.1/§6.4)
-    ///  10  Rubble      — a row the Cave-in swallowed (v3.3, ceiling-gas.md §3.1). NOT drillable, never
+    ///  10  Rubble      — a row the Cave-in swallowed (v3.3, cave-in.md §3.1). NOT drillable, never
     ///                    falls (anchors like the floor), immune to blasts, does NOT fuse
     /// </summary>
     public enum CellType : byte
@@ -30,14 +30,6 @@ namespace HollowLines.Core
         Bomb        = 8,
         Diamond     = 9,
         Rubble      = 10,
-
-        /// <summary>
-        /// v3.3 gas pocket (ceiling-gas.md §4) — the SAME cell as AirCapsule (value 7, map char 'P'), under
-        /// its new name. An alias, not a new cell, so the pocket inherits every capsule rule (drillable,
-        /// never fuses, freed by bursts and bombs) and the air keeps working until R8.6 switches over.
-        /// R8.9 deletes the AirCapsule name. Never put both names in one switch (duplicate case).
-        /// </summary>
-        Gas         = AirCapsule,
     }
 
     public static class CellTypeExtensions

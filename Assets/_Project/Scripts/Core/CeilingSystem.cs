@@ -3,7 +3,7 @@ using System;
 namespace HollowLines.Core
 {
     /// <summary>
-    /// The Cave-in (v3.3, ceiling-gas.md) — the well collapsing behind the player. Replaces the air clock.
+    /// The Cave-in (v3.3, cave-in.md) — the well collapsing behind the player. Replaces the air clock.
     ///
     /// The front (CeilingRow) slides down at Speed rows/s. The gap between it and the avatar is the LEAD,
     /// and the lead is the new air: capped at MaxLead (the leash — a fast player can't bank a lead, exactly
@@ -13,7 +13,7 @@ namespace HollowLines.Core
     ///
     /// Rows the front passes are SWALLOWED for good: RowsSwallowed tells the caller which absolute rows to
     /// turn into rubble. The front itself may recoil back up into the rubble (bursts, bombs, a hit) — that
-    /// buys time before the next row goes, never space (ceiling-gas.md §3.3).
+    /// buys time before the next row goes, never space (cave-in.md §3.3).
     ///
     /// Rows are ABSOLUTE (Endless depth, not a board row), so the front crosses a segment seam untouched.
     /// Knows nothing about the grid or the hearts — GameBootstrap converts rows and takes the heart.
@@ -21,7 +21,7 @@ namespace HollowLines.Core
     public sealed class CeilingSystem
     {
         // ── Tunables ────────────────────────────────────────────────
-        // Starting values are the air balance translated (ceiling-gas.md §2.2): time to be caught standing
+        // Starting values are the air balance translated (cave-in.md §2.2): time to be caught standing
         // still = MaxLead / speed = 100 % / drain, so speed = drain × MaxLead / 100. Provisional until the
         // harness measures them (R8.7).
         public const float DefaultMaxLead = 12f;   // rows (decision D) — ¾ of the 16-row view
@@ -34,6 +34,7 @@ namespace HollowLines.Core
         public const float BombChainRecoilPerBomb = 0.12f;
         public const float PerfectClearRecoil     = 0.75f; // also pays back the row ShiftDown costs (§5.2)
         public const float PowerDrillRecoil       = 0.5f;  // new: the ×6 pushes the well back
+        public const float CapsuleRecoil          = 0.75f; // the old +6 % capsule — drilled or freed (§4)
 
         /// <summary>Danger Zone below this share of MaxLead, in % — same threshold as the air's.</summary>
         public const float DangerZoneThreshold = 15f;
@@ -195,6 +196,7 @@ namespace HollowLines.Core
         public void RestoreBurst()        => Recoil(BurstRecoil);
         public void RestorePerfectClear() => Recoil(PerfectClearRecoil);
         public void RestorePowerDrill()   => Recoil(PowerDrillRecoil);
+        public void RestoreCapsule()      => Recoil(CapsuleRecoil);
 
         /// <summary>Per bomb in a sympathetic chain. Non-positive counts recoil nothing.</summary>
         public void RestoreBombChain(int bombCount)
@@ -206,7 +208,7 @@ namespace HollowLines.Core
 
         /// <summary>
         /// A Perfect Clear shifted every row above the cleared one down by `rows` — the rubble included,
-        /// so the front and the swallowed boundary move with it (ceiling-gas.md §5.2). No RowsSwallowed:
+        /// so the front and the swallowed boundary move with it (cave-in.md §5.2). No RowsSwallowed:
         /// the grid already holds rubble there. Contact is checked on the next Tick.
         /// </summary>
         public void ShiftDown(int rows = 1)

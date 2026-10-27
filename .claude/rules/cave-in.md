@@ -1,7 +1,6 @@
 ---
 paths:
   - "**/CeilingSystem*"
-  - "**/GasSystem*"
   - "**/AirSystem*"
   - "**/CellType*"
   - "**/GravitySystem*"
@@ -19,11 +18,15 @@ paths:
   - "**/AudioManager*"
 ---
 
-# Hollow Lines — L'Effondrement + le bloc de gaz (v3.3, design)
+# Hollow Lines — L'Effondrement (v3.3, design)
 
 > **Statut : DESIGN ACCEPTÉ (2026-10-27) — implémentation R8 en cours** (plan : `refactoring-plan.md` §R8).
 > Remplace l'air (le chronomètre de suffocation) par une pression spatiale : le puits s'effondre derrière
-> toi. Les capsules d'air deviennent des **blocs de gaz**. Les 6 décisions du §9 sont tranchées.
+> toi. Les capsules d'air restent et **font reculer le front**. Les décisions du §9 sont tranchées.
+>
+> **🔄 2026-10-27 — le bloc de gaz est abandonné** (dev : « la mécanique de gaz ne m'intéresse pas »).
+> `GasSystem` (R8.3) et les events `GasReleased` / `NotifyGas` (R8.4) sont retirés du code ; la capsule
+> d'air garde sa place et devient un **recul** du front (§4). L'Effondrement seul porte la pression.
 
 ---
 
@@ -93,7 +96,7 @@ Chaque ancienne source d'air devient un **recul** du front, aux mêmes proportio
 | Chunk Burst | +0,5 % | **+0,06** → arrondi à **+0,1 rangée** |
 | Bombe en chaîne (par bombe) | +1 % | **+0,12 rangée** |
 | Perfect Clear | +6 % | **+0,75 rangée** (et compense le décalage du §6.4) |
-| Capsule d'air | +6 % | — supprimée (devient le gaz) |
+| Capsule d'air (forée ou libérée) | +6 % | **+0,75 rangée** (`CapsuleRecoil` — §4) |
 | 🆕 Power Drill | — | **+0,5 rangée** (nouveau : le ×6 « repousse » le puits) |
 
 > Le forage latéral ne recule rien : il coûte du temps et la marge fond. C'est voulu (règle 6) — mais
@@ -112,7 +115,7 @@ Pourquoi le transformer en vraie cellule plutôt qu'un overlay visuel :
 - **Rien ne peut tomber à travers le front.** Sans ça, un chunk au-dessus du front pourrait chuter
   dans la zone de jeu — absurde à l'écran, et un écrasement « injuste » (règle 4).
 - Ce qui est avalé est **perdu, proprement** : bombes désarmées (jamais d'explosion hors-jeu), ennemis
-  retirés sans points, diamants perdus (règle 8 : bonus, jamais requis), fissures effacées, gaz dissipé.
+  retirés sans points, diamants et capsules perdus (règle 8 : bonus, jamais requis), fissures effacées.
 - Les chunks **sous** le front avec du vide dessous tombent normalement : les débris ne « tiennent »
   rien par le haut (le support vient d'en bas, §4).
 
@@ -158,6 +161,7 @@ Constantes:
   DangerZoneThreshold = 15f    // % de la marge, comme l'air
   DefaultStartGrace   = 3f     // s — même start buffer que R6.2 (grace, puis rampe ×0.5 → ×1 sur 12 s)
   Reculs : BurstRecoil 0.1 / BombChainRecoilPerBomb 0.12 / PerfectClearRecoil 0.75 / PowerDrillRecoil 0.5
+          / CapsuleRecoil 0.75
 
 État:
   CeilingRow (float)   // front, rangée ABSOLUE (le bas des débris = floor(CeilingRow) − 1)
@@ -172,7 +176,7 @@ API:
   Tick(float dt, int avatarRow) // avance (vitesse × buffer), laisse, contact, rangées avalées
   NotifyAvatarRow(int row)      // laisse sans avancer (chute libre / téléport / couture)
   Recoil(float rows)            // recule le front (peut remonter dans les débris — du temps, pas de l'espace)
-  RestoreBurst() / RestoreBombChain(n) / RestorePerfectClear() / RestorePowerDrill()
+  RestoreBurst() / RestoreBombChain(n) / RestorePerfectClear() / RestorePowerDrill() / RestoreCapsule()
   ShiftDown(int rows = 1)       // Perfect Clear : les débris descendent d'un cran (§5.2)
   Speed { get; set; }           // campagne/endless l'assignent (comme DrainRate)
 
@@ -200,70 +204,27 @@ distance aux débris. Les débris eux-mêmes sont inoffensifs (solides, comme du
 
 ---
 
-## 4. Le bloc de gaz (remplace la capsule d'air)
+## 4. La capsule repousse le front (remplace « le bloc de gaz », abandonné)
 
-### 4.1 Ce que c'est
+La capsule d'air (`CellType.AirCapsule`, map char `P`, même tuile, même densité `airRate`) **reste**. Ce
+qu'elle donnait en air, elle le donne en marge : **`CeilingSystem.RestoreCapsule()` → recul de
+`CapsuleRecoil` = 0,75 rangée** (l'ancien +6 % × 12 / 100 = 0,72, arrondi comme le Perfect Clear).
 
-`CellType.Gas` prend la place de `AirCapsule` (même valeur d'enum, même slot dans le générateur, map char `P`
-inchangé → les cartes authored restent valides). Une poche de gaz coincée dans la roche.
+- **Forée** (Drilled handler, et le 2ᵉ bloc percé par le Power Drill) **ou libérée** (shockwave de burst / Power
+  Drill, explosion de bombe, explosion de Boomer — les events `AirCapsuleLiberated` existants) : même recul.
+- Comme tout recul : borné par la laisse (à pleine marge, la capsule ne donne rien de plus) et peut remonter
+  dans les débris (§3.3).
+- Aucun nouveau système Core, aucun nouvel event : une constante et une méthode sur `CeilingSystem`.
 
-- **Forable en 1 coup**, compte comme un forage normal (points × momentum, +1 momentum).
-- Forer (ou libérer par burst / bombe / Boomer) **arme la poche** : elle siffle **0,6 s** (= le wobble,
-  règle 4), puis **libère un nuage**.
-- Le nuage **monte** : toutes les 0,25 s, chaque cellule de gaz essaie de monter d'une case (si vide),
-  sinon de s'étaler à gauche/droite. Volume : **4 cellules**. Durée de vie : **3 s**, puis il se dissipe.
-- **Toucher le gaz = −1 cœur** (`DeathCause.Gas`, i-frames normales). Pas de téléport (§3.2).
-- Le gaz qui atteint le front de l'effondrement est **absorbé** par les débris.
+**Pourquoi c'est conforme aux règles.** Règles 3 (« bombs liberate air ») et 5 (« capsules restore air »)
+gardent leur sens tel quel avec « marge » au lieu d'« air ». Une capsule reste un bonus qu'on prend en passant :
+elle ne demande jamais de détour (règle 6). **À calibrer (R8.7)** : 0,75 rangée ≈ 1,25 s de front à 0,6 r/s
+(l'ancienne capsule valait 1,2 s de drain à 5 %/s) — même poids qu'avant.
 
-**✅ R8.3 — implémenté (`Core/GasSystem.cs`, pur C#)** :
-
-```
-GasSystem(GridModel grid)
-  HissDuration 0.6 · StepInterval 0.25 · CloudVolume 4 · CloudLifetime 3   (provisoires → R8.7)
-  Release(GridPos vent) → bool     // foré ou libéré ; l'appelant a déjà vidé la cellule
-  Tick(float dt, GridPos avatar)   // nuages, puis hisses, puis contact
-  IsGas / IsHissing / HasActiveGas / CopyGasCells / CopyHissingCells / Clear
-  events : PocketHissing(pos) · CloudReleased(vent) · CloudDissipated(vent) · AvatarHitByGas(pos)
-```
-
-- **`CellType.Gas` est un alias d'`AirCapsule`** (même valeur 7, même `P`), pas une nouvelle cellule : la poche
-  hérite de toutes les règles de la capsule (forable, ne fusionne pas, libérée par burst/bombe/Boomer), et
-  l'air marche tel quel jusqu'à la bascule R8.6. R8.9 supprime le nom `AirCapsule`.
-- **Le gaz ne touche jamais la grille** : il vit dans des cellules vides. Une bouffée dont la cellule redevient
-  solide (chunk, débris) disparaît — c'est ainsi que l'effondrement « absorbe » le gaz, sans code dédié.
-  Une poche rebouchée pendant son sifflement ne s'ouvre jamais.
-- Pas : les bouffées les plus hautes bougent d'abord (une colonne monte d'un bloc) ; bloquée en haut, une
-  bouffée glisse sur le côté, préférence gauche/droite **alternée à chaque pas** (étalement symétrique).
-- Le Perfect Clear ne décale pas le gaz (contrairement aux bombes armées) : une bouffée qui se retrouve dans
-  du solide disparaît, les autres continuent de monter. Assez bon pour 3 s de vie.
-
-### 4.2 Pourquoi ça respecte les règles
-
-**Le seul refuge, c'est en bas** (règle 6). Tu fores une poche → tu tombes dans sa case → elle siffle
-0,6 s → si tu continues à forer (fenêtre de momentum 0,8 s, joueur réaliste 0,3 s/coup), tu es **une ou
-deux rangées plus bas** quand le nuage sort… et il monte, **loin de toi**. Si tu t'arrêtes, il te prend.
-C'est le même geste qui fait scorer (momentum), survivre (marge) et esquiver (gaz) — **règle 10 au carré**.
-
-Contourner une poche est toujours possible et jamais obligatoire : elle est optionnelle comme danger,
-comme la capsule l'était comme récompense.
-
-### 4.3 Interactions
-
-| Avec | Effet | Statut |
-|---|---|---|
-| **Graze** | Forer adjacent à une **bouffée** = graze (+50, +0,3 s) — une ligne dans `CollectDangerCells()`. **Pas** la poche qui siffle : on la fore soi-même, le forage suivant serait un graze automatique à chaque poche | 🟡 R8.6 (câblage View) |
-| **Crawler** | Un Crawler (dormant ou actif) dans une bouffée meurt : `EnemySystem.NotifyGas(cells)`, `KillMethod.Gas`, ×1 (100 pts). **Les Boomers sont épargnés** : un kill au gaz n'a pas de bonus parent, donc pas d'explosion — un Boomer qui s'éteindrait sans exploser gaspillerait l'amplificateur (règle 9) | ✅ R8.4 |
-| **Libération** | Burst / bombe / Boomer qui touche une poche → `GasReleased(pos)` (`GravitySystem`, `BombSystem`, `EnemySystem`), tiré juste après `AirCapsuleLiberated` (même cellule) | ✅ R8.4 |
-| **Effondrement** | Le front absorbe le gaz | ✅ |
-| **Bombe** | Une explosion qui touche un nuage l'**enflamme** : rayon 1, points de bombe | 🅿️ parqué (après playtests) |
-| **Fissures** | Le gaz ne se fissure pas (comme la capsule aujourd'hui : `CanFuse` seulement) | ✅ inchangé |
-| **Chunks** | Un chunk qui tombe dans un nuage le traverse ; le gaz ne supporte rien | ✅ |
-
-### 4.4 Densité
-
-Les capsules sortent à 5-10 % des cellules par strate (`airRate`). C'était correct pour une **récompense** —
-pour un **danger**, c'est beaucoup trop. Proposition : `gasRate = airRate × 0,4` (2-4 %), **absent des
-niveaux 1-3** (onboarding), présent dès le niveau 4. À mesurer au harness (R8.7).
+> **Retiré avec le gaz** : `Core/GasSystem.cs`, l'alias `CellType.Gas`, les events `GasReleased`
+> (Gravity / Bomb / Enemy), `EnemySystem.NotifyGas`, `KillMethod.Gas`, `DeathCause.Gas` et son texte de récap,
+> `GasSystemTests` (15) + `GasInteractionTests` (8). Le design du gaz reste dans l'historique git
+> (commits b041c16 → a6a27f1) si l'idée revient un jour.
 
 ---
 
@@ -273,17 +234,17 @@ niveaux 1-3** (onboarding), présent dès le niveau 4. À mesurer au harness (R8
 |---|---|---|
 | `AirSystem` | Chronomètre | **Supprimé** → `CeilingSystem` (Core, pur C#) |
 | `ScoreSystem.DangerZone` | air < 15 % | **marge < 15 %** (même ×2, même règle ⚡D3) |
-| `DeathCause.Suffocation` | | **Supprimé** → cause effondrement + `Gas` |
+| `DeathCause.Suffocation` | | **Supprimé** → `CaveIn` |
 | `DeathTracker` | « Dernier forage il y a 6,2 s » | « Le puits t'a rattrapé — marge 0 » |
 | `CampaignManager` | `DrainRateForLevel`, `AirStartGraceForLevel` | `CeilingSpeedForLevel`, `CeilingStartGraceForLevel` |
 | `EndlessManager` | `DrainRateForDepth`, `DrainRateChanged` | `CeilingSpeedForDepth`, `CeilingSpeedChanged` |
-| `GravitySystem`, `BombSystem`, `EnemySystem` | `AirCapsuleLiberated` | `GasReleased(GridPos)` |
-| `StrateGenerator` | `airRate` | `gasRate` (densité §4.4), chambre « Air » du tutoriel → chambre « Gaz » |
+| `GravitySystem`, `BombSystem`, `EnemySystem` | `AirCapsuleLiberated` → air | `AirCapsuleLiberated` → `RestoreCapsule` (§4) |
+| `StrateGenerator` | `airRate` | inchangé (la capsule reste) |
 | HUD | Barre d'air + « Fore pour respirer ! » (R6.3) | **Même barre** = marge ; hint « DESCENDS ! » sous 30 % |
-| VFX | Vignette danger | + rendu des débris, front qui s'effrite (poussière), nuage de gaz |
-| Audio | Heartbeat danger | + grondement dont le volume suit la proximité, sifflement du gaz |
+| VFX | Vignette danger | + rendu des débris, front qui s'effrite (poussière), tuile capsule à redessiner |
+| Audio | Heartbeat danger | + grondement dont le volume suit la proximité |
 | Debug toggle | `disableAir` | `disableCeiling` |
-| Aide en jeu | Page air | Page « Le puits s'effondre » + gaz |
+| Aide en jeu | Page air | Page « Le puits s'effondre » |
 | Harness | Ledger d'air | Ledger de marge (vitesse, reculs, rattrapages par la laisse) |
 | CLAUDE.md | Règles 1, 5, 10 parlent d'air | Réécrites (§7) |
 
@@ -316,9 +277,9 @@ devient inutile : en chute libre tu descends, donc la marge monte toute seule.
 
 1. **Drilling IS the reward.** Every drill tap gives points (×momentum) — and drilling **down** buys distance
    from the collapse. ~~air (+0.5%)~~
-4. **Wobble telegraphs everything.** 0.6 s warning — chunks, **gas pockets (hiss)**. The collapse is always on screen.
-5. **The collapse rewards aggression.** ~~Air rewards aggression.~~ Descending is the escape; bursts, bomb
-   chains, Perfect Clears and Power Drills push the collapse back. Passive = buried.
+4. **Wobble telegraphs everything.** 0.6 s warning. The collapse is always on screen.
+5. **The collapse rewards aggression.** ~~Air rewards aggression.~~ Descending is the escape; capsules, bursts,
+   bomb chains, Perfect Clears and Power Drills push the collapse back. Passive = buried.
 10. **Scoring and surviving are the same gesture.** Drill fast = stay ahead of the collapse = momentum = score.
 
 Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement une mécanique.
@@ -331,13 +292,13 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 |---|---|---|
 | R8.1 | `CeilingSystem` (Core) : front, vitesse, laisse, grace, reculs, contact, `HitRecoil`, Danger Zone, `RowsSwallowed` | NUnit |
 | R8.2 | `CellType.Rubble` + conversion des rangées avalées (grille, bombes, ennemis, fissures) | NUnit |
-| R8.3 | `CellType.Gas` (remplace AirCapsule) + `GasSystem` (armement 0,6 s, nuage, montée, durée de vie, contact) | NUnit |
-| R8.4 | Événements `GasReleased` (gravity / bombes / Boomer), mort des Crawlers dans le gaz, graze sur le gaz | NUnit |
+| ~~R8.3~~ | ~~`CellType.Gas` + `GasSystem`~~ — livré puis **retiré** (gaz abandonné) | — |
+| ~~R8.4~~ | ~~`GasReleased`, Crawlers dans le gaz~~ — livré puis **retiré** ; remplacé par R8.4c (capsule → recul) | NUnit |
 | R8.5 | `ScoreSystem` / `DeathTracker` / `CampaignManager` / `EndlessManager` : Danger Zone, causes de mort, vitesses | NUnit |
 | R8.6 | `GameBootstrap` : câblage, ordre du tick, nouvelle règle de respawn, couture Endless, retrait d'`AirSystem` | Intégration + play mode |
-| R8.7 | Harness : parité, puis **calibrage** (vitesses, `MaxLead`, `gasRate`, reculs) — même méthode que R7.15 | Harness |
-| R8.8 | View : débris + front, nuage de gaz, barre de marge, hint, audio | Visuel |
-| R8.9 | Générateur (densité gaz, chambre tutoriel), pages d'aide, GDD, CLAUDE.md, suppression des tests d'air | NUnit + play mode |
+| R8.7 | Harness : parité, puis **calibrage** (vitesses, `MaxLead`, reculs dont `CapsuleRecoil`) — même méthode que R7.15 | Harness |
+| R8.8 | View : débris + front, barre de marge, hint, audio, tuile capsule | Visuel |
+| R8.9 | Pages d'aide, GDD, CLAUDE.md, suppression d'`AirSystem` et des tests d'air | NUnit + play mode |
 
 > L'air reste fonctionnel jusqu'à R8.6 : R8.1-R8.5 ajoutent à côté, R8.6 bascule, R8.9 nettoie
 > (même stratégie que StreakTracker → MomentumTracker en R7).
@@ -352,8 +313,8 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 | B | Après un dégât (n'importe lequel), l'avatar reste sur place au lieu de retourner au spawn ? | **Oui, partout** — le spawn peut être avalé (§3.2) |
 | C | Le front qui touche l'avatar : −1 cœur + recul de 4 rangées ? | **Oui** — sans recul, c'est une mort garantie après les i-frames |
 | D | `MaxLead` = 12 rangées (front toujours visible) ? | **Oui** pour commencer ; le harness ajuste |
-| E | Gaz absent des niveaux 1-3 ? | **Oui** — l'onboarding a déjà assez à apprendre |
-| F | Nom de la cause de mort : `Collapse` existe déjà (Perfect Clear qui écrase) | Garder `Collapse` tel quel, ajouter **`DeathCause.CaveIn`** (le front) + **`DeathCause.Gas`**, retirer `Suffocation` |
+| E | ~~Gaz absent des niveaux 1-3 ?~~ | **Caduque** — le gaz est abandonné (2026-10-27) |
+| F | Nom de la cause de mort : `Collapse` existe déjà (Perfect Clear qui écrase) | Garder `Collapse` tel quel, ajouter **`DeathCause.CaveIn`** (le front), retirer `Suffocation` (`Gas` retiré avec le gaz) |
 
 ---
 
@@ -367,16 +328,16 @@ Ce qu'il branche — le vrai Core, rien de simulé :
 - L'air ne draine plus ; `CeilingSystem` tourne à la vitesse traduite du niveau (`SpeedForDrainRate`) avec le
   même start buffer ; `RowsSwallowed` → `FillRows(Rubble)` + `DisarmRows` + `BuryRows` ; contact → `CaveIn`.
 - Les reculs : burst, chaîne de bombes, Perfect Clear (+ `ShiftDown`), Power Drill.
-- Le gaz : forer un bloc **AIR** (= poche de gaz, même cellule) ou le libérer (burst / bombe / Boomer / Power
-  Drill) → `GasSystem.Release` ; contact → `Gas` ; `NotifyGas` chaque frame ; les bouffées comptent pour le graze.
+- La capsule : forer un bloc **AIR** (aussi le 2ᵉ bloc du Power Drill) ou le libérer (burst / bombe / Boomer /
+  Power Drill) → `RestoreCapsule` (+0,75 rangée).
 - Respawn décision B (`CaveInRespawnCell`) : on reste sur place, on remonte seulement si on est dans du solide.
 - Danger Zone = celle de la marge.
 
 Limites assumées (corrigées en R8.6 / R8.8) : rangées **locales au board** (le front repart à pleine laisse à
 chaque couture Endless) ; la barre d'air du HUD est figée (la marge = la ligne orange + le texte en bas à gauche) ;
-le bloc garde son visuel « AIR » ; le récap affiche encore « air restant 100 % ».
+le récap affiche encore « air restant 100 % ».
 
-**Vérifié en play mode (tutoriel, via UnityMCP)** : le front entre dans le board, la rangée 0 devient des débris
-gris, avatar immobile → 3 coups `CaveIn` (≈ 2,5 s d'écart à 3 r/s forcés) → récap « Rattrapé par l'éboulement » ;
-descente forée : Power Drill perce la poche (3,12) → sifflement → nuage qui monte pendant que l'avatar descend →
-absorbé par les débris ; aucune exception. Le seul cœur perdu venait de la bombe du tutoriel (§5.14, accepté).
+**Vérifié en play mode (tutoriel, via UnityMCP, version avec gaz)** : le front entre dans le board, la rangée 0
+devient des débris gris, avatar immobile → 3 coups `CaveIn` (≈ 2,5 s d'écart à 3 r/s forcés) → récap « Rattrapé
+par l'éboulement » ; aucune exception. **La version capsule → recul n'est pas encore revue en play mode** (MCP
+Unity déconnecté au moment du retrait du gaz) — Core seulement, 503/503 via `dotnet test`.

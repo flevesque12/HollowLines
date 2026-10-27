@@ -39,13 +39,6 @@ namespace HollowLines.Core
         /// <summary>A burst shockwave freed an air capsule. Consumer restores air (never destroys it).</summary>
         public event Action<GridPos> AirCapsuleLiberated;
 
-        /// <summary>
-        /// R8.4: the same freeing, read as v3.3 gas — a shockwave cracked a gas pocket open. Fires right
-        /// after AirCapsuleLiberated (same cell, CellType.Gas is its alias). Wire to GasSystem.Release
-        /// at the R8.6 switch; R8.9 deletes AirCapsuleLiberated.
-        /// </summary>
-        public event Action<GridPos> GasReleased;
-
         /// <summary>A burst shockwave freed a diamond (R4). Consumer counts it toward DiamondSystem — never destroys it.</summary>
         public event Action<GridPos> DiamondLiberated;
 
@@ -470,7 +463,6 @@ namespace HollowLines.Core
                 case CellType.AirCapsule:
                     _grid.Set(p, CellType.Empty);
                     AirCapsuleLiberated?.Invoke(p);
-                    GasReleased?.Invoke(p);
                     return false;
 
                 case CellType.Diamond:
