@@ -1,7 +1,6 @@
 ---
 paths:
   - "**/CeilingSystem*"
-  - "**/AirSystem*"
   - "**/CellType*"
   - "**/GravitySystem*"
   - "**/BombSystem*"
@@ -20,7 +19,7 @@ paths:
 
 # Hollow Lines — L'Effondrement (v3.3, design)
 
-> **Statut : DESIGN ACCEPTÉ (2026-10-27) — implémentation R8 en cours** (plan : `refactoring-plan.md` §R8).
+> **Statut : ✅ LIVRÉ (R8.1-R8.9, 2026-10-28)** — `AirSystem` est supprimé, l'éboulement est le seul système de pression.
 > Remplace l'air (le chronomètre de suffocation) par une pression spatiale : le puits s'effondre derrière
 > toi. Les capsules d'air restent et **font reculer le front**. Les décisions du §9 sont tranchées.
 >
@@ -274,7 +273,7 @@ devient inutile : en chute libre tu descends, donc la marge monte toute seule.
 
 ---
 
-## 7. Règles non négociables — réécriture proposée
+## 7. Règles non négociables — ✅ adoptées dans CLAUDE.md §11 (R8.9)
 
 1. **Drilling IS the reward.** Every drill tap gives points (×momentum) — and drilling **down** buys distance
    from the collapse. ~~air (+0.5%)~~
@@ -299,7 +298,7 @@ Règles 2, 3, 6, 7, 8, 9, 11 : inchangées. La règle 6 devient littéralement u
 | R8.6 ✅ | `GameBootstrap` : câblage, ordre du tick, nouvelle règle de respawn, couture Endless, l'air ne tue plus (passerelle `Mirror` jusqu'à R8.8) | Intégration + play mode |
 | R8.7 ✅ | Harness : parité, puis calibrage — mesuré (×1 / ×1,5 / ×2, `MaxLead` 12 / 8), **rien de changé** (`balance.md` §15.11) | Harness |
 | R8.8 ✅ | View : débris + front, barre de marge, hint, audio, tuile capsule (étai) | Visuel |
-| R8.9 | Pages d'aide, GDD, CLAUDE.md, suppression d'`AirSystem` et des tests d'air | NUnit + play mode |
+| R8.9 ✅ | Pages d'aide, GDD, CLAUDE.md, suppression d'`AirSystem` et des tests d'air | NUnit + play mode |
 
 > L'air reste fonctionnel jusqu'à R8.6 : R8.1-R8.5 ajoutent à côté, R8.6 bascule, R8.9 nettoie
 > (même stratégie que StreakTracker → MomentumTracker en R7).
@@ -394,3 +393,18 @@ appelée — elle part avec `AirSystem` en R8.9. `CeilingSystem.StartGraceDurati
 
 **Vérifié en play mode (captures, tutoriel)** : grâce (« ÉBOULEMENT · 2 », mèche, étai lisible dans la grille), marge
 à 25 % (barre rouge, « DESCENDS ! », cailloux), marge à 2 % (rangée 0 en pavés, dents + lueur, vignette, ×2 DANGER).
+
+---
+
+## 13. Ménage — R8.9 (2026-10-28)
+
+- **Supprimé** : `Core/AirSystem.cs` (et `Mirror`), `DeathCause.Suffocation`, `CampaignManager.DrainRateForLevel` /
+  `AirStartGraceForLevel`, `EndlessManager.DrainRate` / `DrainRateChanged` / `DrainRateForDepth` (+ constantes),
+  `CeilingSystem.SpeedForDrainRate`. Les vitesses du front restent des littéraux (§2.2) ; la rampe Endless a sa
+  propre constante `CeilingStepRows` (20).
+- **`DeathReport`** : plus de champ `Air` ; `Lead` n'est plus nullable ; `NotifyDeath(cause, pos, lead)`. Une mort
+  `None` sans coup enregistré retombe sur `CaveIn`.
+- **Tests** : `AirSystemTests` (46) + 8 tests de drain / garde-fous de traduction supprimés → **462/462**.
+- **Aide** : page 5 « L'ÉBOULEMENT ET LES CŒURS » (marge, descendre, étai, Danger Zone, cœurs) ; « capsules d'air »
+  → « étais » sur les pages des blocs qui tombent et des bombes ; page 1 et 3-4 sans air. Vérifiée à l'écran en 16:9
+  (deux lignes raccourcies : la première version ne laissait que ~5 px sous la carte).

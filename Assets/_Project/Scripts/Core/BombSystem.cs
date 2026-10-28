@@ -137,7 +137,7 @@ namespace HollowLines.Core
 
         /// <summary>
         /// v3: a blast freed an air capsule instead of wasting it (design rule 3 — bombs are friends).
-        /// Caller wires this to AirSystem.RestoreCapsule().
+        /// Caller wires this to CeilingSystem.RestoreCapsule() (R8.6: the capsule pushes the front back).
         /// </summary>
         public event Action<GridPos> AirCapsuleLiberated;
 

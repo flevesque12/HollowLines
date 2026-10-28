@@ -23,9 +23,6 @@ namespace HollowLines.Core
         /// <summary>Contact with an active enemy (EnemySystem.AvatarHitByEnemy).</summary>
         Enemy,
 
-        /// <summary>Air reached 0 (AirSystem.AirDepleted). Never a heart hit — always fatal.</summary>
-        Suffocation,
-
         /// <summary>v3.3: the Cave-in front reached the avatar (CeilingSystem.AvatarReached) — cave-in.md §3.2.</summary>
         CaveIn,
     }

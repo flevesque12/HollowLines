@@ -1,6 +1,6 @@
 ---
 paths:
-  - "**/AirSystem*"
+  - "**/CeilingSystem*"
   - "**/ScoreSystem*"
   - "**/StrateGenerator*"
 ---

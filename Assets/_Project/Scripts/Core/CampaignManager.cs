@@ -36,35 +36,16 @@ namespace HollowLines.Core
         }
 
         /// <summary>
-        /// Campaign air drain in % per second. Levels 1-3 breathe easier for onboarding.
-        ///
-        /// Raised for v3 (§15.1). Drain is time-based, so it only bites once a run is long enough
-        /// for it to act: at the old 14-26 row depths a descent took ~2 s and NO drain rate worked
-        /// (making 2 s costly would need ~20 %/s, which kills exploration outright). With depths
-        /// tripled, a descent runs 5-9 s and 7 %/s consumes ~60 % of the tank — enough that
-        /// capsules, bursts and bomb chains become things you actually need. Depth and drain are
-        /// multiplicative; tune them together, never one alone.
-        /// </summary>
-        public static float DrainRateForLevel(int level) => level <= 3 ? 4f : 7f;
-
-        /// <summary>
-        /// R6.2 (F02): seconds of zero drain at the start of each campaign board (AirSystem start
-        /// buffer). Levels 1-3 get longer to read the board — same onboarding split as drain and
-        /// wobble. The ramp that follows is the same everywhere (AirSystem.StartRampDuration).
-        /// </summary>
-        public static float AirStartGraceForLevel(int level) => level <= 3 ? 5f : AirSystem.DefaultStartGrace;
-
-        /// <summary>
-        /// R8.5 (cave-in.md §2.2): Cave-in front speed in rows/s — the drain above translated
-        /// (drain × MaxLead / 100), so a still player dies in the same 25 s / 14 s as on the air.
-        /// Literals, not derived from DrainRateForLevel: the air is deleted in R8.9 and this stays.
+        /// R8.5 (cave-in.md §2.2): Cave-in front speed in rows/s. Translated from the air drain it replaced
+        /// (4 / 7 %/s × MaxLead / 100), so a still player dies in the same 25 s / 14 s as on the air. Front
+        /// speed and depth (§9) are multiplicative — tune them together, never one alone (§15.1).
         /// R8.7: measured with the harness and kept as is (balance.md §15.11).
         /// </summary>
         public static float CeilingSpeedForLevel(int level) => level <= 3 ? 0.48f : 0.84f;
 
         /// <summary>
-        /// R8.5: seconds the front waits before it moves (CeilingSystem start buffer) — the same
-        /// onboarding split as the air's grace (R6.2): 5 s on levels 1-3, 3 s after.
+        /// R8.5 (F02, R6.2): seconds the front waits before it moves (CeilingSystem start buffer). Levels
+        /// 1-3 get longer to read the board — same onboarding split as speed and wobble: 5 s, then 3 s.
         /// </summary>
         public static float CeilingStartGraceForLevel(int level) => level <= 3 ? 5f : CeilingSystem.DefaultStartGrace;
 

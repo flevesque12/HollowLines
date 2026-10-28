@@ -199,7 +199,7 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 >   is no longer fed); the drill popup "×N" is the only momentum feedback until the View sprint.
 > - R7.14–R7.15 require the playtest harness (`tools/playtest/`) to be updated for momentum.
 
-### R8 — The Cave-in (v3.3)  🟡 IN PROGRESS
+### R8 — The Cave-in (v3.3)  ✅ COMPLETE (2026-10-28)
 
 > **Source:** `cave-in.md` (design accepted 2026-10-27, decisions A-F). Replaces air: the well collapses
 > behind the player (lead in rows = the new air %); air capsules push the front back.
@@ -219,4 +219,4 @@ strate tables and no longer matched `CampaignStrates`. **Findings: see §15 — 
 | R8.6 ✅ | **The switch.** `GameBootstrap`: persistent `CeilingSystem` in absolute rows (`_rowOffset`), every recoil + capsule wired, `RowsSwallowed` → `SwallowBoardRows`, decision B respawn for every hit, Endless seam keeps the front and pre-fills the passed rows, `disableAir` → `disableCeiling`, `previewCaveIn` removed. The air no longer drains or kills — `AirSystem.Mirror` bridges the margin to HUD/VFX/audio until R8.8 | 3 new, 515/515 + play mode |
 | R8.7 ✅ | Harness at Cave-in parity (absolute rows, seam pre-fill, recoils, front ledger, `CEIL_SPEED_SCALE` / `CEIL_MAXLEAD` knobs), then measured ×1 / ×1.5 / ×2 and `MaxLead` 12 / 8 — **dev kept every value** (balance.md §15.11) | Harness |
 | R8.8 ✅ | View: HUD / vignette / heartbeat read `CeilingSystem` directly (the air bridge is unused), bar "ÉBOULEMENT" + "DESCENDS !", `CaveInView` (rock teeth + glow, dust, debris), procedural cobble rubble tile, Cave-in rumble loop, **timber-prop capsule tile** (dev's picks) | 1 new, 516/516 + play-mode screenshots |
-| R8.9 | Help pages, GDD, CLAUDE.md rules 1/5/10, delete `AirSystem` + air tests + `DeathCause.Suffocation` + the drain↔speed translation guards | NUnit + play mode |
+| R8.9 ✅ | **Cleanup.** `AirSystem` deleted, `DeathCause.Suffocation` removed, drain APIs gone from `CampaignManager` / `EndlessManager`, `CeilingSystem.SpeedForDrainRate` + translation guards removed, `DeathReport.Lead` non-null (no `Air`). Help page "L'ÉBOULEMENT ET LES CŒURS" + "étais" wording, GDD v3.3, CLAUDE.md rules 1/3/4/5/10 | −54, 462/462 (Unity) + help screenshot |

@@ -81,7 +81,7 @@ namespace HollowLines.Core
             set => _cascadeMultiplier = value < 1 ? 1 : value > MaxCascadeMultiplier ? MaxCascadeMultiplier : value;
         }
 
-        /// <summary>Mirror of AirSystem.IsDangerZone — doubles base points while true (§M3.4).</summary>
+        /// <summary>Mirror of CeilingSystem.IsDangerZone (R8.6) — doubles base points while true (§M3.4).</summary>
         public bool DangerZone { get; set; }
 
         // ── Observable state ────────────────────────────────────────

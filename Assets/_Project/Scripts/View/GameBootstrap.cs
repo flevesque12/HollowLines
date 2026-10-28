@@ -16,7 +16,7 @@ namespace HollowLines.View
     ///
     /// v3.3 Cave-in (R8.6, cave-in.md): the well collapses behind the player. CeilingSystem works in
     /// ABSOLUTE rows (board row + _rowOffset), so the front crosses an Endless seam untouched. Since R8.8
-    /// the HUD, VFX and audio read it directly — the game no longer uses AirSystem at all (deleted in R8.9).
+    /// the HUD, VFX and audio read it directly (AirSystem was deleted in R8.9).
     ///
     /// Grid-dependent systems (GridModel, AvatarModel, GravitySystem, CollapseSystem,
     /// BombSystem, ChainTracker, EnemySystem) are fully rebuilt by LoadLevel() on each transition.
@@ -1008,7 +1008,7 @@ namespace HollowLines.View
             if (_healthSystem.IsAlive)
                 _avatar.Teleport(RespawnCell()); // decision B: stay in place, the spawn may be rubble by now
             else
-                _deathTracker.NotifyDeath(cause, _avatar.Position, 0f, _ceiling.Lead); // R8.5: the recap reads the margin, not air
+                _deathTracker.NotifyDeath(cause, _avatar.Position, _ceiling.Lead); // R8.5: the recap reads the margin
         }
 
         // ─────────────────────────────────────────────────────────────────────

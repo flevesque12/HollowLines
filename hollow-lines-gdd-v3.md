@@ -1,4 +1,4 @@
-# HOLLOW LINES — Game Design Document v3.1 (arcade pivot)
+# HOLLOW LINES — Game Design Document v3.1 (arcade pivot) + v3.3 Cave-in
 
 **Working title:** Hollow Lines
 **Genre:** Casual arcade / action descent
@@ -19,11 +19,18 @@ Key changes from v3: Color Streak is vertical-only (lateral drills are streak-ne
 are an optional bonus (+150 pts, no gate). Enemies are Crawler + Boomer only (Digger/Tank removed).
 Bomb fuse reduced 2.5→1.5 s. Every drill restores +0.5% air. Campaign win = depth + score minimum.
 
+> **🔄 v3.3 — The Cave-in replaces air (R8, shipped 2026-10-28).** There is no air any more: the well
+> collapses behind the player. The margin between the avatar and the collapse front (max 12 rows) is the
+> new "air"; descending buys margin, capsules (now **timber props**), bursts, bomb chains, Perfect Clears and
+> Power Drills push the front back; if it reaches you, −1 heart and it backs off 4 rows. Full spec:
+> `.claude/rules/cave-in.md`. Sections 2, 4.9-4.13, 7 and 8 below are updated; older sections (e.g. 4.7
+> Color Streak, replaced by Drill Momentum in v3.2) predate later versions — see CLAUDE.md.
+
 ---
 
 ## 1. Elevator pitch
 
-> You're a tiny driller descending through layers of colored blocks. Drill streaks of the same color for rising combos, undermine huge chunks to make them shatter on impact, chain bombs together for massive bursts — and find air pockets before you suffocate. Campaign teaches you the ropes; Endless is the real game: how deep can you go?
+> You're a tiny driller descending through layers of colored blocks. Build drilling momentum for rising combos, undermine huge chunks to make them shatter on impact, chain bombs together for massive bursts — and stay ahead of the well collapsing behind you. Campaign teaches you the ropes; Endless is the real game: how deep can you go?
 
 **Design DNA:** Mr. Driller's avatar-in-well with self-created danger × Downwell's score-chasing depth run × the visceral satisfaction of blocks bursting and chains popping.
 
@@ -31,11 +38,11 @@ Bomb fuse reduced 2.5→1.5 s. Every drill restores +0.5% air. Campaign win = de
 
 ## 2. Design pillars
 
-1. **Drilling IS the fun.** Every drill tap must feel good. The score systems reward the act of drilling itself, not an abstract goal built on top of it. 🆕v3.1: every drill also restores air — drilling IS survival.
+1. **Drilling IS the fun.** Every drill tap must feel good. The score systems reward the act of drilling itself, not an abstract goal built on top of it. 🆕v3.1: every drill also restores air — drilling IS survival. 🔄v3.3: drilling down buys distance from the collapse.
 2. **Big bursts, big rewards.** Chunk Bursts and Bomb chains are the highlight moments — spectacle and score aligned. The player should think "yes!" when they see a big chunk wobbling or three bombs lined up.
 3. **Readable danger.** Every hazard is telegraphed (0.6 s wobble, bomb fuse beep). No unfair deaths.
 4. **Depth is destiny.** Going deeper is always good. The game never asks the player to stop descending. 🔄v3.1: no mechanic may require lateral routing or backtracking. Everything optional is on the way down.
-5. **Survive by attacking.** Air drains constantly; drilling, capsules and aggressive play (burst bonuses, bomb liberations) are the only way to breathe. Passive play = suffocation. 🔄v3.1: drilling itself is the primary air source.
+5. **Survive by attacking.** 🔄v3.3: the well collapses behind you; descending, capsules (timber props) and aggressive play (bursts, bomb chains, Power Drills) keep you ahead of it. Passive play = buried.
 
 ---
 
@@ -213,7 +220,24 @@ A 3-bomb sympathetic chain destroying 20 blocks total = 20 × 25 × 3 = **1,500 
 
 **Design intent:** the player sees a cluster of bombs and plans how to set them off in sequence for maximum destruction. Three bombs in a line = a setup worth routing toward. Bombs also liberate air capsules instead of destroying them, so bombing near capsules is actively good — the incentives are aligned with spectacle instead of fighting it.
 
-### 4.9 Air system
+### 4.9 The Cave-in (🔄v3.3 — replaces the air system)
+
+| Parameter | Value | Notes |
+|---|---|---|
+| Leash (`MaxLead`) | 12 rows | The front is never more than 12 rows above you — always on screen |
+| Front speed, campaign | 0.48 rows/s (levels 1–3) · 0.84 rows/s (4–10) | Translated from the measured air drain: same 25 s / 14 s to die standing still |
+| Front speed, Endless | 0.6 rows/s + 0.06 per 20 rows of depth, capped at 1.2 | Absolute rows — the front crosses segment seams |
+| Start buffer | 5 s (levels 1–3) / 3 s still, then a 12 s ramp from ×0.5 | Same as the old air buffer (R6.2) |
+| Contact | −1 heart, front backs off 4 rows | The avatar stays where it is (the spawn is rubble) |
+| Recoils | capsule 0.75 · burst 0.1 · bomb chain 0.12/bomb · Perfect Clear 0.75 · Power Drill 0.5 rows | The old air restores, same proportions |
+| Danger Zone | margin < 15 % | All base points ×2 |
+
+Swallowed rows turn into **rubble** (solid, undrillable, never falls): buried bombs go out, buried enemies are
+gone, buried diamonds and capsules are lost. HUD: the "ÉBOULEMENT" bar + "DESCENDS !" hint under 30 %.
+Measured with the harness (R8.7, `balance.md` §15.11) and kept: the front taxes hesitation and farming, never
+descent. Full spec: `.claude/rules/cave-in.md`.
+
+#### Former air system (v3.1, removed in v3.3)
 
 > **Values below are the shipped R2.8-balanced numbers, not the original v3 draft.** The draft
 > assumed these were rare events; measured on a real board they are not (a level-10 descent produced
@@ -244,7 +268,7 @@ When all 7 cells of a row are void (from any combination of drilling, bursting, 
 
 This is **no longer the core mechanic**. It's a rare, emergent bonus:
 - **+500 points** flat.
-- **+6% air** restored.
+- **+6% air** restored. 🔄v3.3: pushes the front back 0.75 row (and the rubble shifts down with the rows above).
 - Text popup: "PERFECT CLEAR!"
 - The cascade step is still tracked (the popup and chain SFX read it) but **no longer scales the
   points** — Perfect Clear is a flat +500. The draft's `+500 × cascade` averaged ×4–×7 and let
@@ -272,17 +296,18 @@ Unchanged from v2: 3 hearts, 1.5 s i-frames. Damage sources:
 - Chunk Burst footprint on the avatar (a crushed player standing in the shattering chunk — the burst
   ring itself is harmless, §4.6).
 - Bomb blast hitting avatar.
-- Hearts at 0 → game over.
+- 🆕v3.3 The Cave-in front reaching the avatar (it then backs off 4 rows).
+- Hearts at 0 → game over. 🔄v3.3: after any hit the avatar stays where it is (no respawn at the top).
 
 ### 4.13 Win / lose
 
 **Campaign (🔄v3.1):**
 - **Win:** avatar reaches the bottom rows + **score meets the level minimum** (§6). Levels 1-3 have no score minimum. The score gate forces engagement with burst/bomb/enemy mechanics without requiring lateral routing.
-- **Lose:** air depleted OR hearts depleted.
+- **Lose:** hearts depleted (🔄v3.3: was "air depleted OR hearts depleted").
 
 **Endless:**
 - **No win condition.** Play until death.
-- **Lose:** air depleted OR hearts depleted.
+- **Lose:** hearts depleted — the Cave-in front is the main threat (🔄v3.3).
 - **Score screen:** depth reached + total score + best streak + biggest burst.
 
 ---
@@ -368,13 +393,14 @@ breaking design rules 1 and 2 at the exact point a run should peak.
 Resulting terrain at steady state: ~27 % color cells, ~19 % hard+steel, ~14 % of solid cells sitting
 over a 2-row drop (campaign 10, for reference: 32 % / 13 % / 13 %).
 
-### Air drain ramp
+### Cave-in speed ramp (🔄v3.3 — was the air drain ramp)
 
 ```
-drain_rate = 5.0 + (depth / 20) × 0.5   (capped at 10%/s)
+front_speed = 0.6 + (depth / 20) × 0.06   rows/s (capped at 1.2)
 ```
 
-At row 0: 5%/s (20 s budget). At row 100: 7.5%/s (13.3 s budget). The player must play increasingly aggressively to survive.
+At row 0: 0.6 rows/s (20 s from a full leash to contact). At row 100: 0.9 rows/s (13.3 s). The player must
+descend increasingly fast to stay ahead — the same curve as the old drain, translated (× MaxLead / 100).
 
 ### Score screen
 
@@ -401,11 +427,11 @@ Same seed for all players on a given day. One attempt per day (or unlimited with
 
 These rules are **non-negotiable** — they define Hollow Lines v3:
 
-1. **Drilling IS the reward.** Every drill tap gives points (×streak). The player never drills "for free."
+1. **Drilling IS the reward.** Every drill tap gives points (×momentum) — and drilling down buys distance from the collapse. The player never drills "for free."
 2. **Big chunks burst.** Fall from 2+ rows → shatter. Spectacle and score are the same thing.
-3. **Bombs are friends.** They liberate air capsules, chain for multipliers, and clear paths. The player wants to find bombs.
+3. **Bombs are friends.** They liberate capsules (push the collapse back), chain for multipliers, and clear paths. The player wants to find bombs.
 4. **Wobble telegraphs everything.** 0.6 s warning. No unfair deaths. (0.8 s on campaign 1–3.)
-5. **Air rewards aggression.** Capsule drilling, burst bonuses, and bomb chain bonuses all restore air. Passive play = suffocation.
+5. **The collapse rewards aggression.** Descending is the escape; capsules, bursts, bomb chains, Perfect Clears and Power Drills push the collapse back. Passive play = buried. (🔄v3.3 — was "Air rewards aggression".)
 6. **Depth is always forward.** Campaign win = reach the bottom. Endless score = how deep. Never stop descending.
 7. **Perfect Clear is a bonus, not a goal.** A full void row is a rare jackpot (+500), not the core mechanic.
 

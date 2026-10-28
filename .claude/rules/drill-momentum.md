@@ -2,7 +2,7 @@
 paths:
   - "**/MomentumTracker*"
   - "**/ScoreSystem*"
-  - "**/AirSystem*"
+  - "**/CeilingSystem*"
   - "**/GrazeSystem*"
   - "**/FissureTracker*"
   - "**/HUDView*"
@@ -204,6 +204,9 @@ La chute libre récompense les zones poreuses : le joueur traverse le vide à to
 vitesse, maintient son momentum, et reprend le drilling à l'atterrissage.
 
 #### M3.4 Danger Zone — Air critique
+
+> **🔄v3.3 (R8.6-R8.9):** l'air n'existe plus. La Danger Zone est maintenant **marge de l'éboulement < 15 %**
+> (`CeilingSystem.IsDangerZone`) — même ×2, même règle ⚡D3. Lire « air » comme « marge » ci-dessous.
 
 **Fichier:** `Core/AirSystem.cs` — ajouter un flag `IsDangerZone`
 

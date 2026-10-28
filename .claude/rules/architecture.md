@@ -42,7 +42,8 @@ Assets/_Project/Scripts/
     ScoreSource.cs        — 🆕 Streak, Burst, Bomb, Depth, PerfectClear
     ❌ LineSource.cs      — DELETED (replaced by ScoreSource.cs)
     ChainTracker.cs       — Temporal chain counting (kept for burst cascades)
-    AirSystem.cs          — 🔄 Added RestoreBurst, RestoreBombChain; drain ramp for endless
+    CeilingSystem.cs      — 🆕v3.3 The Cave-in front (replaced AirSystem, deleted R8.9): absolute rows, leash
+                            (MaxLead 12), start buffer, recoils, contact + HitRecoil, Danger Zone (cave-in.md)
     HealthSystem.cs       — 3 hearts, i-frames (unchanged)
     BombSystem.cs         — 🔄 Capsule liberation, chain mult, scoring events, ArmBombAt()
     StrateDescriptor.cs   — Immutable config struct for one board layer
@@ -106,7 +107,7 @@ Legend: 🆕 = new file · 🔄 = needs modification · ✅ = R-step complete ·
 ### GameBootstrap.Awake() — subscriptions
 
 ```csharp
-// ── 🔄v3.2 Momentum tracking + drill air restore ─────────────────
+// ── 🔄v3.2 Momentum tracking (🔄v3.3: no air restore — descending IS the margin) ──
 // ✅R7.6 SHIPPED order. Graze sits AFTER NotifyDrill (its +0.3 s would otherwise be overwritten by the
 // window refresh) and BEFORE bombs/enemies (the bomb this drill lights / enemy it wakes is not a near miss).
 // Power Drill completion is deferred to the END of the handler so AwardDrill reads the ×6 (⚡D1).
@@ -114,9 +115,8 @@ _avatar.Drilled += (pos, oldType, direction) =>
 {
     _momentumTracker.NotifyDrill(oldType);                    // 🔄v3.2: time-based, no direction
     _scoreSystem.AwardDrill(_momentumTracker.Multiplier);     // 🔄v3.2: × cascade × danger inside ScoreSystem
-    _airSystem.RestoreDrill();                                // v3.1: +0.5% air per drill
     _grazeSystem.NotifyDrill(pos, CollectDangerCells());      // 🆕v3.2: active enemies + armed bombs (⚡D6)
-    if (oldType == CellType.AirCapsule) _airSystem.RestoreCapsule();
+    if (oldType == CellType.AirCapsule) _ceiling.RestoreCapsule();     // v3.3: the timber prop pushes the front back
     if (oldType == CellType.Diamond) _diamondSystem.NotifyCollected(pos);  // R4
     _bombSystem.NotifyDrilled(pos);
     _enemySystem.NotifyAdjacentDrill(pos);                                 // R5.9 activation
@@ -137,7 +137,7 @@ _momentumTracker.PowerDrillActivated += mult => _powerDrillPending = true;
 // ── 🆕v3.2 Cascade + Danger Zone → ScoreSystem inputs (✅R7.6) ────
 _chainTracker.LinkAdded      += link => _scoreSystem.CascadeMultiplier = link;  // per board
 _chainTracker.ChainCompleted += _    => _scoreSystem.CascadeMultiplier = 1;
-_airSystem.DangerZoneChanged += d    => _scoreSystem.DangerZone = d;            // once, in Awake
+_ceiling.DangerZoneChanged   += d    => _scoreSystem.DangerZone = d;            // once, in Awake (v3.3: the margin's)
 
 // ── 🆕v3.2 Freefall scoring ──────────────────────────────────────
 _avatar.FreefallCell += () =>
@@ -152,12 +152,12 @@ _gravity.ChunkLanded += chunk => _bombSystem.NotifyChunkLanded(chunk);
 _gravity.ChunkBurst += (cells, fallDistance, color) =>   // 🆕 (color: see §5.2 deviation 3)
 {
     _scoreSystem.AwardBurst(cells.Count, fallDistance);
-    _airSystem.RestoreBurst();
+    _ceiling.RestoreBurst();
 };
 
 // Shockwave side effects are events, NOT handled inside GravitySystem — Core systems
 // must not reference each other, so the wiring lives here.
-_gravity.AirCapsuleLiberated += _   => _airSystem.RestoreCapsule();
+_gravity.AirCapsuleLiberated += _   => _ceiling.RestoreCapsule();
 _gravity.BombArmedByBurst    += pos => _bombSystem.ArmBombAt(pos);
 _gravity.AvatarHitByBurst    += OnAvatarCrushed;         // 🆕 (no arg)
 
@@ -165,16 +165,17 @@ _gravity.AvatarHitByBurst    += OnAvatarCrushed;         // 🆕 (no arg)
 _bombSystem.BombScored += (destroyed, chainMult) =>   // 🔄
 {
     _scoreSystem.AwardBomb(destroyed, chainMult);
-    if (chainMult > 1) _airSystem.RestoreBombChain(chainMult);
+    if (chainMult > 1) _ceiling.RestoreBombChain(chainMult);
 };
-_bombSystem.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();  // 🆕
+_bombSystem.AirCapsuleLiberated += _ => _ceiling.RestoreCapsule();  // 🆕
 _bombSystem.AvatarHitByBlast += _ => OnAvatarCrushed();
 
 // ── Perfect Clear (formerly void-line) ─────────────────────────
 _collapse.PerfectClear += (row, cascadeStep) =>       // 🔄
 {
     _scoreSystem.AwardPerfectClear(cascadeStep);
-    _airSystem.RestorePerfectClear();
+    _ceiling.ShiftDown();            // v3.3: the rubble moved down with everything above
+    _ceiling.RestorePerfectClear();
 };
 
 // ── Depth ──────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ _depthTracker.NewDepthReached += row =>                // 🆕
 
 // ── Endless (🆕R3, §5.15 / §6.3) ───────────────────────────────
 _endless.DepthChanged     += depth => { if (_endlessMode) _scoreSystem.AwardDepth(depth); };
-_endless.DrainRateChanged += rate  => { if (_endlessMode) _airSystem.DrainRate = rate; };
+_endless.CeilingSpeedChanged += speed => { if (_endlessMode) _ceiling.Speed = speed; };  // v3.3
 _endless.SegmentExhausted += _     => _pendingSegmentAdvance = true;   // deferred — see tick step 0
 
 // ── Diamonds (🆕R4) ───────────────────────────────────────────
@@ -208,7 +209,7 @@ _gravity.ChunkLanded += chunk =>
 };
 _gravity.ChunkBurst += (cells, fallDist, color) =>
 {
-    /* ...score/air/shake... */
+    /* ...score/recoil/shake... */
     // LastShockwaveCells is ONLY valid during this event (§ GravitySystem fills it just before
     // firing, R5.12). Read it here — never poll it.
     _enemySystem.NotifyBurst(cells, new List<GridPos>(_gravity.LastShockwaveCells), fallDist);
@@ -223,8 +224,8 @@ _enemySystem.AvatarHitByEnemy += _ => OnAvatarCrushed();
 
 // ✅R5.8/R5.12 Boomer detonation: EnemySystem ALREADY applied the radius-1 blast to the grid (and
 // any chain-reaction kills) before this fires, and reports its own block count — GameBootstrap
-// must NOT re-apply the blast, it only banks what Core can't reach (score, air, shake).
-_enemySystem.AirCapsuleLiberated += _ => _airSystem.RestoreCapsule();
+// must NOT re-apply the blast, it only banks what Core can't reach (score, recoil, shake).
+_enemySystem.AirCapsuleLiberated += _ => _ceiling.RestoreCapsule();
 _enemySystem.DiamondLiberated    += pos => _diamondSystem.NotifyCollected(pos);
 _enemySystem.BoomerDetonated += (pos, parentBonus, blocksDestroyed) =>
 {
@@ -290,12 +291,6 @@ _healthSystem.Tick(dt);
 //    too: falling IS gaining margin (⚡D4 retired with the air drain).
 if (!disableCeiling && !_levelEnding)
     _ceiling.Tick(dt, _avatar.Position.Y + _rowOffset);
-
-// 9b. ✅R8.6 bridge until R8.8: the air never drains (DrainRate 0, no AirDepleted wiring). Its Tick
-//     only runs the start-buffer clock for the HUD grace cue; Mirror makes the air bar / breathe hint /
-//     vignette / heartbeat read the margin. Deleted with AirSystem in R8.9.
-_airSystem.Tick(dt);
-_airSystem.Mirror(_ceiling.LeadPercent);
 
 // 10. ✅R5.12 Enemy movement + avatar collision (grid comes from the constructor since R5.8)
 _enemySystem.Tick(dt, _avatar.Position);

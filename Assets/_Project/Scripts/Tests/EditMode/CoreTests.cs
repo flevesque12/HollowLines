@@ -848,599 +848,6 @@ namespace HollowLines.Tests
         }
     }
 
-    [TestFixture]
-    public class AirSystemTests
-    {
-        // ── R8.6 bridge: Mirror (the HUD air bar shows the Cave-in margin) ──
-
-        [Test]
-        public void Mirror_SetsAir_Clamped_AndFiresOnlyOnChange()
-        {
-            var air = new AirSystem();
-            var seen = new List<float>();
-            air.AirChanged += seen.Add;
-
-            air.Mirror(40f);
-            air.Mirror(40f);   // no change → no event
-            air.Mirror(150f);  // clamps to MaxAir
-            air.Mirror(-5f);   // clamps to 0
-
-            CollectionAssert.AreEqual(new[] { 40f, AirSystem.MaxAir, 0f }, seen);
-            Assert.AreEqual(0f, air.Air);
-        }
-
-        [Test]
-        public void Mirror_DrivesTheDangerZone_ButNeverDepletes()
-        {
-            var air = new AirSystem { DrainRate = 0f };
-            var flips = new List<bool>();
-            bool depleted = false;
-            air.DangerZoneChanged += flips.Add;
-            air.AirDepleted       += () => depleted = true;
-
-            air.Mirror(10f);
-            air.Mirror(0f);
-            air.Tick(1f);      // the bridge ticks the air for its start-buffer clock only
-            air.Mirror(50f);
-
-            CollectionAssert.AreEqual(new[] { true, false }, flips);
-            Assert.IsFalse(depleted, "the Cave-in front does the killing, never the mirrored air");
-        }
-
-        [Test]
-        public void ZeroDrain_StartBuffer_StillTimesTheGraceCue()
-        {
-            var air = new AirSystem { DrainRate = 0f };
-            air.BeginStartBuffer(5f);
-
-            air.Tick(2f);
-            Assert.IsTrue(air.InStartGrace);
-            Assert.AreEqual(3f, air.StartGraceRemaining, 1e-4f);
-
-            air.Tick(4f);
-            Assert.IsFalse(air.InStartGrace);
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, "zero drain never moves the air");
-        }
-
-        private const float Delta = 0.001f;
-
-        [Test]
-        public void StartsAtFullAir()
-        {
-            var air = new AirSystem();
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-            Assert.IsFalse(air.IsEmpty);
-        }
-
-        // ── R6.2 start buffer ───────────────────────────────────────
-
-        [Test]
-        public void StartBuffer_NotBegun_FactorIsOne_FullDrainFromFrameZero()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            Assert.AreEqual(1f, air.StartBufferFactor, Delta);
-            Assert.IsFalse(air.InStartGrace);
-
-            air.Tick(1f);
-            Assert.AreEqual(AirSystem.MaxAir - 4f, air.Air, Delta, "opt-in: no buffer unless BeginStartBuffer is called");
-        }
-
-        [Test]
-        public void StartBuffer_Grace_DrainsNothing_AndStaysSilent()
-        {
-            var air = new AirSystem { DrainRate = 7f };
-            int changed = 0;
-            air.AirChanged += _ => changed++;
-            air.BeginStartBuffer(3f);
-
-            air.Tick(2.9f);
-
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-            Assert.IsTrue(air.InStartGrace);
-            Assert.AreEqual(0f, air.EffectiveDrainRate, Delta);
-            Assert.AreEqual(0, changed, "nothing drained → no HUD update");
-        }
-
-        [Test]
-        public void StartGraceRemaining_CountsDown_ThenZero()
-        {
-            var air = new AirSystem();
-            Assert.AreEqual(0f, air.StartGraceRemaining, Delta, "no buffer → no countdown");
-
-            air.BeginStartBuffer(3f);
-            Assert.AreEqual(3f, air.StartGraceRemaining, Delta);
-            Assert.AreEqual(3f, air.StartGraceDuration, Delta);
-
-            air.Tick(1.25f);
-            Assert.AreEqual(1.75f, air.StartGraceRemaining, Delta);
-
-            air.Tick(2f);
-            Assert.AreEqual(0f, air.StartGraceRemaining, Delta, "in the ramp, the countdown is over");
-        }
-
-        [Test]
-        public void StartBuffer_RampBeginsAtStartDrainFactor()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            air.BeginStartBuffer(0f);
-
-            Assert.IsFalse(air.InStartGrace);
-            Assert.AreEqual(AirSystem.StartDrainFactor, air.StartBufferFactor, Delta);
-            Assert.AreEqual(4f * AirSystem.StartDrainFactor, air.EffectiveDrainRate, Delta);
-        }
-
-        [Test]
-        public void StartBuffer_WholeWindow_DrainsExactlyTheRampArea()
-        {
-            // 3 s grace (0) + 12 s ramp 0.5→1 (area 0.5·12 + ½·(0.5/12)·12² = 9 full-rate seconds).
-            var air = new AirSystem { DrainRate = 4f };
-            air.BeginStartBuffer(3f);
-
-            air.Tick(3f + AirSystem.StartRampDuration);
-
-            Assert.AreEqual(AirSystem.MaxAir - 4f * 9f, air.Air, 0.01f);
-            Assert.AreEqual(1f, air.StartBufferFactor, Delta, "buffer is over");
-        }
-
-        [Test]
-        public void StartBuffer_ManySmallTicks_MatchOneBigTick()
-        {
-            var big = new AirSystem { DrainRate = 7f };
-            var small = new AirSystem { DrainRate = 7f };
-            big.BeginStartBuffer(3f);
-            small.BeginStartBuffer(3f);
-
-            big.Tick(10f);
-            for (int i = 0; i < 600; i++) small.Tick(10f / 600f);
-
-            Assert.AreEqual(big.Air, small.Air, 0.01f, "drain is integrated, not frame-rate dependent");
-        }
-
-        [Test]
-        public void StartBuffer_FrameStraddlingGraceEnd_DrainsOnlyThePostGracePart()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            air.BeginStartBuffer(3f);
-
-            air.Tick(4f); // 3 s grace + 1 s of ramp: area 0.5 + ½·(0.5/12)·1² ≈ 0.5208
-
-            Assert.AreEqual(AirSystem.MaxAir - 4f * 0.520833f, air.Air, Delta);
-        }
-
-        [Test]
-        public void StartBuffer_AfterRamp_DrainsAtFullRate()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            air.BeginStartBuffer(3f);
-            air.Tick(3f + AirSystem.StartRampDuration);
-            float before = air.Air;
-
-            air.Tick(1f);
-
-            Assert.AreEqual(before - 4f, air.Air, Delta);
-        }
-
-        [Test]
-        public void StartBuffer_Reset_CancelsIt()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            air.BeginStartBuffer(3f);
-            air.Reset();
-
-            air.Tick(1f);
-
-            Assert.AreEqual(AirSystem.MaxAir - 4f, air.Air, Delta);
-        }
-
-        [Test]
-        public void StartBuffer_BeginAgain_RestartsTheClock()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            air.BeginStartBuffer(3f);
-            air.Tick(10f);
-            float before = air.Air;
-
-            air.BeginStartBuffer(3f);
-            air.Tick(2f);
-
-            Assert.AreEqual(before, air.Air, Delta, "a new board opens a new grace window");
-        }
-
-        [Test]
-        public void StartBuffer_NegativeGrace_ClampsToZero()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            air.BeginStartBuffer(-5f);
-
-            Assert.IsFalse(air.InStartGrace);
-            Assert.AreEqual(AirSystem.StartDrainFactor, air.StartBufferFactor, Delta);
-        }
-
-        [Test]
-        public void StartBuffer_RestoresStillWorkDuringGrace()
-        {
-            var air = new AirSystem { DrainRate = 4f };
-            air.Tick(5f);                 // 80 %
-            air.BeginStartBuffer(3f);
-            air.RestoreCapsule();
-
-            Assert.AreEqual(80f + AirSystem.CapsuleRestoreAmount, air.Air, Delta);
-        }
-
-        [Test]
-        public void Tick_DrainsAtCorrectRate()
-        {
-            var air = new AirSystem();
-            air.Tick(1f);
-            Assert.AreEqual(AirSystem.MaxAir - AirSystem.DefaultDrainRate, air.Air, Delta);
-        }
-
-        [Test]
-        public void Tick_UsesCustomDrainRate()
-        {
-            var air = new AirSystem { DrainRate = 3f };
-            air.Tick(2f);
-            Assert.AreEqual(AirSystem.MaxAir - 6f, air.Air, Delta);
-        }
-
-        [Test]
-        public void Tick_FiresAirChanged()
-        {
-            var air = new AirSystem();
-            float? reported = null;
-            air.AirChanged += v => reported = v;
-
-            air.Tick(1f);
-
-            Assert.IsNotNull(reported);
-            Assert.AreEqual(air.Air, reported.Value, Delta);
-        }
-
-        [Test]
-        public void Tick_ClampsAtZero_NeverNegative()
-        {
-            var air = new AirSystem();
-            // drain for far longer than it takes to empty
-            for (int i = 0; i < 1000; i++)
-                air.Tick(1f);
-
-            Assert.AreEqual(0f, air.Air, Delta);
-            Assert.IsTrue(air.IsEmpty);
-        }
-
-        [Test]
-        public void AirDepleted_FiresExactlyOnce()
-        {
-            var air = new AirSystem();
-            int count = 0;
-            air.AirDepleted += () => count++;
-
-            for (int i = 0; i < 1000; i++)
-                air.Tick(1f);
-
-            Assert.AreEqual(1, count, "AirDepleted must fire exactly once per run");
-        }
-
-        [Test]
-        public void Tick_StopsChangingAfterEmpty()
-        {
-            var air = new AirSystem();
-            for (int i = 0; i < 1000; i++)
-                air.Tick(1f);
-
-            int extraChanges = 0;
-            air.AirChanged += _ => extraChanges++;
-
-            air.Tick(1f);
-            air.Tick(1f);
-
-            Assert.AreEqual(0, extraChanges, "no AirChanged events once already at 0");
-        }
-
-        [Test]
-        public void RestorePerfectClear_AddsCorrectAmount()
-        {
-            var air = new AirSystem();
-            air.Tick(10f); // drain 50 % (DrainRate=5, 10s)
-            float before = air.Air;
-
-            air.RestorePerfectClear();
-
-            Assert.AreEqual(before + AirSystem.PerfectClearRestoreAmount, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestorePerfectClear_ClampsAtMax()
-        {
-            var air = new AirSystem();
-            // already full — restore should do nothing
-            air.RestorePerfectClear();
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreCapsule_AddsCorrectAmount()
-        {
-            var air = new AirSystem();
-            air.Tick(10f); // drain 50 %
-            float before = air.Air;
-
-            air.RestoreCapsule();
-
-            Assert.AreEqual(before + AirSystem.CapsuleRestoreAmount, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreCapsule_ClampsAtMax()
-        {
-            var air = new AirSystem();
-            air.Tick(1f); // drain just 5 %
-            air.RestoreCapsule(); // +25 % would overfill — must clamp
-
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestorePerfectClear_FiresAirChanged()
-        {
-            var air = new AirSystem();
-            air.Tick(10f); // drain so restore has room
-            float? reported = null;
-            air.AirChanged += v => reported = v;
-
-            air.RestorePerfectClear();
-
-            Assert.IsNotNull(reported);
-            Assert.AreEqual(air.Air, reported.Value, Delta);
-        }
-
-        // ── v3 restore sources: burst + bomb chain ───────────────────────────
-
-        [Test]
-        public void RestoreBurst_AddsItsConfiguredAmount()
-        {
-            var air = new AirSystem();
-            air.Tick(10f); // drain to 50 %
-            Assert.AreEqual(50f, air.Air, Delta, "precondition");
-
-            air.RestoreBurst();
-
-            Assert.AreEqual(50f + AirSystem.BurstRestoreAmount, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreBurst_ClampsAtMax()
-        {
-            var air = new AirSystem();
-            air.Tick(0.05f);    // drain a sliver
-            air.RestoreBurst(); // would overfill
-
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreBombChain_ScalesWithBombCount()
-        {
-            var air = new AirSystem();
-            air.Tick(10f); // drain to 50 %
-
-            air.RestoreBombChain(3);
-
-            Assert.AreEqual(50f + 3 * AirSystem.BombChainRestorePerBomb, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreEconomy_IsSmallRelativeToDrain()
-        {
-            // §15.1 regression guard: these were 20× oversupplied and made the air clock
-            // decorative. A single burst must never be worth more than a second of drain.
-            Assert.Less(AirSystem.BurstRestoreAmount, AirSystem.DefaultDrainRate,
-                "one burst must not out-earn a second of drain");
-            Assert.Less(AirSystem.CapsuleRestoreAmount, 3f * AirSystem.DefaultDrainRate,
-                "a capsule is a find, not a refill");
-            Assert.LessOrEqual(AirSystem.DrillRestoreAmount, AirSystem.BurstRestoreAmount,
-                "drill restore is the survival floor, not a shortcut — it must never out-earn any other source");
-        }
-
-        // ── v3.1 arcade pivot: drill restore (§8, §6.1) ───────────────────────
-
-        [Test]
-        public void RestoreDrill_AddsCorrectAmount()
-        {
-            var air = new AirSystem();
-            air.Tick(10f); // drain to 50 %
-            Assert.AreEqual(50f, air.Air, Delta, "precondition");
-
-            air.RestoreDrill();
-
-            Assert.AreEqual(50.5f, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreDrill_ClampsAtMax()
-        {
-            var air = new AirSystem();
-            air.Tick(0.04f); // drain 0.2 % → Air = 99.8
-            Assert.AreEqual(99.8f, air.Air, Delta, "precondition");
-
-            air.RestoreDrill(); // +0.5 % would overfill to 100.3
-
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreDrill_TenTimesFromNinetyFive_ClampsAtMax_NoHigher()
-        {
-            var air = new AirSystem();
-            air.Tick(1f); // drain 5 % → Air = 95
-            Assert.AreEqual(95f, air.Air, Delta, "precondition");
-
-            for (int i = 0; i < 10; i++)
-                air.RestoreDrill();
-
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta, "must clamp at 100, never overshoot");
-        }
-
-        [Test]
-        public void RestoreBombChain_ClampsAtMax()
-        {
-            var air = new AirSystem();
-            air.Tick(1f);              // drain 5 %
-            air.RestoreBombChain(20);  // +60 % would massively overfill
-
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-        }
-
-        [Test]
-        public void RestoreBombChain_NonPositiveCount_RestoresNothing()
-        {
-            var air = new AirSystem();
-            air.Tick(10f);
-            float before = air.Air;
-
-            air.RestoreBombChain(0);
-            air.RestoreBombChain(-5);
-
-            Assert.AreEqual(before, air.Air, Delta, "a bad caller must never move the air bar");
-        }
-
-        [Test]
-        public void RestoreBurst_AndBombChain_FireAirChanged()
-        {
-            var air = new AirSystem();
-            air.Tick(10f);
-            int changes = 0;
-            air.AirChanged += _ => changes++;
-
-            air.RestoreBurst();
-            air.RestoreBombChain(2);
-
-            Assert.AreEqual(2, changes, "each restore that moves the bar reports once");
-        }
-
-        [Test]
-        public void Reset_RestoresFullAirAndClearsDepleted()
-        {
-            var air = new AirSystem();
-            for (int i = 0; i < 1000; i++)
-                air.Tick(1f);
-            Assert.IsTrue(air.IsEmpty);
-
-            air.Reset();
-
-            Assert.AreEqual(AirSystem.MaxAir, air.Air, Delta);
-            Assert.IsFalse(air.IsEmpty);
-
-            // AirDepleted should be able to fire again after reset
-            int count = 0;
-            air.AirDepleted += () => count++;
-            for (int i = 0; i < 1000; i++)
-                air.Tick(1f);
-            Assert.AreEqual(1, count, "AirDepleted fires again after Reset()");
-        }
-
-        // ── v3.2 Danger Zone (drill-momentum.md §M3.4) ───────────────────────
-
-        /// <summary>An AirSystem drained to exactly `air` % in one tick (no start buffer).</summary>
-        private static AirSystem AirAt(float air)
-        {
-            var sys = new AirSystem { DrainRate = AirSystem.MaxAir - air };
-            sys.Tick(1f);
-            return sys;
-        }
-
-        [Test]
-        public void DangerZone_OffAtFullAir()
-        {
-            Assert.IsFalse(new AirSystem().IsDangerZone);
-        }
-
-        [Test]
-        public void DangerZone_StrictlyBelowThreshold()
-        {
-            Assert.IsFalse(AirAt(AirSystem.DangerZoneThreshold).IsDangerZone, "exactly 15 % is not danger");
-            Assert.IsTrue(AirAt(AirSystem.DangerZoneThreshold - 0.1f).IsDangerZone);
-            Assert.AreEqual(15f, AirSystem.DangerZoneThreshold);
-        }
-
-        [Test]
-        public void DangerZoneChanged_FiresOnceOnEntering()
-        {
-            var air = new AirSystem { DrainRate = 10f };
-            var flips = new List<bool>();
-            air.DangerZoneChanged += flips.Add;
-
-            air.Tick(8f);  // 20 %
-            CollectionAssert.IsEmpty(flips, "no flip above the threshold");
-            air.Tick(0.6f); // 14 %
-            air.Tick(0.5f); //  9 % — still inside
-            air.Tick(0.5f); //  4 %
-
-            CollectionAssert.AreEqual(new[] { true }, flips);
-        }
-
-        [Test]
-        public void DangerZoneChanged_FiresFalse_WhenARestoreLiftsAirOut()
-        {
-            var air = AirAt(12f);
-            var flips = new List<bool>();
-            air.DangerZoneChanged += flips.Add;
-
-            air.RestoreCapsule(); // +6 → 18 %
-
-            Assert.IsFalse(air.IsDangerZone);
-            CollectionAssert.AreEqual(new[] { false }, flips);
-        }
-
-        [Test]
-        public void DangerZone_SmallRestoreThatStaysInside_DoesNotFlip()
-        {
-            var air = AirAt(10f);
-            int flips = 0;
-            air.DangerZoneChanged += _ => flips++;
-
-            air.RestoreDrill(); // 10.5 %
-
-            Assert.IsTrue(air.IsDangerZone);
-            Assert.AreEqual(0, flips);
-        }
-
-        [Test]
-        public void DangerZone_Reset_LeavesTheZone()
-        {
-            var air = AirAt(5f);
-            var flips = new List<bool>();
-            air.DangerZoneChanged += flips.Add;
-
-            air.Reset();
-
-            Assert.IsFalse(air.IsDangerZone);
-            CollectionAssert.AreEqual(new[] { false }, flips);
-        }
-
-        [Test]
-        public void DangerZoneChanged_FiresAfterAirChanged()
-        {
-            var air = new AirSystem { DrainRate = 90f };
-            var log = new List<string>();
-            air.AirChanged        += a => log.Add("air");
-            air.DangerZoneChanged += d => log.Add("danger");
-
-            air.Tick(1f);
-
-            CollectionAssert.AreEqual(new[] { "air", "danger" }, log);
-        }
-
-        [Test]
-        public void DangerZone_StillOnWhenDepleted()
-        {
-            var air = AirAt(0f);
-
-            Assert.IsTrue(air.IsEmpty);
-            Assert.IsTrue(air.IsDangerZone);
-        }
-    }
-
     /// <summary>R8.1 — the Cave-in front (cave-in.md §3.3). Rows are absolute.</summary>
     [TestFixture]
     public class CeilingSystemTests
@@ -1511,18 +918,6 @@ namespace HollowLines.Tests
             c.Speed = 1f;
             c.Tick(-1f, 20);
             Assert.AreEqual(8f, c.CeilingRow, Delta, "negative dt is ignored");
-        }
-
-        [Test]
-        public void SpeedForDrainRate_TranslatesTheMeasuredAirBalance()
-        {
-            // §2.2: same standing-still time as the drain it replaces.
-            Assert.AreEqual(0.48f, CeilingSystem.SpeedForDrainRate(4f), Delta);
-            Assert.AreEqual(0.84f, CeilingSystem.SpeedForDrainRate(7f), Delta);
-            Assert.AreEqual(0.60f, CeilingSystem.SpeedForDrainRate(5f), Delta);
-            Assert.AreEqual(1.20f, CeilingSystem.SpeedForDrainRate(10f), Delta);
-            Assert.AreEqual(0f,    CeilingSystem.SpeedForDrainRate(-2f), Delta);
-            Assert.AreEqual(CeilingSystem.DefaultSpeed, CeilingSystem.SpeedForDrainRate(5f), Delta);
         }
 
         [Test]
@@ -1729,9 +1124,9 @@ namespace HollowLines.Tests
         [Test]
         public void CapsuleRecoil_IsWorthAboutTheOldCapsule()
         {
-            // The old capsule was +6 % air (AirSystem.CapsuleRestoreAmount) — same share of the leash,
-            // and like the air guard (§15.1) never more than 3 s of the front at its default speed.
-            Assert.AreEqual(AirSystem.CapsuleRestoreAmount * CeilingSystem.DefaultMaxLead / 100f,
+            // The old capsule was +6 % air — same share of the leash, and like the old air guard (§15.1)
+            // never more than 3 s of the front at its default speed.
+            Assert.AreEqual(6f * CeilingSystem.DefaultMaxLead / 100f,
                             CeilingSystem.CapsuleRecoil, 0.05f);
             Assert.Less(CeilingSystem.CapsuleRecoil, 3f * CeilingSystem.DefaultSpeed);
         }
@@ -4754,15 +4149,6 @@ namespace HollowLines.Tests
         }
 
         [Test]
-        public void Campaign_DrainRate_Ramp()
-        {
-            Assert.AreEqual(4f, CampaignManager.DrainRateForLevel(1));
-            Assert.AreEqual(4f, CampaignManager.DrainRateForLevel(3));
-            Assert.AreEqual(7f, CampaignManager.DrainRateForLevel(4), "§15.1: drain bites once runs are long enough");
-            Assert.AreEqual(7f, CampaignManager.DrainRateForLevel(10));
-        }
-
-        [Test]
         public void Campaign_WobbleDuration_Ramp()
         {
             Assert.AreEqual(0.8f, CampaignManager.WobbleDurationForLevel(1));
@@ -4771,29 +4157,15 @@ namespace HollowLines.Tests
             Assert.AreEqual(0.6f, CampaignManager.WobbleDurationForLevel(10));
         }
 
-        [Test]
-        public void AirStartGraceForLevel_LongerOnOnboardingLevels()
-        {
-            Assert.AreEqual(5f, CampaignManager.AirStartGraceForLevel(1));
-            Assert.AreEqual(5f, CampaignManager.AirStartGraceForLevel(3));
-            Assert.AreEqual(AirSystem.DefaultStartGrace, CampaignManager.AirStartGraceForLevel(4));
-            Assert.AreEqual(AirSystem.DefaultStartGrace, CampaignManager.AirStartGraceForLevel(10));
-        }
-
         // ── R8.5 Cave-in speeds (cave-in.md §2.2) ───────────────────
 
         [Test]
-        public void CeilingSpeedForLevel_IsTheDrainTranslated()
+        public void CeilingSpeedForLevel_SlowOnOnboardingLevels()
         {
             Assert.AreEqual(0.48f, CampaignManager.CeilingSpeedForLevel(1), 1e-4f);
             Assert.AreEqual(0.48f, CampaignManager.CeilingSpeedForLevel(3), 1e-4f);
             Assert.AreEqual(0.84f, CampaignManager.CeilingSpeedForLevel(4), 1e-4f);
             Assert.AreEqual(0.84f, CampaignManager.CeilingSpeedForLevel(10), 1e-4f);
-
-            // Same 25 s / 14 s to die standing still as the air (until R8.7 recalibrates; R8.9 drops this guard).
-            for (int level = 1; level <= CampaignManager.LevelCount; level++)
-                Assert.AreEqual(CeilingSystem.SpeedForDrainRate(CampaignManager.DrainRateForLevel(level)),
-                                CampaignManager.CeilingSpeedForLevel(level), 1e-4f, $"level {level}");
         }
 
         [Test]
@@ -6698,57 +6070,14 @@ namespace HollowLines.Tests
         private static int BoardHeight(EndlessManager m) =>
             StrateGenerator.SpawnRows + m.SegmentRows + StrateGenerator.FloorRows;
 
-        // ── Air drain ramp (GDD §7: 5.0 + depth/20 × 0.5, capped at 10) ───────
+        // ── Cave-in speed ramp (cave-in.md §2.2: 0.6 + 0.06 per 20 rows, capped at 1.2) ──
 
         [Test]
-        public void DrainRateForDepth_FollowsTheGddCurve()
-        {
-            Assert.AreEqual(5.0f, EndlessManager.DrainRateForDepth(0),   0.0001f);
-            Assert.AreEqual(5.5f, EndlessManager.DrainRateForDepth(20),  0.0001f);
-            Assert.AreEqual(7.5f, EndlessManager.DrainRateForDepth(100), 0.0001f);
-        }
-
-        [Test]
-        public void DrainRateForDepth_IsCappedAtMax()
-        {
-            Assert.AreEqual(EndlessManager.MaxDrainRate, EndlessManager.DrainRateForDepth(200),   0.0001f);
-            Assert.AreEqual(EndlessManager.MaxDrainRate, EndlessManager.DrainRateForDepth(10000), 0.0001f);
-        }
-
-        [Test]
-        public void DrainRateForDepth_NegativeDepth_ClampsToBase()
-        {
-            Assert.AreEqual(EndlessManager.BaseDrainRate, EndlessManager.DrainRateForDepth(-5), 0.0001f);
-        }
-
-        [Test]
-        public void DescendingRaisesTheDrainRate_AndFiresTheEvent()
-        {
-            var endless = new EndlessManager(seed: 1);
-            float? fired = null;
-            endless.DrainRateChanged += r => fired = r;
-
-            Assert.AreEqual(EndlessManager.BaseDrainRate, endless.DrainRate, 0.0001f);
-
-            endless.NotifyAvatarPosition(new GridPos(3, StrateGenerator.SpawnRows + 40), BoardHeight(endless));
-
-            Assert.AreEqual(EndlessManager.DrainRateForDepth(40), endless.DrainRate, 0.0001f);
-            Assert.IsNotNull(fired);
-            Assert.Greater(endless.DrainRate, EndlessManager.BaseDrainRate);
-        }
-
-        // ── R8.5 Cave-in speed ramp (cave-in.md §2.2: the drain curve × 12 / 100) ──
-
-        [Test]
-        public void CeilingSpeedForDepth_IsTheDrainCurveTranslated()
+        public void CeilingSpeedForDepth_RampsWithDepth()
         {
             Assert.AreEqual(0.60f, EndlessManager.CeilingSpeedForDepth(0),   1e-4f);
             Assert.AreEqual(0.66f, EndlessManager.CeilingSpeedForDepth(20),  1e-4f);
             Assert.AreEqual(0.90f, EndlessManager.CeilingSpeedForDepth(100), 1e-4f);
-
-            for (int depth = 0; depth <= 300; depth += 10)
-                Assert.AreEqual(CeilingSystem.SpeedForDrainRate(EndlessManager.DrainRateForDepth(depth)),
-                                EndlessManager.CeilingSpeedForDepth(depth), 1e-4f, $"depth {depth}");
         }
 
         [Test]
@@ -6936,7 +6265,7 @@ namespace HollowLines.Tests
             Assert.AreEqual(0,  endless.SegmentIndex);
             Assert.AreEqual(0,  endless.SegmentStartDepth);
             Assert.AreEqual(0,  endless.Depth);
-            Assert.AreEqual(EndlessManager.BaseDrainRate, endless.DrainRate, 0.0001f);
+            Assert.AreEqual(EndlessManager.BaseCeilingSpeed, endless.CeilingSpeed, 0.0001f);
         }
     }
 
@@ -7785,33 +7114,24 @@ namespace HollowLines.Tests
         }
 
         [Test]
-        public void NotifyDeath_WithoutLead_ReportHasNone()
-        {
-            var t = new DeathTracker();
-            t.NotifyDeath(DeathCause.ChunkCrush, P, 40f);
-            Assert.IsFalse(t.Report.Value.Lead.HasValue, "the air game reports air, not a margin");
-        }
-
-        [Test]
         public void NotifyDeath_WithLead_CarriesIt_AndClampsNegative()
         {
             var a = new DeathTracker();
-            a.NotifyDeath(DeathCause.BombBlast, P, 100f, lead: 7.5f);
-            Assert.AreEqual(7.5f, a.Report.Value.Lead.Value, 1e-5f);
+            a.NotifyDeath(DeathCause.BombBlast, P, 7.5f);
+            Assert.AreEqual(7.5f, a.Report.Value.Lead, 1e-5f);
 
             var b = new DeathTracker();
-            b.NotifyDeath(DeathCause.CaveIn, P, 100f, lead: -1f);
-            Assert.AreEqual(0f, b.Report.Value.Lead.Value, 1e-5f);
+            b.NotifyDeath(DeathCause.CaveIn, P, -1f);
+            Assert.AreEqual(0f, b.Report.Value.Lead, 1e-5f);
             Assert.AreEqual(DeathCause.CaveIn, b.Report.Value.Cause);
         }
 
         [Test]
-        public void NotifyHit_IgnoresNoneAndSuffocation_ClampsNegativeHearts()
+        public void NotifyHit_IgnoresNone_ClampsNegativeHearts()
         {
             var t = new DeathTracker();
             t.NotifyHit(DeathCause.None, P, 2);
-            t.NotifyHit(DeathCause.Suffocation, P, 2);
-            Assert.AreEqual(0, t.Hits.Count, "neither is a heart hit");
+            Assert.AreEqual(0, t.Hits.Count, "None is not a heart hit");
 
             t.NotifyHit(DeathCause.Enemy, P, -1);
             Assert.AreEqual(0, t.Hits[0].HeartsLeft);
@@ -7842,36 +7162,36 @@ namespace HollowLines.Tests
             t.NotifyHit(DeathCause.BurstShockwave, P, 1);
             t.NotifyHit(DeathCause.ChunkCrush, P, 0);
 
-            Assert.IsTrue(t.NotifyDeath(DeathCause.ChunkCrush, P, 42f));
-            Assert.IsFalse(t.NotifyDeath(DeathCause.Suffocation, P, 0f), "same frame, second cause → ignored");
+            Assert.IsTrue(t.NotifyDeath(DeathCause.ChunkCrush, P, 4.2f));
+            Assert.IsFalse(t.NotifyDeath(DeathCause.CaveIn, P, 0f), "same frame, second cause → ignored");
 
             Assert.AreEqual(1, fired);
             Assert.IsTrue(t.IsDead);
             Assert.AreEqual(DeathCause.ChunkCrush, got.Cause);
             Assert.AreEqual(3, got.Hits.Count);
             Assert.AreEqual(DeathCause.BurstShockwave, got.Hits[1].Cause, "hits are oldest first");
-            Assert.AreEqual(42f, got.Air, 1e-5f);
+            Assert.AreEqual(4.2f, got.Lead, 1e-5f);
             Assert.AreEqual(4f, got.Time, 1e-5f);
             Assert.IsTrue(t.Report.HasValue);
         }
 
         [Test]
-        public void NotifyDeath_Suffocation_CarriesTimeSinceLastDrill()
+        public void NotifyDeath_CaveIn_CarriesTimeSinceLastDrill()
         {
             var t = new DeathTracker();
             t.Tick(1f);
             t.NotifyDrill();
             t.Tick(6f);
 
-            t.NotifyDeath(DeathCause.Suffocation, P, -3f);
+            t.NotifyDeath(DeathCause.CaveIn, P, -3f);
 
-            Assert.AreEqual(DeathCause.Suffocation, t.Report.Value.Cause);
+            Assert.AreEqual(DeathCause.CaveIn, t.Report.Value.Cause);
             Assert.AreEqual(6f, t.Report.Value.TimeSinceLastDrill, 1e-5f);
-            Assert.AreEqual(0f, t.Report.Value.Air, "negative air clamps to 0");
+            Assert.AreEqual(0f, t.Report.Value.Lead, "a negative margin clamps to 0");
         }
 
         [Test]
-        public void NotifyDeath_None_FallsBackToLastHit_ThenSuffocation()
+        public void NotifyDeath_None_FallsBackToLastHit_ThenCaveIn()
         {
             var a = new DeathTracker();
             a.NotifyHit(DeathCause.Enemy, P, 0);
@@ -7880,7 +7200,7 @@ namespace HollowLines.Tests
 
             var b = new DeathTracker();
             b.NotifyDeath(DeathCause.None, P, 0f);
-            Assert.AreEqual(DeathCause.Suffocation, b.Report.Value.Cause);
+            Assert.AreEqual(DeathCause.CaveIn, b.Report.Value.Cause);
         }
 
         [Test]
@@ -7931,7 +7251,7 @@ namespace HollowLines.Tests
             Assert.AreEqual(0f, t.TimeSinceLastDrill);
             Assert.AreEqual(0, t.Hits.Count);
 
-            Assert.IsTrue(t.NotifyDeath(DeathCause.Suffocation, P, 0f));
+            Assert.IsTrue(t.NotifyDeath(DeathCause.CaveIn, P, 0f));
             Assert.AreEqual(2, fired);
         }
     }

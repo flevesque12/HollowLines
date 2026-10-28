@@ -11,7 +11,7 @@ namespace HollowLines.View
     /// Not a MonoBehaviour and not its own UIDocument — UIScreenManager owns the one overlay panel,
     /// so this just builds a VisualElement subtree into it and fills it from a DeathReport:
     ///   1. the killer, big and red ("Écrasé par un bloc");
-    ///   2. one diagnostic line (time since the last drill for suffocation, run time otherwise);
+    ///   2. one diagnostic line (time since the last drill for a cave-in, the margin left otherwise);
     ///   3. a one-sentence tip that maps the cause back to the telegraph the player missed;
     ///   4. the run's heart-loss timeline, so a 3-hit death reads as three separate mistakes.
     /// All player-facing text is French (§12); the data comes from Core.DeathTracker.
@@ -114,7 +114,7 @@ namespace HollowLines.View
             for (int i = first; i < hits.Count; i++)
             {
                 var hit   = hits[i];
-                bool last = i == hits.Count - 1 && report.Cause != DeathCause.Suffocation;
+                bool last = i == hits.Count - 1;
                 _timeline.Add(Row(Clock(hit.Time), CauseTitle(hit.Cause),
                                   hit.HeartsLeft > 0 ? $"reste {hit.HeartsLeft}" : "K.O.",
                                   last ? ColDanger : Color.white));
@@ -165,26 +165,22 @@ namespace HollowLines.View
                 case DeathCause.BurstShockwave: return "Pris dans un éclatement";
                 case DeathCause.BombBlast:      return "Soufflé par une bombe";
                 case DeathCause.Enemy:          return "Mordu par un Crawler";
-                case DeathCause.Suffocation:    return "À court d'air";
                 case DeathCause.CaveIn:         return "Rattrapé par l'éboulement";
                 default:                        return "Mort mystérieuse";
             }
         }
 
         /// <summary>
-        /// The one diagnostic line under the killer. Suffocation and the Cave-in are both "you stopped
-        /// drilling", so they show the time since the last drill; any other hit shows when it landed and
-        /// what was left of the clock — the Cave-in margin once the front runs the game (R8.5), else the air.
+        /// The one diagnostic line under the killer. A cave-in means "you stopped drilling", so it shows the
+        /// time since the last drill; any other hit shows when it landed and the Cave-in margin left (R8.5).
         /// </summary>
         public static string DetailLine(DeathReport report)
         {
-            if (report.Cause == DeathCause.Suffocation || report.Cause == DeathCause.CaveIn)
+            if (report.Cause == DeathCause.CaveIn)
                 return $"Dernier forage il y a {Seconds(report.TimeSinceLastDrill)}  ·  après {Clock(report.Time)}";
 
-            string left = report.Lead.HasValue
-                ? $"marge {report.Lead.Value.ToString("0.#", Fr)} rangée{(report.Lead.Value >= 2f ? "s" : "")}"
-                : $"air restant {Mathf.RoundToInt(report.Air)} %";
-            return $"Coup fatal à {Clock(report.Time)}  ·  {left}";
+            string rows = report.Lead >= 2f ? "rangées" : "rangée";
+            return $"Coup fatal à {Clock(report.Time)}  ·  marge {report.Lead.ToString("0.#", Fr)} {rows}";
         }
 
         /// <summary>
@@ -205,8 +201,6 @@ namespace HollowLines.View
                     return "une bombe armée clignote 1,5 s avant d'exploser en croix. Sors de sa ligne et de sa colonne.";
                 case DeathCause.Enemy:
                     return "un Crawler réveillé patrouille sa rangée. Écrase-le avec un bloc ou change de rangée.";
-                case DeathCause.Suffocation:
-                    return "chaque forage redonne de l'air. Continue de forer vers le bas et ramasse les capsules.";
                 case DeathCause.CaveIn:
                     return "le puits s'effondre derrière toi. Fore vers le bas sans t'arrêter — les capsules, les éclatements et les bombes le font reculer.";
                 default:

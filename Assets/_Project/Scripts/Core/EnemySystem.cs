@@ -72,7 +72,7 @@ namespace HollowLines.Core
         /// <summary>
         /// A Boomer's blast freed an air capsule instead of destroying it (same principle as
         /// BombSystem.AirCapsuleLiberated — design rule 3, bombs/booms are friends).
-        /// Caller wires this to AirSystem.RestoreCapsule().
+        /// Caller wires this to CeilingSystem.RestoreCapsule() (R8.6: the capsule pushes the front back).
         /// </summary>
         public event Action<GridPos> AirCapsuleLiberated;
 

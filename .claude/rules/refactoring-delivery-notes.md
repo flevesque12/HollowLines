@@ -1347,3 +1347,26 @@ labelled **"ÉBOULEMENT"**.
 
 **Not done here (R8.9):** help pages still describe air; `AirSystem` + its tests + `Mirror` + `DeathCause.Suffocation`
 still exist (unused by the game). **Listen in play mode**: the rumble level was set by reasoning, not by ear.
+
+### R8.9 — Cleanup: the air is gone — 2026-10-28 (R8 COMPLETE)
+
+**462/462 in Unity** (EditMode, compiled clean), harness builds, help page screenshot-checked. Details: `cave-in.md` §13.
+
+- **Core:** `AirSystem.cs` deleted (incl. the R8.6 `Mirror` bridge). `DeathCause.Suffocation` removed — it sat
+  before `CaveIn`, so `CaveIn`'s value moved; safe, no enum value is persisted. `CampaignManager` lost
+  `DrainRateForLevel` / `AirStartGraceForLevel`; `EndlessManager` lost the whole drain ramp (its depth→speed ramp
+  now has its own `CeilingStepRows`); `CeilingSystem.SpeedForDrainRate` removed. Comments that pointed at
+  `AirSystem.RestoreCapsule` / `IsDangerZone` now point at `CeilingSystem`.
+- **`DeathReport`:** `Air` field gone, `Lead` non-nullable, `NotifyDeath(cause, position, lead)`; `None` with no
+  recorded hit falls back to `CaveIn`. `DeathRecapView.DetailLine` lost its air branch.
+- **Tests:** −54 (46 `AirSystemTests`, 8 drain / translation-guard tests). The DeathTracker suite was rewritten
+  around `CaveIn` + `Lead`; the speed tests keep their literal values but no longer pin the old drain translation.
+- **Help:** page 5 is "L'ÉBOULEMENT ET LES CŒURS"; "capsules d'air" → "étais"; pages 1/3/4 lost their air lines.
+  **Screenshot fix:** the first wording left ~5 px under the card at 1280×720 → two lines shortened to fit on one
+  line each (~24 px margin now; page 6 stays the tightest at 693/720).
+- **Docs:** CLAUDE.md pitch, v3 bullets, a new "v3.3 The Cave-in" section and rules 1/3/4/5/10 rewritten (the
+  `cave-in.md` §7 proposal, adopted); architecture §3.3/§7 now show `CeilingSystem` wiring; GDD updated to v3.3
+  (header, pillars, §4.9 → the Cave-in, §4.10/4.12/4.13, §7 front ramp, §8 rules).
+
+**Not done (out of R8's scope):** the GDD's older v3.1 sections (Color Streak §4.7, etc.) still predate v3.2 — the
+GDD was last synced 2026-07-23; a full resync is separate work.

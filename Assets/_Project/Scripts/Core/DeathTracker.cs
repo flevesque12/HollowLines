@@ -31,20 +31,18 @@ namespace HollowLines.Core
         public readonly DeathCause      Cause;              // what ended the run
         public readonly GridPos         Position;           // avatar cell at death
         public readonly float           Time;               // run seconds at death
-        public readonly float           TimeSinceLastDrill; // the suffocation diagnostic (§ rule 1/5)
-        public readonly float           Air;                // air % at death (0 on suffocation)
-        public readonly float?          Lead;               // R8.5: Cave-in margin in rows at death; null on the air game
+        public readonly float           TimeSinceLastDrill; // the cave-in diagnostic: how long since you stopped drilling
+        public readonly float           Lead;               // R8.5/R8.9: Cave-in margin in rows at death (≥ 0)
         public readonly IReadOnlyList<DamageHit> Hits;      // every heart lost this run, oldest first
 
         public DeathReport(DeathCause cause, GridPos position, float time, float timeSinceLastDrill,
-                           float air, IReadOnlyList<DamageHit> hits, float? lead = null)
+                           float lead, IReadOnlyList<DamageHit> hits)
         {
             Cause              = cause;
             Position           = position;
             Time               = time;
             TimeSinceLastDrill = timeSinceLastDrill;
-            Air                = air;
-            Lead               = lead.HasValue ? Math.Max(0f, lead.Value) : (float?)null;
+            Lead               = Math.Max(0f, lead);
             Hits               = hits ?? Array.Empty<DamageHit>();
         }
     }
@@ -55,7 +53,7 @@ namespace HollowLines.Core
     /// Every system that can hurt the avatar already fires its own event, but they all funnelled into
     /// one anonymous OnAvatarCrushed(), so the game-over screen could only say "Plus de cœurs". This
     /// records each landed hit with its cause, plus how long it's been since the last drill (the
-    /// only meaningful "why" for suffocation, since drilling is the primary air source in v3.1).
+    /// meaningful "why" for a cave-in death: the front only catches a player who stopped drilling).
     ///
     /// Pure bookkeeping — it never deals damage or decides death. The caller reports hits that
     /// HealthSystem actually accepted, and declares the death; Died fires exactly once per run.
@@ -102,34 +100,33 @@ namespace HollowLines.Core
 
         /// <summary>
         /// Record a heart the avatar actually lost. Call only after HealthSystem.TryTakeDamage
-        /// returned true (i-frame-absorbed hits are not damage). None and Suffocation are ignored —
-        /// neither is a heart hit. Negative heart counts clamp to 0.
+        /// returned true (i-frame-absorbed hits are not damage). None is ignored — it is not a heart hit.
+        /// Negative heart counts clamp to 0.
         /// </summary>
         public void NotifyHit(DeathCause cause, GridPos position, int heartsLeft)
         {
-            if (IsDead || cause == DeathCause.None || cause == DeathCause.Suffocation)
+            if (IsDead || cause == DeathCause.None)
                 return;
             _hits.Add(new DamageHit(cause, position, RunTime, Math.Max(0, heartsLeft)));
         }
 
         /// <summary>
         /// Declare the run over and freeze the report. Returns false (no event) if already dead —
-        /// so a frame where the last heart and the last breath go together only ends the run once.
-        /// None is coerced to the last recorded hit's cause (or Suffocation if no hit was recorded).
-        /// R8.5: `lead` is the Cave-in margin in rows (CeilingSystem.Lead) — pass it once the front is
-        /// what kills; leave it null while the air does. Negative clamps to 0.
+        /// so two killing hits in the same frame only end the run once.
+        /// None is coerced to the last recorded hit's cause (or CaveIn if no hit was recorded).
+        /// `lead` is the Cave-in margin in rows (CeilingSystem.Lead) for the recap; negative clamps to 0.
         /// </summary>
-        public bool NotifyDeath(DeathCause cause, GridPos position, float air, float? lead = null)
+        public bool NotifyDeath(DeathCause cause, GridPos position, float lead)
         {
             if (IsDead)
                 return false;
 
             if (cause == DeathCause.None)
-                cause = _hits.Count > 0 ? _hits[_hits.Count - 1].Cause : DeathCause.Suffocation;
+                cause = _hits.Count > 0 ? _hits[_hits.Count - 1].Cause : DeathCause.CaveIn;
 
             IsDead = true;
             var report = new DeathReport(cause, position, RunTime, TimeSinceLastDrill,
-                                         Math.Max(0f, air), _hits.ToArray(), lead);
+                                         lead, _hits.ToArray());
             Report = report;
             Died?.Invoke(report);
             return true;

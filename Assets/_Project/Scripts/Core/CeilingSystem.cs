@@ -45,11 +45,7 @@ namespace HollowLines.Core
         public const float StartRampDuration = 12f;
         public const float StartSpeedFactor  = 0.5f;
 
-        /// <summary>The front speed that gives the same standing-still time as an air drain of `drainPercent` %/s.</summary>
-        public static float SpeedForDrainRate(float drainPercent, float maxLead = DefaultMaxLead) =>
-            Math.Max(0f, drainPercent) * maxLead / 100f;
-
-        /// <summary>Front speed in rows per second. Campaign / Endless assign it, like AirSystem.DrainRate.</summary>
+        /// <summary>Front speed in rows per second. Campaign / Endless assign it (CeilingSpeedForLevel / CeilingSpeedForDepth).</summary>
         public float Speed { get; set; } = DefaultSpeed;
 
         /// <summary>The leash: the lead can never exceed this many rows.</summary>
@@ -184,7 +180,7 @@ namespace HollowLines.Core
         /// <summary>
         /// Push the front back `rows`. It may climb back into the rubble (time, not space), but never past
         /// the leash — a lead beyond MaxLead would be yanked straight back on the next tick anyway.
-        /// Non-positive amounts are ignored (defensive, like AirSystem.Restore).
+        /// Non-positive amounts are ignored (defensive).
         /// </summary>
         public void Recoil(float rows)
         {
@@ -253,7 +249,7 @@ namespace HollowLines.Core
             NotifyLeadChanged();
         }
 
-        /// <summary>∫ StartBufferFactor dt from the buffer start to t — same integral as AirSystem's.</summary>
+        /// <summary>∫ StartBufferFactor dt from the buffer start to t — integrated, not sampled, so a long frame advances exactly what 60 short ones would.</summary>
         private float BufferedSeconds(float t)
         {
             float u = t - _startGrace;

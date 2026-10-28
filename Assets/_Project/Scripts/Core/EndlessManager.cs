@@ -39,14 +39,10 @@ namespace HollowLines.Core
         // At depth 0 that is the 20 s tank of a campaign level 1-3; at depth 100 it is 13.3 s.
         // Endless has no level structure to carry difficulty, so the clock IS the difficulty curve
         // (terrain rates ramp too, but the drain is what forces increasingly aggressive play).
-        public const float BaseDrainRate   = AirSystem.DefaultDrainRate; // 5 %/s at the surface
-        public const float DrainStepRows   = 20f;
-        public const float DrainStepAmount = 0.5f;
-        public const float MaxDrainRate    = 10f;
-
         // R8.5 (cave-in.md §2.2): the same ramp for the Cave-in front, in rows/s — the drain curve
         // × MaxLead / 100: 0.6 r/s at the surface, +0.06 every 20 rows, capped at 1.2 (depth 200).
         public const float BaseCeilingSpeed   = CeilingSystem.DefaultSpeed; // 0.6 r/s
+        public const float CeilingStepRows    = 20f;
         public const float CeilingStepAmount  = 0.06f;
         public const float MaxCeilingSpeed    = 1.2f;
 
@@ -73,8 +69,6 @@ namespace HollowLines.Core
         public int Depth { get; private set; }
 
         /// <summary>Current air drain in % per second, derived from <see cref="Depth"/>.</summary>
-        public float DrainRate { get; private set; }
-
         /// <summary>R8.5: current Cave-in front speed in rows/s, derived from <see cref="Depth"/>.</summary>
         public float CeilingSpeed { get; private set; } = BaseCeilingSpeed;
 
@@ -83,8 +77,6 @@ namespace HollowLines.Core
         public event Action<int> DepthChanged;
 
         /// <summary>Fired when the depth ramp changes the drain. Arg = the new rate in %/s.</summary>
-        public event Action<float> DrainRateChanged;
-
         /// <summary>R8.5: fired when the depth ramp changes the front speed. Arg = rows/s.</summary>
         public event Action<float> CeilingSpeedChanged;
 
@@ -109,20 +101,6 @@ namespace HollowLines.Core
         // ── Depth ↔ drain ────────────────────────────────────────────
 
         /// <summary>
-        /// Air drain in % per second at the given absolute depth (GDD §7).
-        /// Continuous, not stepped: depth 0 → 5 %/s, depth 100 → 7.5 %/s, capped at 10 %/s
-        /// (reached at depth 200) so the tank never becomes unplayably short.
-        /// </summary>
-        public static float DrainRateForDepth(int depth)
-        {
-            if (depth <= 0)
-                return BaseDrainRate;
-
-            float rate = BaseDrainRate + depth / DrainStepRows * DrainStepAmount;
-            return Math.Min(MaxDrainRate, rate);
-        }
-
-        /// <summary>
         /// R8.5: Cave-in front speed in rows/s at the given absolute depth — the drain ramp translated.
         /// Depth 0 → 0.6, depth 100 → 0.9, capped at 1.2 from depth 200. Measured and kept in R8.7 (balance.md §15.11).
         /// </summary>
@@ -131,7 +109,7 @@ namespace HollowLines.Core
             if (depth <= 0)
                 return BaseCeilingSpeed;
 
-            float speed = BaseCeilingSpeed + depth / DrainStepRows * CeilingStepAmount;
+            float speed = BaseCeilingSpeed + depth / CeilingStepRows * CeilingStepAmount;
             return Math.Min(MaxCeilingSpeed, speed);
         }
 
@@ -177,12 +155,6 @@ namespace HollowLines.Core
                 Depth = depth;
                 DepthChanged?.Invoke(Depth);
 
-                float rate = DrainRateForDepth(Depth);
-                if (rate != DrainRate)
-                {
-                    DrainRate = rate;
-                    DrainRateChanged?.Invoke(DrainRate);
-                }
 
                 float speed = CeilingSpeedForDepth(Depth);
                 if (speed != CeilingSpeed)
@@ -219,7 +191,6 @@ namespace HollowLines.Core
             SegmentIndex      = 0;
             SegmentStartDepth = 0;
             Depth             = 0;
-            DrainRate         = BaseDrainRate;
             CeilingSpeed      = BaseCeilingSpeed;
             _exhausted        = false;
         }
